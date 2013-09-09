@@ -68,7 +68,6 @@ typedef struct VideoPicture {
     double pts;             // presentation timestamp for this picture
     double target_clock;    // av_gettime() time at which this should be displayed ideally
     int64_t pos;            // byte position in file
-    SDL_Overlay *bmp;
     int width, height; /* source height & width */
     int allocated;
     int reallocate;
@@ -379,45 +378,6 @@ static double get_audio_clock(VideoState *is)
     return pts;
 }
 
-/* get the current video clock value */
-static double get_video_clock(VideoState *is)
-{
-    if (is->paused) {
-        return is->video_current_pts;
-    } else {
-        return is->video_current_pts_drift + av_gettime() / 1000000.0;
-    }
-}
-
-/* get the current external clock value */
-static double get_external_clock(VideoState *is)
-{
-    int64_t ti;
-    ti = av_gettime();
-    return is->external_clock + ((ti - is->external_clock_time) * 1e-6);
-}
-
-/* get the current master clock value */
-static double get_master_clock(VideoState *is)
-{
-    double val;
-
-    if (is->av_sync_type == AV_SYNC_VIDEO_MASTER) {
-        if (is->video_st)
-            val = get_video_clock(is);
-        else
-            val = get_audio_clock(is);
-    } else if (is->av_sync_type == AV_SYNC_AUDIO_MASTER) {
-        if (is->audio_st)
-            val = get_audio_clock(is);
-        else
-            val = get_video_clock(is);
-    } else {
-        val = get_external_clock(is);
-    }
-    return val;
-}
-
 /* seek in the stream */
 static void stream_seek(VideoState *is, int64_t pos, int64_t rel, int seek_by_bytes)
 {
@@ -444,47 +404,6 @@ static void stream_pause(VideoState *is)
     is->paused = !is->paused;
 }
 
-static double compute_target_time(double frame_current_pts, VideoState *is)
-{
-    double delay, sync_threshold, diff;
-
-    /* compute nominal delay */
-    delay = frame_current_pts - is->frame_last_pts;
-    if (delay <= 0 || delay >= 10.0) {
-        /* if incorrect delay, use previous one */
-        delay = is->frame_last_delay;
-    } else {
-        is->frame_last_delay = delay;
-    }
-    is->frame_last_pts = frame_current_pts;
-
-    /* update delay to follow master synchronisation source */
-    if (((is->av_sync_type == AV_SYNC_AUDIO_MASTER && is->audio_st) ||
-         is->av_sync_type == AV_SYNC_EXTERNAL_CLOCK)) {
-        /* if video is slave, we try to correct big delays by
-           duplicating or deleting a frame */
-        diff = get_video_clock(is) - get_master_clock(is);
-
-        /* skip or repeat frame. We take into account the
-           delay to compute the threshold. I still don't know
-           if it is the best guess */
-        sync_threshold = FFMAX(AV_SYNC_THRESHOLD, delay);
-        if (fabs(diff) < AV_NOSYNC_THRESHOLD) {
-            if (diff <= -sync_threshold)
-                delay = 0;
-            else if (diff >= sync_threshold)
-                delay = 2 * delay;
-        }
-    }
-    is->frame_timer += delay;
-
-    av_dlog(NULL, "video: delay=%0.3f pts=%0.3f A-V=%f\n",
-            delay, frame_current_pts, -diff);
-
-    return is->frame_timer;
-}
-
-
 static void stream_close(VideoState *is)
 {
     VideoPicture *vp;
@@ -498,10 +417,6 @@ static void stream_close(VideoState *is)
     for (i = 0; i < VIDEO_PICTURE_QUEUE_SIZE; i++) {
         vp = &is->pictq[i];
         avfilter_unref_bufferp(&vp->picref);
-        if (vp->bmp) {
-            SDL_FreeYUVOverlay(vp->bmp);
-            vp->bmp = NULL;
-        }
     }
     SDL_DestroyMutex(is->pictq_mutex);
     SDL_DestroyCond(is->pictq_cond);
@@ -558,7 +473,7 @@ static int synchronize_audio(VideoState *is, short *samples,
         double diff, avg_diff;
         int wanted_size, min_size, max_size, nb_samples;
 
-        ref_clock = get_master_clock(is);
+        ref_clock = get_audio_clock(is);
         diff = get_audio_clock(is) - ref_clock;
 
         if (diff < AV_NOSYNC_THRESHOLD) {
@@ -1337,7 +1252,7 @@ static void event_loop(void)
                         pos += incr;
                         stream_seek(cur_stream, pos, incr, 1);
                     } else {
-                        pos = get_master_clock(cur_stream);
+                        pos = get_audio_clock(cur_stream);
                         pos += incr;
                         stream_seek(cur_stream, (int64_t)(pos * AV_TIME_BASE), (int64_t)(incr * AV_TIME_BASE), 0);
                     }

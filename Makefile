@@ -5,7 +5,7 @@ LIBAVSRC = /home/andy/Downloads/libav-9.8/out
 ALLAVLIBS = avformat avcodec avdevice avfilter avresample avutil swscale
 CFLAGS := -I$(LIBAVSRC)/include -pedantic -Werror -ggdb -O0
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAVSRC)/lib/lib%.a)
-LDFLAGS := -lm -lz -pthread -lao -lbz2 -lSDL
+LDFLAGS := -lm -lz -pthread -lbz2 -lSDL
 
 .PHONY: examples clean
 
