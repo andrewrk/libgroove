@@ -96,7 +96,6 @@ typedef struct AudioState {
 static int seek_by_bytes = -1;
 static int autoexit;
 static int loop = 1;
-static int infinite_buffer = 0;
 
 /* current context */
 static AudioState *cur_stream;
@@ -697,9 +696,7 @@ static int decode_thread(void *arg)
         }
 
         /* if the queue are full, no need to read more */
-        if (!infinite_buffer &&
-            (is->audioq.size > MAX_QUEUE_SIZE || is->audioq.size > MIN_AUDIOQ_SIZE))
-        {
+        if (is->audioq.size > MAX_QUEUE_SIZE || is->audioq.size > MIN_AUDIOQ_SIZE) {
             /* wait 10 ms */
             SDL_Delay(10);
             continue;
@@ -798,101 +795,103 @@ static void event_loop(void)
 {
     SDL_Event event;
     double incr, pos, frac;
+    double x;
 
     for (;;) {
-        double x;
-        SDL_WaitEvent(&event);
-        switch (event.type) {
-        case SDL_KEYDOWN:
-            switch (event.key.keysym.sym) {
-            case SDLK_ESCAPE:
-            case SDLK_q:
+        while(SDL_PollEvent(&event)) {
+            switch (event.type) {
+            case SDL_KEYDOWN:
+                switch (event.key.keysym.sym) {
+                case SDLK_ESCAPE:
+                case SDLK_q:
+                    do_exit();
+                    break;
+                case SDLK_p:
+                case SDLK_SPACE:
+                    toggle_pause();
+                    break;
+                case SDLK_LEFT:
+                    incr = -10.0;
+                    goto do_seek;
+                case SDLK_RIGHT:
+                    incr = 10.0;
+                    goto do_seek;
+                case SDLK_UP:
+                    incr = 60.0;
+                    goto do_seek;
+                case SDLK_DOWN:
+                    incr = -60.0;
+                do_seek:
+                    if (cur_stream) {
+                        if (seek_by_bytes) {
+                            if (cur_stream->audio_pkt.pos >= 0) {
+                                pos = cur_stream->audio_pkt.pos;
+                            } else {
+                                pos = avio_tell(cur_stream->ic->pb);
+                            }
+                            if (cur_stream->ic->bit_rate)
+                                incr *= cur_stream->ic->bit_rate / 8.0;
+                            else
+                                incr *= 180000.0;
+                            pos += incr;
+                            stream_seek(cur_stream, pos, incr, 1);
+                        } else {
+                            pos = get_audio_clock(cur_stream);
+                            pos += incr;
+                            stream_seek(cur_stream, (int64_t)(pos * AV_TIME_BASE), (int64_t)(incr * AV_TIME_BASE), 0);
+                        }
+                    }
+                    break;
+                default:
+                    break;
+                }
+                break;
+            case SDL_MOUSEBUTTONDOWN:
                 do_exit();
                 break;
-            case SDLK_p:
-            case SDLK_SPACE:
-                toggle_pause();
-                break;
-            case SDLK_LEFT:
-                incr = -10.0;
-                goto do_seek;
-            case SDLK_RIGHT:
-                incr = 10.0;
-                goto do_seek;
-            case SDLK_UP:
-                incr = 60.0;
-                goto do_seek;
-            case SDLK_DOWN:
-                incr = -60.0;
-            do_seek:
+            case SDL_MOUSEMOTION:
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    x = event.button.x;
+                } else {
+                    if (event.motion.state != SDL_PRESSED)
+                        break;
+                    x = event.motion.x;
+                }
                 if (cur_stream) {
-                    if (seek_by_bytes) {
-                        if (cur_stream->audio_pkt.pos >= 0) {
-                            pos = cur_stream->audio_pkt.pos;
-                        } else {
-                            pos = avio_tell(cur_stream->ic->pb);
-                        }
-                        if (cur_stream->ic->bit_rate)
-                            incr *= cur_stream->ic->bit_rate / 8.0;
-                        else
-                            incr *= 180000.0;
-                        pos += incr;
-                        stream_seek(cur_stream, pos, incr, 1);
+                    if (seek_by_bytes || cur_stream->ic->duration <= 0) {
+                        uint64_t size =  avio_size(cur_stream->ic->pb);
+                        stream_seek(cur_stream, size*x/cur_stream->width, 0, 1);
                     } else {
-                        pos = get_audio_clock(cur_stream);
-                        pos += incr;
-                        stream_seek(cur_stream, (int64_t)(pos * AV_TIME_BASE), (int64_t)(incr * AV_TIME_BASE), 0);
+                        int64_t ts;
+                        int ns, hh, mm, ss;
+                        int tns, thh, tmm, tss;
+                        tns  = cur_stream->ic->duration / 1000000LL;
+                        thh  = tns / 3600;
+                        tmm  = (tns % 3600) / 60;
+                        tss  = (tns % 60);
+                        frac = x / cur_stream->width;
+                        ns   = frac * tns;
+                        hh   = ns / 3600;
+                        mm   = (ns % 3600) / 60;
+                        ss   = (ns % 60);
+                        fprintf(stderr, "Seek to %2.0f%% (%2d:%02d:%02d) of total duration (%2d:%02d:%02d)       \n", frac*100,
+                                hh, mm, ss, thh, tmm, tss);
+                        ts = frac * cur_stream->ic->duration;
+                        if (cur_stream->ic->start_time != AV_NOPTS_VALUE)
+                            ts += cur_stream->ic->start_time;
+                        stream_seek(cur_stream, ts, 0, 0);
                     }
                 }
+                break;
+            case SDL_QUIT:
+            case FF_QUIT_EVENT:
+                do_exit();
                 break;
             default:
                 break;
             }
-            break;
-        case SDL_MOUSEBUTTONDOWN:
-            do_exit();
-            break;
-        case SDL_MOUSEMOTION:
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                x = event.button.x;
-            } else {
-                if (event.motion.state != SDL_PRESSED)
-                    break;
-                x = event.motion.x;
-            }
-            if (cur_stream) {
-                if (seek_by_bytes || cur_stream->ic->duration <= 0) {
-                    uint64_t size =  avio_size(cur_stream->ic->pb);
-                    stream_seek(cur_stream, size*x/cur_stream->width, 0, 1);
-                } else {
-                    int64_t ts;
-                    int ns, hh, mm, ss;
-                    int tns, thh, tmm, tss;
-                    tns  = cur_stream->ic->duration / 1000000LL;
-                    thh  = tns / 3600;
-                    tmm  = (tns % 3600) / 60;
-                    tss  = (tns % 60);
-                    frac = x / cur_stream->width;
-                    ns   = frac * tns;
-                    hh   = ns / 3600;
-                    mm   = (ns % 3600) / 60;
-                    ss   = (ns % 60);
-                    fprintf(stderr, "Seek to %2.0f%% (%2d:%02d:%02d) of total duration (%2d:%02d:%02d)       \n", frac*100,
-                            hh, mm, ss, thh, tmm, tss);
-                    ts = frac * cur_stream->ic->duration;
-                    if (cur_stream->ic->start_time != AV_NOPTS_VALUE)
-                        ts += cur_stream->ic->start_time;
-                    stream_seek(cur_stream, ts, 0, 0);
-                }
-            }
-            break;
-        case SDL_QUIT:
-        case FF_QUIT_EVENT:
-            do_exit();
-            break;
-        default:
-            break;
         }
+        SDL_Delay(10);
     }
 }
 
