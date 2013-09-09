@@ -46,15 +46,11 @@ typedef struct AudioState {
     int seek_flags;
     int64_t seek_pos;
     int64_t seek_rel;
-    int read_pause_return;
     AVFormatContext *ic;
 
     int audio_stream;
 
     double audio_clock;
-    double audio_diff_avg_coef;
-    double audio_diff_threshold;
-    int audio_diff_avg_count;
     AVStream *audio_st;
     AVCodec *decoder;
     PacketQueue audioq;
@@ -255,7 +251,6 @@ static void stream_pause(AudioState *is)
 
 static void stream_close(AudioState *is)
 {
-    /* XXX: use a special url_shutdown call to abort parse cleanly */
     is->abort_request = 1;
     SDL_WaitThread(is->parse_tid, NULL);
 
@@ -288,8 +283,6 @@ static int audio_decode_frame(AudioState *is, double *pts_ptr)
     for (;;) {
         /* NOTE: the audio packet can contain several frames */
         while (pkt_temp->size > 0 || (!pkt_temp->data && new_packet)) {
-            int resample_changed, audio_resample;
-
             if (!is->frame) {
                 if (!(is->frame = avcodec_alloc_frame()))
                     return AVERROR(ENOMEM);
@@ -319,11 +312,11 @@ static int audio_decode_frame(AudioState *is, double *pts_ptr)
                                                    is->frame->nb_samples,
                                                    is->frame->format, 1);
 
-            audio_resample = is->frame->format         != is->sdl_sample_fmt     ||
+            int audio_resample = is->frame->format         != is->sdl_sample_fmt     ||
                              is->frame->channel_layout != is->sdl_channel_layout ||
                              is->frame->sample_rate    != is->sdl_sample_rate;
 
-            resample_changed = is->frame->format         != is->resample_sample_fmt     ||
+            int resample_changed = is->frame->format         != is->resample_sample_fmt     ||
                                is->frame->channel_layout != is->resample_channel_layout ||
                                is->frame->sample_rate    != is->resample_sample_rate;
 
@@ -457,67 +450,53 @@ static int stream_component_open(AudioState *is, int stream_index)
     AVFormatContext *ic = is->ic;
     AVCodecContext *avctx = ic->streams[stream_index]->codec;
 
-    if (avcodec_open2(avctx, is->decoder, NULL) < 0)
+    if (avcodec_open2(avctx, is->decoder, NULL) < 0) {
+        fprintf(stderr, "unable to open decoder\n");
         return -1;
+    }
 
     /* prepare audio output */
-    if (avctx->codec_type == AVMEDIA_TYPE_AUDIO) {
-        is->sdl_sample_rate = avctx->sample_rate;
+    is->sdl_sample_rate = avctx->sample_rate;
 
-        if (!avctx->channel_layout)
-            avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
-        if (!avctx->channel_layout) {
-            fprintf(stderr, "unable to guess channel layout\n");
-            return -1;
-        }
-        if (avctx->channels == 1)
-            is->sdl_channel_layout = AV_CH_LAYOUT_MONO;
-        else
-            is->sdl_channel_layout = AV_CH_LAYOUT_STEREO;
-        is->sdl_channels = av_get_channel_layout_nb_channels(is->sdl_channel_layout);
-
-        SDL_AudioSpec wanted_spec;
-        wanted_spec.format = AUDIO_S16SYS;
-        wanted_spec.freq = is->sdl_sample_rate;
-        wanted_spec.channels = is->sdl_channels;
-        wanted_spec.silence = 0;
-        wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
-        wanted_spec.callback = sdl_audio_callback;
-        wanted_spec.userdata = is;
-        SDL_AudioSpec spec;
-        if (SDL_OpenAudio(&wanted_spec, &spec) < 0) {
-            fprintf(stderr, "SDL_OpenAudio: %s\n", SDL_GetError());
-            return -1;
-        }
-        is->audio_hw_buf_size = spec.size;
-        is->sdl_sample_fmt          = AV_SAMPLE_FMT_S16;
-        is->resample_sample_fmt     = is->sdl_sample_fmt;
-        is->resample_channel_layout = avctx->channel_layout;
-        is->resample_sample_rate    = avctx->sample_rate;
+    if (!avctx->channel_layout)
+        avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
+    if (!avctx->channel_layout) {
+        fprintf(stderr, "unable to guess channel layout\n");
+        return -1;
     }
+    is->sdl_channel_layout = (avctx->channels == 1) ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO;
+    is->sdl_channels = av_get_channel_layout_nb_channels(is->sdl_channel_layout);
+
+    SDL_AudioSpec wanted_spec;
+    wanted_spec.format = AUDIO_S16SYS;
+    wanted_spec.freq = is->sdl_sample_rate;
+    wanted_spec.channels = is->sdl_channels;
+    wanted_spec.silence = 0;
+    wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
+    wanted_spec.callback = sdl_audio_callback;
+    wanted_spec.userdata = is;
+    SDL_AudioSpec spec;
+    if (SDL_OpenAudio(&wanted_spec, &spec) < 0) {
+        fprintf(stderr, "SDL_OpenAudio: %s\n", SDL_GetError());
+        return -1;
+    }
+    is->audio_hw_buf_size = spec.size;
+    is->sdl_sample_fmt          = AV_SAMPLE_FMT_S16;
+    is->resample_sample_fmt     = is->sdl_sample_fmt;
+    is->resample_channel_layout = avctx->channel_layout;
+    is->resample_sample_rate    = avctx->sample_rate;
 
     ic->streams[stream_index]->discard = AVDISCARD_DEFAULT;
-    switch (avctx->codec_type) {
-    case AVMEDIA_TYPE_AUDIO:
-        is->audio_stream = stream_index;
-        is->audio_st = ic->streams[stream_index];
-        is->audio_buf_size  = 0;
-        is->audio_buf_index = 0;
 
-        /* init averaging filter */
-        is->audio_diff_avg_coef  = exp(log(0.01) / AUDIO_DIFF_AVG_NB);
-        is->audio_diff_avg_count = 0;
-        /* since we do not have a precise anough audio fifo fullness,
-           we correct audio sync only if larger than this threshold */
-        is->audio_diff_threshold = 2.0 * SDL_AUDIO_BUFFER_SIZE / avctx->sample_rate;
+    is->audio_stream = stream_index;
+    is->audio_st = ic->streams[stream_index];
+    is->audio_buf_size  = 0;
+    is->audio_buf_index = 0;
 
-        memset(&is->audio_pkt, 0, sizeof(is->audio_pkt));
-        packet_queue_init(&is->audioq);
-        SDL_PauseAudio(0);
-        break;
-    default:
-        break;
-    }
+    memset(&is->audio_pkt, 0, sizeof(is->audio_pkt));
+    packet_queue_init(&is->audioq);
+    SDL_PauseAudio(0);
+
     return 0;
 }
 
@@ -530,35 +509,22 @@ static void stream_component_close(AudioState *is, int stream_index)
         return;
     avctx = ic->streams[stream_index]->codec;
 
-    switch (avctx->codec_type) {
-    case AVMEDIA_TYPE_AUDIO:
-        packet_queue_abort(&is->audioq);
+    packet_queue_abort(&is->audioq);
 
-        SDL_CloseAudio();
+    SDL_CloseAudio();
 
-        packet_queue_end(&is->audioq);
-        av_free_packet(&is->audio_pkt);
-        if (is->avr)
-            avresample_free(&is->avr);
-        av_freep(&is->audio_buf1);
-        is->audio_buf = NULL;
-        avcodec_free_frame(&is->frame);
-
-        break;
-    default:
-        break;
-    }
+    packet_queue_end(&is->audioq);
+    av_free_packet(&is->audio_pkt);
+    if (is->avr)
+        avresample_free(&is->avr);
+    av_freep(&is->audio_buf1);
+    is->audio_buf = NULL;
+    avcodec_free_frame(&is->frame);
 
     ic->streams[stream_index]->discard = AVDISCARD_ALL;
     avcodec_close(avctx);
-    switch (avctx->codec_type) {
-    case AVMEDIA_TYPE_AUDIO:
-        is->audio_st = NULL;
-        is->audio_stream = -1;
-        break;
-    default:
-        break;
-    }
+    is->audio_st = NULL;
+    is->audio_stream = -1;
 }
 
 static int decode_interrupt_cb(void *ctx)
@@ -624,19 +590,13 @@ static int decode_thread(void *arg)
         goto fail;
     }
 
-    if (is->audio_stream < 0) {
-        fprintf(stderr, "%s: could not open codecs\n", is->filename);
-        ret = -1;
-        goto fail;
-    }
-
     for (;;) {
         if (is->abort_request)
             break;
         if (is->paused != is->last_paused) {
             is->last_paused = is->paused;
             if (is->paused)
-                is->read_pause_return = av_read_pause(ic);
+                av_read_pause(ic);
             else
                 av_read_play(ic);
         }
@@ -685,10 +645,8 @@ static int decode_thread(void *arg)
         }
         ret = av_read_frame(ic, pkt);
         if (ret < 0) {
-            if (ret == AVERROR_EOF || (ic->pb && ic->pb->eof_reached))
+            if (ret == AVERROR_EOF)
                 eof = 1;
-            if (ic->pb && ic->pb->error)
-                break;
             SDL_Delay(100); /* wait for user event */
             continue;
         }
