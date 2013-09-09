@@ -8,7 +8,6 @@
 #include "libavformat/avformat.h"
 #include "libavresample/avresample.h"
 #include "libavutil/opt.h"
-#include "libavcodec/avfft.h"
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
@@ -38,11 +37,6 @@ typedef struct PacketQueue {
     SDL_mutex *mutex;
     SDL_cond *cond;
 } PacketQueue;
-
-typedef struct SubPicture {
-    double pts; /* presentation time stamp for this picture */
-    AVSubtitle sub;
-} SubPicture;
 
 typedef struct AudioState {
     SDL_Thread *parse_tid;
@@ -82,24 +76,19 @@ typedef struct AudioState {
     AVAudioResampleContext *avr;
     AVFrame *frame;
 
-    double frame_timer;
-    double video_current_pts;       // current displayed pts (different from video_clock if frame fifos are used)
-    double video_current_pts_drift; // video_current_pts - time (av_gettime) at which we updated video_current_pts - used to have running video pts
-
     char filename[1024];
-    int width, height, xleft, ytop;
+    int width;
 
     int refresh;
+    int seek_by_bytes;
 } AudioState;
 
 /* options specified by the user */
-static int seek_by_bytes = -1;
 static int autoexit;
 static int loop = 1;
 
 /* current context */
 static AudioState *cur_stream;
-static int64_t audio_callback_time;
 
 static AVPacket flush_pkt;
 
@@ -261,13 +250,6 @@ static void stream_seek(AudioState *is, int64_t pos, int64_t rel, int seek_by_by
 /* pause or resume the video */
 static void stream_pause(AudioState *is)
 {
-    if (is->paused) {
-        is->frame_timer += av_gettime() / 1000000.0 + is->video_current_pts_drift - is->video_current_pts;
-        if (is->read_pause_return != AVERROR(ENOSYS)) {
-            is->video_current_pts = is->video_current_pts_drift + av_gettime() / 1000000.0;
-        }
-        is->video_current_pts_drift = is->video_current_pts - av_gettime() / 1000000.0;
-    }
     is->paused = !is->paused;
 }
 
@@ -447,8 +429,6 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
     int audio_size, len1;
     double pts;
 
-    audio_callback_time = av_gettime();
-
     while (len > 0) {
         if (is->audio_buf_index >= is->audio_buf_size) {
            audio_size = audio_decode_frame(is, &pts);
@@ -479,8 +459,6 @@ static int stream_component_open(AudioState *is, int stream_index)
     AVCodec *codec;
     SDL_AudioSpec wanted_spec, spec;
 
-    if (stream_index < 0 || stream_index >= ic->nb_streams)
-        return -1;
     avctx = ic->streams[stream_index]->codec;
 
 
@@ -595,41 +573,34 @@ static void stream_component_close(AudioState *is, int stream_index)
     }
 }
 
-/* since we have only one decoding thread, we can use a global
-   variable instead of a thread local variable */
-static AudioState *global_video_state;
-
 static int decode_interrupt_cb(void *ctx)
 {
-    return global_video_state && global_video_state->abort_request;
+    AudioState *is = ctx;
+    return is && is->abort_request;
 }
 
 /* this thread gets the stream from the disk or the network */
 static int decode_thread(void *arg)
 {
-    AudioState *is = arg;
-    AVFormatContext *ic = NULL;
-    int err, i, ret;
-    int stream_index;
-    AVPacket pkt1, *pkt = &pkt1;
+    int ret;
     int eof = 0;
-    int orig_nb_streams;
 
+    AVPacket pkt1;
+    AVPacket *pkt = &pkt1;
+
+    AudioState *is = arg;
     is->audio_stream = -1;
 
-    global_video_state = is;
-
-    ic = avformat_alloc_context();
+    AVFormatContext *ic = avformat_alloc_context();
     ic->interrupt_callback.callback = decode_interrupt_cb;
-    err = avformat_open_input(&ic, is->filename, NULL, NULL);
+    ic->interrupt_callback.opaque = is;
+    int err = avformat_open_input(&ic, is->filename, NULL, NULL);
     if (err < 0) {
         fprintf(stderr, "error opening input file\n");
         ret = -1;
         goto fail;
     }
     is->ic = ic;
-
-    orig_nb_streams = ic->nb_streams;
 
     err = avformat_find_stream_info(ic, NULL);
     if (err < 0) {
@@ -638,17 +609,13 @@ static int decode_thread(void *arg)
         goto fail;
     }
 
-    if (ic->pb)
-        ic->pb->eof_reached = 0; // FIXME hack, avplay maybe should not use url_feof() to test for the end
-
-    if (seek_by_bytes < 0)
-        seek_by_bytes = !!(ic->iformat->flags & AVFMT_TS_DISCONT);
+    is->seek_by_bytes = !!(ic->iformat->flags & AVFMT_TS_DISCONT);
 
 
-    for (i = 0; i < ic->nb_streams; i++)
+    for (int i = 0; i < ic->nb_streams; i++)
         ic->streams[i]->discard = AVDISCARD_ALL;
 
-    stream_index = av_find_best_stream(ic, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
+    int stream_index = av_find_best_stream(ic, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
 
     if (stream_index < 0) {
         fprintf(stderr, "%s: no audio stream found\n", is->filename);
@@ -743,12 +710,13 @@ static int decode_thread(void *arg)
 
     ret = 0;
  fail:
-    /* disable interrupting */
-    global_video_state = NULL;
-
     /* close each stream */
     if (is->audio_stream >= 0)
         stream_component_close(is, is->audio_stream);
+
+    /* disable interrupting */
+    is->abort_request = 0;
+
     if (is->ic) {
         avformat_close_input(&is->ic);
     }
@@ -763,26 +731,6 @@ static int decode_thread(void *arg)
     return 0;
 }
 
-static AudioState *stream_open(const char *filename)
-{
-    AudioState *is;
-
-    is = av_mallocz(sizeof(AudioState));
-    if (!is)
-        return NULL;
-    av_strlcpy(is->filename, filename, sizeof(is->filename));
-    is->ytop    = 0;
-    is->xleft   = 0;
-
-
-    is->parse_tid    = SDL_CreateThread(decode_thread, is);
-    if (!is->parse_tid) {
-        av_free(is);
-        return NULL;
-    }
-    return is;
-}
-
 static void toggle_pause(void)
 {
     if (cur_stream)
@@ -791,8 +739,7 @@ static void toggle_pause(void)
 
 
 /* handle an event sent by the GUI */
-static void event_loop(void)
-{
+static int event_loop() {
     SDL_Event event;
     double incr, pos, frac;
     double x;
@@ -823,7 +770,7 @@ static void event_loop(void)
                     incr = -60.0;
                 do_seek:
                     if (cur_stream) {
-                        if (seek_by_bytes) {
+                        if (cur_stream->seek_by_bytes) {
                             if (cur_stream->audio_pkt.pos >= 0) {
                                 pos = cur_stream->audio_pkt.pos;
                             } else {
@@ -858,7 +805,7 @@ static void event_loop(void)
                     x = event.motion.x;
                 }
                 if (cur_stream) {
-                    if (seek_by_bytes || cur_stream->ic->duration <= 0) {
+                    if (cur_stream->seek_by_bytes || cur_stream->ic->duration <= 0) {
                         uint64_t size =  avio_size(cur_stream->ic->pb);
                         stream_seek(cur_stream, size*x/cur_stream->width, 0, 1);
                     } else {
@@ -893,6 +840,7 @@ static void event_loop(void)
         }
         SDL_Delay(10);
     }
+    return 0;
 }
 
 /* Called from the main */
@@ -923,17 +871,22 @@ int main(int argc, char **argv)
     }
 
 
-    SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
-
     av_init_packet(&flush_pkt);
-    flush_pkt.data = (uint8_t*)"FLUSH";
 
-    cur_stream = stream_open(input_filename);
+    cur_stream = av_mallocz(sizeof(AudioState));
+    if (!cur_stream) {
+        fprintf(stderr, "Error initializing state: Out of memory\n");
+        exit(1);
+    }
+    av_strlcpy(cur_stream->filename, input_filename, sizeof(cur_stream->filename));
 
-    event_loop();
+    cur_stream->parse_tid = SDL_CreateThread(decode_thread, cur_stream);
+    if (!cur_stream->parse_tid) {
+        av_free(cur_stream);
+        fprintf(stderr, "Error creating decode thread: Out of memory\n");
+        exit(1);
+    }
 
-    /* never returns */
-
-    return 0;
+    return event_loop();
 }
 

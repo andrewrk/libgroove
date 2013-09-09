@@ -1,4 +1,3 @@
-* cli command that plays any song
 * make it obey replaygain tags
 * make it compute replaygain tags and save them
 * cli which takes a list of songs, sorts them by album and replaygains them all
