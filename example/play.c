@@ -20,7 +20,6 @@
 
 #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
 #define MIN_AUDIOQ_SIZE (20 * 16 * 1024)
-#define MIN_FRAMES 5
 
 /* SDL audio buffer size, in samples. Should be small to have precise
    A/V sync as SDL does not have hardware buffer fullness info. */
@@ -57,6 +56,7 @@ typedef struct AudioState {
     double audio_diff_threshold;
     int audio_diff_avg_count;
     AVStream *audio_st;
+    AVCodec *decoder;
     PacketQueue audioq;
     int audio_hw_buf_size;
     uint8_t silence_buf[SDL_AUDIO_BUFFER_SIZE];
@@ -455,24 +455,10 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
 static int stream_component_open(AudioState *is, int stream_index)
 {
     AVFormatContext *ic = is->ic;
-    AVCodecContext *avctx;
-    AVCodec *codec;
-    SDL_AudioSpec wanted_spec, spec;
+    AVCodecContext *avctx = ic->streams[stream_index]->codec;
 
-    avctx = ic->streams[stream_index]->codec;
-
-
-    codec = avcodec_find_decoder(avctx->codec_id);
-    avctx->debug_mv          = 0;
-    avctx->debug             = 0;
-    avctx->workaround_bugs   = FF_BUG_AUTODETECT;
-
-
-    AVDictionary *opts = NULL;
-    av_dict_set(&opts, "threads", "auto", 0);
-    if (!codec || avcodec_open2(avctx, codec, &opts) < 0)
+    if (avcodec_open2(avctx, is->decoder, NULL) < 0)
         return -1;
-    av_dict_free(&opts);
 
     /* prepare audio output */
     if (avctx->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -490,6 +476,7 @@ static int stream_component_open(AudioState *is, int stream_index)
             is->sdl_channel_layout = AV_CH_LAYOUT_STEREO;
         is->sdl_channels = av_get_channel_layout_nb_channels(is->sdl_channel_layout);
 
+        SDL_AudioSpec wanted_spec;
         wanted_spec.format = AUDIO_S16SYS;
         wanted_spec.freq = is->sdl_sample_rate;
         wanted_spec.channels = is->sdl_channels;
@@ -497,6 +484,7 @@ static int stream_component_open(AudioState *is, int stream_index)
         wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
         wanted_spec.callback = sdl_audio_callback;
         wanted_spec.userdata = is;
+        SDL_AudioSpec spec;
         if (SDL_OpenAudio(&wanted_spec, &spec) < 0) {
             fprintf(stderr, "SDL_OpenAudio: %s\n", SDL_GetError());
             return -1;
@@ -615,7 +603,7 @@ static int decode_thread(void *arg)
     for (int i = 0; i < ic->nb_streams; i++)
         ic->streams[i]->discard = AVDISCARD_ALL;
 
-    int stream_index = av_find_best_stream(ic, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
+    int stream_index = av_find_best_stream(ic, AVMEDIA_TYPE_AUDIO, -1, -1, &is->decoder, 0);
 
     if (stream_index < 0) {
         fprintf(stderr, "%s: no audio stream found\n", is->filename);
@@ -623,10 +611,18 @@ static int decode_thread(void *arg)
         goto fail;
     }
 
+    if (!is->decoder) {
+        fprintf(stderr, "%s: no decoder found\n", is->filename);
+        ret = -1;
+        goto fail;
+    }
+
     /* open the streams */
     ret = stream_component_open(is, stream_index);
-    if (ret < 0)
+    if (ret < 0) {
+        fprintf(stderr, "%s: error opening stream\n", is->filename);
         goto fail;
+    }
 
     if (is->audio_stream < 0) {
         fprintf(stderr, "%s: could not open codecs\n", is->filename);
