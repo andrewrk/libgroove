@@ -29,10 +29,6 @@ Music player backend library.
 
  1. Download [libav 9.8](https://www.libav.org/download.html#release_9)
  2. In the source tree of libav you just downloaded,
-    `./configure --prefix=out && make && make install`
- 3. Edit the `LIBAVSRC` variable appropriately in this project's Makefile.
- 4. `make`
-
-## Notes
- 
- * Every string that goes into or comes out of this library is UTF-8 encoded.
+    `./configure --prefix=$(pwd)/out && make && make install`
+ 3. To build groove, `make LIBAV_PREFIX=/home/you/Downloads/libav9.8/out`
+    (make sure that path is correct)

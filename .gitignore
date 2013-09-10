@@ -1,2 +1,5 @@
 *.o
+*.so
+*.a
+/example/playlist
 /example/play

@@ -259,7 +259,6 @@ static void do_exit(void)
     }
     avformat_network_deinit();
     SDL_Quit();
-    av_log(NULL, AV_LOG_QUIET, "");
     exit(0);
 }
 
@@ -270,7 +269,6 @@ static int audio_decode_frame(AudioState *is)
     AVPacket *pkt = &is->audio_pkt;
     AVCodecContext *dec = is->audio_st->codec;
     int n, len1, data_size, got_frame;
-    double pts;
     int new_packet = 0;
     int flush_complete = 0;
 
@@ -375,7 +373,6 @@ static int audio_decode_frame(AudioState *is)
             }
 
             /* if no pts, then compute it */
-            pts = is->audio_clock;
             n = is->sdl_channels * av_get_bytes_per_sample(is->sdl_sample_fmt);
             is->audio_clock += (double)data_size / (double)(n * is->sdl_sample_rate);
             return data_size;

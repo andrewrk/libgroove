@@ -6,7 +6,6 @@ extern "C"
 {
 #endif /* __cplusplus */
 
-#include "groove_private.h"
 #include <stdint.h>
 
 typedef struct GrooveUtf8 {
@@ -21,7 +20,7 @@ typedef struct GrooveFile {
     int sample_rate; // in hz. example: 44100
     double duration;
 
-    GrooveFilePrivate priv;
+    void * internals;
 } GrooveFile;
 
 typedef struct GrooveQueueItem {
@@ -49,12 +48,11 @@ typedef struct GroovePlayer {
     GrooveQueueItem * queue_tail;
     enum GrooveReplayGainMode replaygain_mode;
 
-    GroovePlayerPrivate priv;
+    void * internals;
 } GroovePlayer;
 
-// pass NULL for the default device
 // you may not create two simultaneous players on the same device
-GroovePlayer * groove_create_player(const char * device);
+GroovePlayer * groove_create_player();
 void groove_destroy_player(GroovePlayer *player);
 
 GrooveFile * groove_open(char* filename);
