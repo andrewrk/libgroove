@@ -23,13 +23,7 @@ src/groove.a: src/groove.o
 src/groove.o: src/groove.c
 	$(CC) $(CFLAGS) -o src/groove.o -c src/groove.c
 
-examples: example/play example/playlist
-
-example/play: example/play.o
-	$(CC) -o example/play example/play.o $(STATIC_LIBS) $(LDFLAGS) 
-
-example/play.o: example/play.c
-	$(CC) $(CFLAGS) -o example/play.o -c example/play.c
+examples: example/playlist
 
 example/playlist: example/playlist.o src/groove.a
 	$(CC) -o example/playlist example/playlist.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
@@ -40,5 +34,4 @@ example/playlist.o: example/playlist.c
 clean:
 	rm -f src/*.o src/*.so src/*.a
 	rm -f example/*.o
-	rm -f example/play
 	rm -f example/playlist
