@@ -7,7 +7,12 @@ CFLAGS := -I$(LIBAVSRC)/include -pedantic -Werror -Wall -ggdb -O0
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAVSRC)/lib/lib%.a)
 LDFLAGS := -lm -lz -pthread -lbz2 -lSDL
 
-.PHONY: examples clean
+.PHONY: examples clean all
+
+all: examples groove.o
+
+groove.o: src/groove.c
+	$(CC) $(CFLAGS) -o src/groove.o -c src/groove.c
 
 examples: example/play
 

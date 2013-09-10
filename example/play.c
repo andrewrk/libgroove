@@ -12,12 +12,6 @@
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
 
-#ifdef __MINGW32__
-#undef main /* We don't want SDL to override our main() */
-#endif
-
-#include <assert.h>
-
 #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
 #define MIN_AUDIOQ_SIZE (20 * 16 * 1024)
 
@@ -270,7 +264,7 @@ static void do_exit(void)
 }
 
 /* decode one audio frame and returns its uncompressed size */
-static int audio_decode_frame(AudioState *is, double *pts_ptr)
+static int audio_decode_frame(AudioState *is)
 {
     AVPacket *pkt_temp = &is->audio_pkt_temp;
     AVPacket *pkt = &is->audio_pkt;
@@ -382,7 +376,6 @@ static int audio_decode_frame(AudioState *is, double *pts_ptr)
 
             /* if no pts, then compute it */
             pts = is->audio_clock;
-            *pts_ptr = pts;
             n = is->sdl_channels * av_get_bytes_per_sample(is->sdl_sample_fmt);
             is->audio_clock += (double)data_size / (double)(n * is->sdl_sample_rate);
             return data_size;
@@ -420,11 +413,10 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
 {
     AudioState *is = opaque;
     int audio_size, len1;
-    double pts;
 
     while (len > 0) {
         if (is->audio_buf_index >= is->audio_buf_size) {
-           audio_size = audio_decode_frame(is, &pts);
+           audio_size = audio_decode_frame(is);
            if (audio_size < 0) {
                 /* if error, just output silence */
                is->audio_buf      = is->silence_buf;
@@ -816,9 +808,6 @@ int main(int argc, char **argv)
     }
 
     int flags = SDL_INIT_AUDIO | SDL_INIT_TIMER;
-#if !defined(__MINGW32__) && !defined(__APPLE__)
-    flags |= SDL_INIT_EVENTTHREAD; /* Not supported on Windows or Mac OS X */
-#endif
     if (SDL_Init (flags)) {
         fprintf(stderr, "Could not initialize SDL - %s\n", SDL_GetError());
         exit(1);
