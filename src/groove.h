@@ -39,6 +39,22 @@ typedef struct GroovePlayer {
     void * internals;
 } GroovePlayer;
 
+// flags to groove_file_metadata_*
+#define GROOVE_TAG_MATCH_CASE      1
+#define GROOVE_TAG_IGNORE_SUFFIX   2
+#define GROOVE_TAG_DONT_STRDUP_KEY 4   /**< Take ownership of a key that's been
+                                            allocated with av_malloc() and children. */
+#define GROOVE_TAG_DONT_STRDUP_VAL 8   /**< Take ownership of a value that's been
+                                            allocated with av_malloc() and chilren. */
+#define GROOVE_TAG_DONT_OVERWRITE 16   /**< Don't overwrite existing entries. */
+#define GROOVE_TAG_APPEND         32   /**< If the entry already exists, append to it.  Note that no
+                                      delimiter is added, the strings are simply concatenated. */
+
+typedef void GrooveTag;
+
+/* GrooveTag methods */
+const char * groove_tag_key(GrooveTag *tag);
+const char * groove_tag_value(GrooveTag *tag);
 
 /* misc methods */
 
@@ -54,8 +70,23 @@ void groove_close(GrooveFile * file);
 
 char * groove_file_filename(GrooveFile *file);
 
+GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
+        const GrooveTag *prev, int flags);
+// key entry to add to metadata. will be strdup'd depending on flags
+// value entry to add to metadata. will be strdup'd depending on flags.
+//    passing NULL causes existing entry to be deleted.
+// return >= 0 on success otherwise an error code < 0
+// note that this will not save the file; you must call groove_file_save to do that.
+int groove_file_metadata_set(GrooveFile *file, const char *key, const char *value, int flags);
+
 // a comma separated list of short names for the format
 const char * groove_file_short_names(GrooveFile *file);
+
+// write changes made to metadata to disk.
+// if you specified transcoding by calling groove_file_transcode
+// those changes will happen now.
+// return < 0 on error
+int groove_file_save(GrooveFile *file);
 
 
 /* GroovePlayer methods */

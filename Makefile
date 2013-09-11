@@ -1,6 +1,5 @@
 CC = c99
 LIBAV_PREFIX = /usr
-TMP = tmpbuild
 
 # for compiling groove
 ALLAVLIBS = avfilter avformat avcodec avresample avutil
@@ -23,13 +22,13 @@ src/groove.a: src/groove.o
 src/groove.o: src/groove.c
 	$(CC) $(CFLAGS) -o src/groove.o -c src/groove.c
 
-examples: example/playlist example/identify
+examples: example/playlist example/metadata
 
-example/identify: example/identify.o src/groove.a
-	$(CC) -o example/identify example/identify.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
+example/metadata: example/metadata.o src/groove.a
+	$(CC) -o example/metadata example/metadata.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
 
-example/identify.o: example/identify.c
-	$(CC) $(EX_CFLAGS) -o example/identify.o -c example/identify.c
+example/metadata.o: example/metadata.c
+	$(CC) $(EX_CFLAGS) -o example/metadata.o -c example/metadata.c
 
 example/playlist: example/playlist.o src/groove.a
 	$(CC) -o example/playlist example/playlist.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
@@ -41,4 +40,4 @@ clean:
 	rm -f src/*.o src/*.so src/*.a
 	rm -f example/*.o
 	rm -f example/playlist
-	rm -f example/identify
+	rm -f example/metadata

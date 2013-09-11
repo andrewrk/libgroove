@@ -2,4 +2,4 @@
 *.so
 *.a
 /example/playlist
-/example/identify
+/example/metadata

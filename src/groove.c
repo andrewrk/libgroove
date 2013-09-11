@@ -921,3 +921,33 @@ const char * groove_file_short_names(GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
     return f->ic->iformat->name;
 }
+
+GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
+        const GrooveTag *prev, int flags)
+{
+    GrooveFilePrivate *f = file->internals;
+    const AVDictionaryEntry *e = prev;
+    return av_dict_get(f->ic->metadata, key, e, flags);
+}
+
+int groove_file_metadata_set(GrooveFile *file, const char *key,
+        const char *value, int flags)
+{
+    GrooveFilePrivate *f = file->internals;
+    return av_dict_set(&f->ic->metadata, key, value, flags);
+}
+
+const char * groove_tag_key(GrooveTag *tag) {
+    AVDictionaryEntry *e = tag;
+    return e->key;
+}
+
+const char * groove_tag_value(GrooveTag *tag) {
+    AVDictionaryEntry *e = tag;
+    return e->value;
+}
+
+int groove_file_save(GrooveFile *file) {
+    // TODO
+    return -1;
+}

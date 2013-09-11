@@ -1,4 +1,4 @@
-/* display the short name of a media file */
+/* read or update metadata in a media file */
 
 #include "groove.h"
 #include <stdio.h>
@@ -10,6 +10,9 @@ int main(int argc, char * argv[]) {
     }
     char * filename = argv[1];
     GrooveFile * file = groove_open(filename);
-    printf("%s\n", groove_file_short_names(file));
+    GrooveTag *tag;
+    while ((tag = groove_file_metadata_get(file, "", tag, GROOVE_TAG_IGNORE_SUFFIX)))
+        printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));
     groove_close(file);
+    return 0;
 }
