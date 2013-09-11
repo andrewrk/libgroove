@@ -3,7 +3,6 @@
 #include "groove.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
 #include <time.h>
 
 int main(int argc, char * argv[]) {
@@ -26,7 +25,16 @@ int main(int argc, char * argv[]) {
     struct timespec sleep_time;
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = 50000000;
-    while (groove_player_count(player) > 0) {
+    int count;
+    int last_count = 0;
+    for (;;) {
+        count = groove_player_count(player);
+        if (count <= 0)
+            break;
+        if (count != last_count) {
+            printf("Now playing: %s\n", groove_file_filename(player->queue_head->file));
+        }
+        last_count = count;
         nanosleep(&sleep_time, NULL);
     }
     printf("done\n");

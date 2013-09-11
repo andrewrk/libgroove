@@ -42,7 +42,7 @@ enum GrooveState {
 };
 
 typedef struct GroovePlayer {
-    enum GrooveState state;
+    enum GrooveState state; // read-only
     double volume;
     GrooveQueueItem * queue_head;
     GrooveQueueItem * queue_tail;
@@ -58,6 +58,7 @@ void groove_destroy_player(GroovePlayer *player);
 GrooveFile * groove_open(char* filename);
 void groove_close(GrooveFile * file);
 
+char * groove_file_filename(GrooveFile *file);
 
 void groove_player_play(GroovePlayer *player);
 void groove_player_stop(GroovePlayer *player);
