@@ -1,6 +1,7 @@
-/* use groove to identify the type of file */
+/* display the short name of a media file */
 
 #include "groove.h"
+#include <stdio.h>
 
 int main(int argc, char * argv[]) {
     if (argc < 2) {
@@ -8,7 +9,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
     char * filename = argv[1];
-    GrooveFile * g = groove_open(filename);
-    printf("%s\n", g->recommended_extension->data);
-    groove_close(filename);
+    GrooveFile * file = groove_open(filename);
+    printf("%s\n", groove_file_short_names(file));
+    groove_close(file);
 }

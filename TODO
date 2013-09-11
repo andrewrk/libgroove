@@ -1,6 +1,5 @@
+* example which displays and updates metadata tags
 * make it obey replaygain tags
-* make it compute replaygain tags and save them
+* add replaygain scanning example
 * cli which takes a list of songs, sorts them by album and replaygains them all
-* cli which takes a list of songs and plays them all with gapless playback
-* 2 seconds into the first song skip to the next
-* httpd streaming
+* live encoding

@@ -45,7 +45,6 @@ typedef struct BufferQueue {
 typedef struct GrooveFilePrivate {
     int audio_stream_index;
     int abort_request; // true when we're closing the file
-    char filename[1024];
     AVFormatContext *ic;
     int seek_by_bytes;
     AVCodec *decoder;
@@ -319,11 +318,28 @@ static int decode_interrupt_cb(void *ctx) {
     return f->abort_request;
 }
 
-// open a given stream. Return < 0 if error
-static int stream_component_open(GroovePlayer *player, GrooveFile *file) {
-    GrooveFilePrivate * f = file->internals;
-    AVFormatContext *ic = f->ic;
-    AVCodecContext *avctx = ic->streams[f->audio_stream_index]->codec;
+// return < 0 if error
+static int init_decode(GrooveFile *file) {
+    GrooveFilePrivate *f = file->internals;
+
+    // set all streams to discard. in a few lines here we will find the audio
+    // stream and cancel discarding it
+    for (int i = 0; i < f->ic->nb_streams; i++)
+        f->ic->streams[i]->discard = AVDISCARD_ALL;
+
+    f->audio_stream_index = av_find_best_stream(f->ic, AVMEDIA_TYPE_AUDIO, -1, -1, &f->decoder, 0);
+
+    if (f->audio_stream_index < 0) {
+        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", f->ic->filename);
+        return -1;
+    }
+
+    if (!f->decoder) {
+        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", f->ic->filename);
+        return -1;
+    }
+
+    AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
 
     if (avcodec_open2(avctx, f->decoder, NULL) < 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to open decoder\n");
@@ -347,69 +363,11 @@ static int stream_component_open(GroovePlayer *player, GrooveFile *file) {
     f->resample_channel_layout = avctx->channel_layout;
     f->resample_sample_rate    = avctx->sample_rate;
 
-    f->audio_st = ic->streams[f->audio_stream_index];
+    f->audio_st = f->ic->streams[f->audio_stream_index];
     f->audio_st->discard = AVDISCARD_DEFAULT;
 
     memset(&f->audio_pkt, 0, sizeof(f->audio_pkt));
 
-    return 0;
-}
-
-static int init_decode(GroovePlayer *player, GrooveFile *file) {
-    GrooveFilePrivate *f = file->internals;
-    AVFormatContext *ic = avformat_alloc_context();
-    if (!ic) {
-        av_log(NULL, AV_LOG_ERROR, "error creating format context: out of memory\n");
-        return -1;
-    }
-    ic->interrupt_callback.callback = decode_interrupt_cb;
-    ic->interrupt_callback.opaque = file;
-    int err = avformat_open_input(&ic, f->filename, NULL, NULL);
-    if (err < 0) {
-        avformat_free_context(ic);
-        av_log(NULL, AV_LOG_ERROR, "error opening %s\n", f->filename);
-        return -1;
-    }
-    f->ic = ic;
-
-    err = avformat_find_stream_info(ic, NULL);
-    if (err < 0) {
-        f->abort_request = 0;
-        avformat_close_input(&f->ic);
-        avformat_free_context(ic);
-        av_log(NULL, AV_LOG_ERROR, "%s: could not find codec parameters\n", f->filename);
-        return -1;
-    }
-
-    f->seek_by_bytes = !!(ic->iformat->flags & AVFMT_TS_DISCONT);
-
-    for (int i = 0; i < ic->nb_streams; i++)
-        ic->streams[i]->discard = AVDISCARD_ALL;
-
-    f->audio_stream_index = av_find_best_stream(ic, AVMEDIA_TYPE_AUDIO, -1, -1, &f->decoder, 0);
-
-    if (f->audio_stream_index < 0) {
-        f->abort_request = 0;
-        avformat_close_input(&f->ic);
-        avformat_free_context(ic);
-        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", f->filename);
-        return -1;
-    }
-
-    if (!f->decoder) {
-        f->abort_request = 0;
-        avformat_close_input(&f->ic);
-        avformat_free_context(ic);
-        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", f->filename);
-        return -1;
-    }
-
-    if (stream_component_open(player, file) < 0) {
-        f->abort_request = 0;
-        avformat_close_input(&f->ic);
-        avformat_free_context(ic);
-        return -1;
-    }
     return 0;
 }
 
@@ -479,7 +437,7 @@ static int decode_thread(void *arg) {
 
         // if the file has not been initialized for decoding
         if (f->audio_stream_index < 0) {
-            int err = init_decode(player, file);
+            int err = init_decode(file);
             if (err < 0) {
                 // we cannot play this song. skip it
                 next_without_flush(player);
@@ -609,8 +567,6 @@ GroovePlayer * groove_create_player() {
         return NULL;
     }
 
-    player->volume = 1.0;
-
     p->audio_buf_size  = 0;
     p->audio_buf_index = 0;
 
@@ -692,43 +648,62 @@ GrooveFile * groove_open(char* filename) {
     }
     file->internals = f;
     f->audio_stream_index = -1;
-    av_strlcpy(f->filename, filename, sizeof(f->filename));
 
+    f->ic = avformat_alloc_context();
+    if (!f->ic) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "error creating format context: out of memory\n");
+        return NULL;
+    }
+    f->ic->interrupt_callback.callback = decode_interrupt_cb;
+    f->ic->interrupt_callback.opaque = file;
+    int err = avformat_open_input(&f->ic, filename, NULL, NULL);
+    if (err < 0) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "error opening %s\n", f->ic->filename);
+        return NULL;
+    }
+
+    err = avformat_find_stream_info(f->ic, NULL);
+    if (err < 0) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "%s: could not find codec parameters\n", f->ic->filename);
+        return NULL;
+    }
+
+    f->seek_by_bytes = !!(f->ic->iformat->flags & AVFMT_TS_DISCONT);
     return file;
 }
 
-static void stream_component_close(GrooveFile *file) {
-    GrooveFilePrivate * f = file->internals;
-
-    if (f->audio_stream_index < 0)
+// should be safe to call no matter what state the file is in
+void groove_close(GrooveFile * file) {
+    if (!file)
         return;
 
-    AVFormatContext *ic = f->ic;
-    AVCodecContext *avctx = ic->streams[f->audio_stream_index]->codec;
-
-    av_free_packet(&f->audio_pkt);
-    if (f->avr)
-        avresample_free(&f->avr);
-
-    ic->streams[f->audio_stream_index]->discard = AVDISCARD_ALL;
-    avcodec_close(avctx);
-    f->audio_st = NULL;
-    f->audio_stream_index = -1;
-}
-
-void groove_close(GrooveFile * file) {
     GrooveFilePrivate * f = file->internals;
 
-    stream_component_close(file);
+    if (f) {
+        if (f->audio_stream_index >= 0) {
+            AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
 
-    // disable interrupting
-    f->abort_request = 0;
+            av_free_packet(&f->audio_pkt);
+            if (f->avr)
+                avresample_free(&f->avr);
 
-    if (f->ic) {
-        avformat_close_input(&f->ic);
+            f->ic->streams[f->audio_stream_index]->discard = AVDISCARD_ALL;
+            avcodec_close(avctx);
+            f->audio_st = NULL;
+            f->audio_stream_index = -1;
+        }
+
+        // disable interrupting
+        f->abort_request = 0;
+
+        if (f->ic)
+            avformat_close_input(&f->ic);
+
+        av_free(f);
     }
-
-    av_free(f);
     av_free(file);
 }
 
@@ -939,5 +914,10 @@ void groove_player_set_replaygain_mode(GroovePlayer *player, enum GrooveReplayGa
 
 char * groove_file_filename(GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
-    return f->filename;
+    return f->ic->filename;
+}
+
+const char * groove_file_short_names(GrooveFile *file) {
+    GrooveFilePrivate * f = file->internals;
+    return f->ic->iformat->name;
 }
