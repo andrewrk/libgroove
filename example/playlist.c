@@ -32,7 +32,16 @@ int main(int argc, char * argv[]) {
         if (count <= 0)
             break;
         if (count != last_count) {
-            printf("Now playing: %s\n", groove_file_filename(player->queue_head->file));
+            GrooveTag *artist_tag = groove_file_metadata_get(player->queue_head->file,
+                    "artist", NULL, GROOVE_TAG_IGNORE_SUFFIX);
+            GrooveTag *title_tag = groove_file_metadata_get(player->queue_head->file,
+                    "title", NULL, GROOVE_TAG_IGNORE_SUFFIX);
+            if (artist_tag && title_tag) {
+                printf("Now playing: %s - %s\n", groove_tag_value(artist_tag),
+                        groove_tag_value(title_tag));
+            } else {
+                printf("Now playing: %s\n", groove_file_filename(player->queue_head->file));
+            }
         }
         last_count = count;
         nanosleep(&sleep_time, NULL);
