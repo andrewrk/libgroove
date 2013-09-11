@@ -660,14 +660,14 @@ GrooveFile * groove_open(char* filename) {
     int err = avformat_open_input(&f->ic, filename, NULL, NULL);
     if (err < 0) {
         groove_close(file);
-        av_log(NULL, AV_LOG_ERROR, "error opening %s\n", f->ic->filename);
+        av_log(NULL, AV_LOG_ERROR, "error opening %s\n", filename);
         return NULL;
     }
 
     err = avformat_find_stream_info(f->ic, NULL);
     if (err < 0) {
         groove_close(file);
-        av_log(NULL, AV_LOG_ERROR, "%s: could not find codec parameters\n", f->ic->filename);
+        av_log(NULL, AV_LOG_ERROR, "%s: could not find codec parameters\n", filename);
         return NULL;
     }
 

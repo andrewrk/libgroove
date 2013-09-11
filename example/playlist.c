@@ -16,8 +16,8 @@ int main(int argc, char * argv[]) {
         char * filename = argv[i];
         GrooveFile * file = groove_open(filename);
         if (!file) {
-            fprintf(stderr, "Error opening %s\n", filename);
-            exit(1);
+            fprintf(stderr, "Not queuing %s\n", filename);
+            continue;
         }
         groove_player_queue(player, file);
     }
