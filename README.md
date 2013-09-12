@@ -1,20 +1,21 @@
-# groove
+# libgroove
 
 Music player backend library.
 
 ## Features
 
- * vaporware
-
-## Goals
-
  * Robust. Decodes everything.
- * Add entries to a playlist for gapless playback.
- * Read/write tags for every supported format.
- * Replaygain volume adjustment during playback even if tags are missing.
- * Always performs replaygain scanning during playback and saves replaygain tags.
- * Seeking during playback.
- * httpd streaming server
+ * Add and remove entries on a playlist for gapless playback.
+ * Supports pause, play, stop, and seek during playback.
+ * Read and write metadata tags for every supported format.
+
+## Roadmap
+
+ * ReplayGain volume adjustment during playback.
+ * Support ReplayGain scanning for every format.
+   - add files to a batch job and monitor progress
+ * Ability to keep a buffer filled with encoded audio.
+   - This could be used for example for an HTTP streaming server.
 
 ## Dependencies
 

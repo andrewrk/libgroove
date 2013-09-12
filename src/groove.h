@@ -9,6 +9,7 @@ extern "C"
 #include <stdint.h>
 
 typedef struct GrooveFile {
+    int dirty; // read-only
     void * internals;
 } GrooveFile;
 
@@ -41,7 +42,6 @@ typedef struct GroovePlayer {
 
 // flags to groove_file_metadata_*
 #define GROOVE_TAG_MATCH_CASE      1
-#define GROOVE_TAG_IGNORE_SUFFIX   2
 #define GROOVE_TAG_DONT_OVERWRITE 16
 
 // If the entry already exists, append to it.  Note that no
@@ -88,8 +88,8 @@ char * groove_file_filename(GrooveFile *file);
 
 GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags);
-// key entry to add to metadata. will be strdup'd depending on flags
-// value entry to add to metadata. will be strdup'd depending on flags.
+// key entry to add to metadata. will be strdup'd
+// value entry to add to metadata. will be strdup'd
 //    passing NULL causes existing entry to be deleted.
 // return >= 0 on success otherwise an error code < 0
 // note that this will not save the file; you must call groove_file_save to do that.
@@ -99,8 +99,6 @@ int groove_file_metadata_set(GrooveFile *file, const char *key, const char *valu
 const char * groove_file_short_names(GrooveFile *file);
 
 // write changes made to metadata to disk.
-// if you specified transcoding by calling groove_file_transcode
-// those changes will happen now.
 // return < 0 on error
 int groove_file_save(GrooveFile *file);
 

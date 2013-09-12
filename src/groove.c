@@ -516,6 +516,9 @@ static int maybe_init() {
         return 0;
     initialized = 1;
 
+
+    srand(time(NULL));
+
     // register all codecs, demux and protocols
     avcodec_register_all();
     av_register_all();
@@ -927,14 +930,15 @@ GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
 {
     GrooveFilePrivate *f = file->internals;
     const AVDictionaryEntry *e = prev;
-    return av_dict_get(f->ic->metadata, key, e, flags);
+    return av_dict_get(f->ic->metadata, key, e, flags&AV_DICT_IGNORE_SUFFIX);
 }
 
 int groove_file_metadata_set(GrooveFile *file, const char *key,
         const char *value, int flags)
 {
+    file->dirty = 1;
     GrooveFilePrivate *f = file->internals;
-    return av_dict_set(&f->ic->metadata, key, value, flags);
+    return av_dict_set(&f->ic->metadata, key, value, flags&AV_DICT_IGNORE_SUFFIX);
 }
 
 const char * groove_tag_key(GrooveTag *tag) {
@@ -947,7 +951,217 @@ const char * groove_tag_value(GrooveTag *tag) {
     return e->value;
 }
 
+static char * revstrchr(char *str, int character) {
+    char * found = NULL;
+    while(*str) {
+        if (*str == character)
+            found = str;
+        str += 1;
+    }
+    return found;
+}
+
+// XXX this might break for some character encodings
+// would love some advice on what to do instead of this
+static int tempfileify(char * str, size_t max_len) {
+    size_t len = strlen(str);
+    if (len + 10 > max_len)
+        return -1;
+    char prepend[11];
+    int n = rand() % 99999;
+    snprintf(prepend, 11, ".tmp%05d-", n);
+    // find the last slash and insert after it
+    // if no slash, insert at beginning
+    char * slash = revstrchr(str, '/');
+    char * pos = slash ? slash + 1 : 0;
+    size_t orig_len = len - (pos - str);
+    memmove(pos + 10, pos, orig_len);
+    strncpy(pos, prepend, 10);
+    return 0;
+}
+
 int groove_file_save(GrooveFile *file) {
-    // TODO
-    return -1;
+    if (!file->dirty)
+        return 0;
+
+    GrooveFilePrivate *f = file->internals;
+
+    // detect output format
+    AVOutputFormat *ofmt = av_guess_format(f->ic->iformat->name, f->ic->filename, NULL);
+    if (!ofmt) {
+        av_log(NULL, AV_LOG_ERROR, "Could not deduce output format to use.\n");
+        return -1;
+    }
+
+    // allocate output media context
+    AVFormatContext *oc = avformat_alloc_context();
+    if (!oc) {
+        av_log(NULL, AV_LOG_ERROR, "Could not create output context: out of memory\n");
+        return -1;
+    }
+
+    oc->oformat = ofmt;
+    snprintf(oc->filename, sizeof(oc->filename), "%s", f->ic->filename);
+    if (tempfileify(oc->filename, sizeof(oc->filename)) < 0) {
+        av_free(oc);
+        av_log(NULL, AV_LOG_ERROR, "could not create temp file - filename too long\n");
+        return -1;
+    }
+
+    // open output file if needed
+    if (!(ofmt->flags & AVFMT_NOFILE)) {
+        if (avio_open(&oc->pb, oc->filename, AVIO_FLAG_WRITE) < 0) {
+            av_free(oc);
+            av_log(NULL, AV_LOG_ERROR, "could not open '%s'\n", oc->filename);
+            return -1;
+        }
+    }
+
+    // add all the streams
+    for (int i = 0; i < f->ic->nb_streams; i++) {
+        AVStream *in_stream = f->ic->streams[i];
+        AVStream *out_stream = avformat_new_stream(oc, NULL);
+        if (!out_stream) {
+            // TODO clean up
+            av_log(NULL, AV_LOG_ERROR, "error allocating output stream\n");
+            return -1;
+        }
+        out_stream->id = in_stream->id;
+        out_stream->disposition = in_stream->disposition;
+
+        AVCodecContext *icodec = in_stream->codec;
+        AVCodecContext *ocodec = out_stream->codec;
+        ocodec->bits_per_raw_sample    = icodec->bits_per_raw_sample;
+        ocodec->chroma_sample_location = icodec->chroma_sample_location;
+        ocodec->codec_id   = icodec->codec_id;
+        ocodec->codec_type = icodec->codec_type;
+        if (!ocodec->codec_tag) {
+            if (!oc->oformat->codec_tag ||
+                 av_codec_get_id (oc->oformat->codec_tag, icodec->codec_tag) == ocodec->codec_id ||
+                 av_codec_get_tag(oc->oformat->codec_tag, icodec->codec_id) <= 0)
+                ocodec->codec_tag = icodec->codec_tag;
+        }
+        ocodec->bit_rate       = icodec->bit_rate;
+        ocodec->rc_max_rate    = icodec->rc_max_rate;
+        ocodec->rc_buffer_size = icodec->rc_buffer_size;
+        ocodec->field_order    = icodec->field_order;
+
+        uint64_t extra_size = (uint64_t)icodec->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE;
+        if (extra_size > INT_MAX) {
+            // TODO cleanup
+            av_log(NULL, AV_LOG_ERROR, "codec extra size too big\n");
+            return AVERROR(EINVAL);
+        }
+        ocodec->extradata      = av_mallocz(extra_size);
+        if (!ocodec->extradata) {
+            // TODO cleanup
+            av_log(NULL, AV_LOG_ERROR, "could not allocate codec extradata: out of memory\n");
+            return AVERROR(ENOMEM);
+        }
+        memcpy(ocodec->extradata, icodec->extradata, icodec->extradata_size);
+        ocodec->extradata_size = icodec->extradata_size;
+        ocodec->time_base      = in_stream->time_base;
+        switch (ocodec->codec_type) {
+        case AVMEDIA_TYPE_AUDIO:
+            ocodec->channel_layout     = icodec->channel_layout;
+            ocodec->sample_rate        = icodec->sample_rate;
+            ocodec->channels           = icodec->channels;
+            ocodec->frame_size         = icodec->frame_size;
+            ocodec->audio_service_type = icodec->audio_service_type;
+            ocodec->block_align        = icodec->block_align;
+            break;
+        case AVMEDIA_TYPE_VIDEO:
+            ocodec->pix_fmt            = icodec->pix_fmt;
+            ocodec->width              = icodec->width;
+            ocodec->height             = icodec->height;
+            ocodec->has_b_frames       = icodec->has_b_frames;
+            if (!ocodec->sample_aspect_ratio.num) {
+                ocodec->sample_aspect_ratio   =
+                out_stream->sample_aspect_ratio =
+                    in_stream->sample_aspect_ratio.num ? in_stream->sample_aspect_ratio :
+                    icodec->sample_aspect_ratio.num ?
+                    icodec->sample_aspect_ratio : (AVRational){0, 1};
+            }
+            break;
+        case AVMEDIA_TYPE_SUBTITLE:
+            ocodec->width  = icodec->width;
+            ocodec->height = icodec->height;
+            break;
+        case AVMEDIA_TYPE_DATA:
+        case AVMEDIA_TYPE_ATTACHMENT:
+            break;
+        default:
+            // TODO cleanup
+            av_log(NULL, AV_LOG_ERROR, "unrecognized stream type\n");
+            return -1;
+        }
+    }
+
+    // set metadata
+    AVDictionaryEntry *tag = NULL;
+    while((tag = av_dict_get(f->ic->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
+        av_dict_set(&oc->metadata, tag->key, tag->value, AV_DICT_IGNORE_SUFFIX);
+    }
+
+    if (avformat_write_header(oc, NULL) < 0) {
+        if (!(ofmt->flags & AVFMT_NOFILE)) {
+            avio_close(oc->pb);
+            // TODO: delete file
+        }
+        av_free(oc);
+        av_log(NULL, AV_LOG_ERROR, "could not write header\n");
+        return -1;
+    }
+
+    AVPacket *pkt = &f->audio_pkt;
+    for (;;) {
+        int err = av_read_frame(f->ic, pkt);
+        if (err == AVERROR_EOF) {
+            break;
+        } else if (err < 0) {
+            if (!(ofmt->flags & AVFMT_NOFILE)) {
+                avio_close(oc->pb);
+                // TODO: delete file
+            }
+            av_free(oc);
+            av_log(NULL, AV_LOG_ERROR, "error reading frame\n");
+            return -1;
+        }
+        if (av_write_frame(oc, pkt) < 0) {
+            av_free_packet(pkt);
+            if (!(ofmt->flags & AVFMT_NOFILE)) {
+                avio_close(oc->pb);
+                // TODO: delete file
+            }
+            av_free(oc);
+        }
+        av_free_packet(pkt);
+    }
+
+    if (av_write_trailer(oc) < 0) {
+        if (!(ofmt->flags & AVFMT_NOFILE)) {
+            avio_close(oc->pb);
+            // TODO: delete file
+        }
+        av_free(oc);
+        av_log(NULL, AV_LOG_ERROR, "could not write trailer\n");
+        return -1;
+    }
+
+    if (rename(oc->filename, f->ic->filename) != 0) {
+        if (!(ofmt->flags & AVFMT_NOFILE)) {
+            avio_close(oc->pb);
+            // TODO: delete file
+        }
+        av_free(oc);
+        av_log(NULL, AV_LOG_ERROR, "error renaming tmp file to original file\n");
+        return -1;
+    }
+    if (!(ofmt->flags & AVFMT_NOFILE)) {
+        avio_close(oc->pb);
+    }
+    av_free(oc);
+
+    file->dirty = 0;
+    return 0;
 }

@@ -1,5 +1,4 @@
-* example which displays and updates metadata tags
-* make it obey replaygain tags
 * add replaygain scanning example
+* make it obey replaygain tags
 * cli which takes a list of songs, sorts them by album and replaygains them all
 * live encoding
