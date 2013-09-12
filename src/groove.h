@@ -42,22 +42,38 @@ typedef struct GroovePlayer {
 // flags to groove_file_metadata_*
 #define GROOVE_TAG_MATCH_CASE      1
 #define GROOVE_TAG_IGNORE_SUFFIX   2
-#define GROOVE_TAG_DONT_STRDUP_KEY 4   /**< Take ownership of a key that's been
-                                            allocated with av_malloc() and children. */
-#define GROOVE_TAG_DONT_STRDUP_VAL 8   /**< Take ownership of a value that's been
-                                            allocated with av_malloc() and chilren. */
-#define GROOVE_TAG_DONT_OVERWRITE 16   /**< Don't overwrite existing entries. */
-#define GROOVE_TAG_APPEND         32   /**< If the entry already exists, append to it.  Note that no
-                                      delimiter is added, the strings are simply concatenated. */
+#define GROOVE_TAG_DONT_OVERWRITE 16
+
+// If the entry already exists, append to it.  Note that no
+// delimiter is added, the strings are simply concatenated.
+#define GROOVE_TAG_APPEND         32
 
 typedef void GrooveTag;
+
+typedef struct GrooveReplayGainScan {
+    void * internals;
+} GrooveReplayGainScan;
+
+typedef struct GrooveReplayGainScanEvent {
+    void * internals;
+} GrooveReplayGainScanEvent;
+
+/* GrooveReplayGainScan methods */
+GrooveReplayGainScan * groove_create_replaygainscan();
+void groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file);
+void groove_replaygainscan_exec(GrooveReplayGainScan *scan);
+// call this if you never call exec or during a progress callback to abort the scan
+void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
+int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveReplayGainScanEvent *event);
+void groove_replaygainscan_event_wait(GrooveReplayGainScan *scan);
+
 
 /* GrooveTag methods */
 const char * groove_tag_key(GrooveTag *tag);
 const char * groove_tag_value(GrooveTag *tag);
 
-/* misc methods */
 
+/* misc methods */
 // enable/disable logging of errors
 void groove_set_logging(int enabled);
 
