@@ -33,9 +33,9 @@ int main(int argc, char * argv[]) {
             break;
         if (count != last_count) {
             GrooveTag *artist_tag = groove_file_metadata_get(player->queue_head->file,
-                    "artist", NULL, GROOVE_TAG_IGNORE_SUFFIX);
+                    "artist", NULL, 0);
             GrooveTag *title_tag = groove_file_metadata_get(player->queue_head->file,
-                    "title", NULL, GROOVE_TAG_IGNORE_SUFFIX);
+                    "title", NULL, 0);
             if (artist_tag && title_tag) {
                 printf("Now playing: %s - %s\n", groove_tag_value(artist_tag),
                         groove_tag_value(title_tag));

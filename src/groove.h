@@ -54,18 +54,37 @@ typedef struct GrooveReplayGainScan {
     void * internals;
 } GrooveReplayGainScan;
 
-typedef struct GrooveReplayGainScanEvent {
-    void * internals;
-} GrooveReplayGainScanEvent;
+enum GrooveRgEventType {
+    GROOVE_RG_EVENT_PROGRESS,
+    GROOVE_RG_EVENT_COMPLETE,
+};
+
+typedef struct GrooveRgEventProgress {
+    enum GrooveRgEventType type;
+    int metadata_current;
+    int metadata_total;
+    int scanning_current;
+    int scanning_total;
+    int update_current;
+    int update_total;
+} GrooveRgEventProgress;
+
+typedef union GrooveRgEvent {
+    enum GrooveRgEventType type;
+    GrooveRgEventProgress rg_progress;
+} GrooveRgEvent;
 
 /* GrooveReplayGainScan methods */
 GrooveReplayGainScan * groove_create_replaygainscan();
-void groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file);
+// filename is strdup'd. you may not call add after you call exec
+int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename);
 void groove_replaygainscan_exec(GrooveReplayGainScan *scan);
-// call this if you never call exec or during a progress callback to abort the scan
+// call this to abort a scan or if you never call exec
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
-int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveReplayGainScanEvent *event);
-void groove_replaygainscan_event_wait(GrooveReplayGainScan *scan);
+// returns < 0 on error
+int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event);
+// returns < 0 on error
+int groove_replaygainscan_event_wait(GrooveReplayGainScan *scan, GrooveRgEvent *event);
 
 
 /* GrooveTag methods */

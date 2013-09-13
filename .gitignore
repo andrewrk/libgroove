@@ -3,3 +3,4 @@
 *.a
 /example/playlist
 /example/metadata
+/example/replaygain

@@ -32,7 +32,7 @@
 
 #include <stddef.h>
 
-#define GAIN_NOT_ENOUGH_SAMPLES  -24601
+#define GAIN_NOT_ENOUGH_SAMPLES  (-24601)
 #define GAIN_ANALYSIS_ERROR           0
 #define GAIN_ANALYSIS_OK              1
 

@@ -1,4 +1,5 @@
 #include "groove.h"
+#include "decode.h"
 
 #include <stdio.h>
 #include <inttypes.h>
@@ -6,9 +7,8 @@
 #include "libavutil/avstring.h"
 #include "libavutil/dict.h"
 #include "libavutil/samplefmt.h"
-#include "libavformat/avformat.h"
-#include "libavresample/avresample.h"
 #include "libavutil/opt.h"
+#include "libavformat/avformat.h"
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
@@ -26,12 +26,6 @@
 #define MIN_AUDIOQ_SIZE (44100 * 2 * 2 / 4)
 #define QUEUE_FULL_DELAY 10
 
-typedef struct BufferList {
-    uint8_t * buffer;
-    int size;
-    struct BufferList * next;
-} BufferList;
-
 typedef struct BufferQueue {
     BufferList *first_buf;
     BufferList *last_buf;
@@ -42,34 +36,6 @@ typedef struct BufferQueue {
     SDL_cond *cond;
 } BufferQueue;
 
-typedef struct GrooveFilePrivate {
-    int audio_stream_index;
-    int abort_request; // true when we're closing the file
-    AVFormatContext *ic;
-    int seek_by_bytes;
-    AVCodec *decoder;
-    int sdl_sample_rate;
-    uint64_t sdl_channel_layout;
-    int sdl_channels;
-    enum AVSampleFormat sdl_sample_fmt;
-    enum AVSampleFormat resample_sample_fmt;
-    uint64_t resample_channel_layout;
-    int resample_sample_rate;
-    AVStream *audio_st;
-    int seek_req;
-    int seek_flags;
-    int64_t seek_pos;
-    int64_t seek_rel;
-    int eof;
-    double audio_clock;
-    AVAudioResampleContext *avr;
-    AVPacket audio_pkt;
-
-    // state while saving
-    AVFormatContext *oc;
-    int tempfile_exists;
-} GrooveFilePrivate;
-
 typedef struct GroovePlayerPrivate {
     SDL_Thread *thread_id;
     int abort_request;
@@ -78,11 +44,9 @@ typedef struct GroovePlayerPrivate {
     uint8_t *audio_buf;
     unsigned int audio_buf_size; // in bytes
     int audio_buf_index; // in bytes
-    AVPacket audio_pkt_temp;
-    AVFrame *frame;
-    int paused;
-    int last_paused;
+    DecodeContext decode_ctx;
 } GroovePlayerPrivate;
+
 
 static int initialized = 0;
 static int initialized_sdl = 0;
@@ -111,133 +75,6 @@ static int buffer_queue_put(BufferQueue *q, BufferList *buf_list) {
     SDL_UnlockMutex(q->mutex);
 
     return 0;
-}
-
-// decode one audio packet and return its uncompressed size
-static int audio_decode_frame(GroovePlayer *player, GrooveFile *file) {
-    GroovePlayerPrivate * p = player->internals;
-    GrooveFilePrivate * f = file->internals;
-
-    AVPacket *pkt = &f->audio_pkt;
-    AVCodecContext *dec = f->audio_st->codec;
-
-    AVPacket *pkt_temp = &p->audio_pkt_temp;
-    *pkt_temp = *pkt;
-
-    // update the audio clock with the pts if we can
-    if (pkt->pts != AV_NOPTS_VALUE) {
-        f->audio_clock = av_q2d(f->audio_st->time_base)*pkt->pts;
-    }
-
-    int data_size = 0;
-    int n, len1, got_frame;
-    int new_packet = 1;
-
-    // NOTE: the audio packet can contain several frames
-    while (pkt_temp->size > 0 || (!pkt_temp->data && new_packet)) {
-        avcodec_get_frame_defaults(p->frame);
-        new_packet = 0;
-
-        len1 = avcodec_decode_audio4(dec, p->frame, &got_frame, pkt_temp);
-        if (len1 < 0) {
-            // if error, we skip the frame
-            pkt_temp->size = 0;
-            return -1;
-        }
-
-        pkt_temp->data += len1;
-        pkt_temp->size -= len1;
-
-        if (!got_frame) {
-            // stop sending empty packets if the decoder is finished
-            if (!pkt_temp->data && dec->codec->capabilities & CODEC_CAP_DELAY)
-                return 0;
-            continue;
-        }
-        data_size = av_samples_get_buffer_size(NULL, dec->channels,
-                       p->frame->nb_samples, p->frame->format, 1);
-
-        int audio_resample = p->frame->format     != f->sdl_sample_fmt     ||
-                         p->frame->channel_layout != f->sdl_channel_layout ||
-                         p->frame->sample_rate    != f->sdl_sample_rate;
-
-        int resample_changed = p->frame->format     != f->resample_sample_fmt     ||
-                           p->frame->channel_layout != f->resample_channel_layout ||
-                           p->frame->sample_rate    != f->resample_sample_rate;
-
-        if ((!f->avr && audio_resample) || resample_changed) {
-            int ret;
-            if (f->avr) {
-                avresample_close(f->avr);
-            } else if (audio_resample) {
-                f->avr = avresample_alloc_context();
-                if (!f->avr) {
-                    av_log(NULL, AV_LOG_ERROR, "error allocating AVAudioResampleContext\n");
-                    return -1;
-                }
-            }
-            if (audio_resample) {
-                av_opt_set_int(f->avr, "in_channel_layout",  p->frame->channel_layout, 0);
-                av_opt_set_int(f->avr, "in_sample_fmt",      p->frame->format,         0);
-                av_opt_set_int(f->avr, "in_sample_rate",     p->frame->sample_rate,    0);
-                av_opt_set_int(f->avr, "out_channel_layout", f->sdl_channel_layout,    0);
-                av_opt_set_int(f->avr, "out_sample_fmt",     f->sdl_sample_fmt,        0);
-                av_opt_set_int(f->avr, "out_sample_rate",    f->sdl_sample_rate,       0);
-
-                if ((ret = avresample_open(f->avr)) < 0) {
-                    av_log(NULL, AV_LOG_ERROR, "error initializing libavresample\n");
-                    return -1;
-                }
-            }
-            f->resample_sample_fmt     = p->frame->format;
-            f->resample_channel_layout = p->frame->channel_layout;
-            f->resample_sample_rate    = p->frame->sample_rate;
-        }
-
-        BufferList buf_list;
-        if (audio_resample) {
-            int osize      = av_get_bytes_per_sample(f->sdl_sample_fmt);
-            int nb_samples = p->frame->nb_samples;
-
-            int out_linesize;
-            buf_list.size = av_samples_get_buffer_size(&out_linesize,
-                                  f->sdl_channels, nb_samples, f->sdl_sample_fmt, 0);
-            buf_list.buffer = av_malloc(buf_list.size);
-            if (!buf_list.buffer) {
-                av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
-                return -1;
-            }
-
-            int out_samples = avresample_convert(f->avr, &buf_list.buffer,
-                    out_linesize, nb_samples, p->frame->data,
-                    p->frame->linesize[0], p->frame->nb_samples);
-            if (out_samples < 0) {
-                av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
-                break;
-            }
-            data_size = out_samples * osize * f->sdl_channels;
-            buf_list.size = data_size;
-        } else {
-            buf_list.size = data_size;
-            buf_list.buffer = av_malloc(buf_list.size);
-            if (!buf_list.buffer) {
-                av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
-                return -1;
-            }
-            memcpy(buf_list.buffer, p->frame->data[0], buf_list.size);
-        }
-        if (buffer_queue_put(&p->audioq, &buf_list) < 0) {
-            av_log(NULL, AV_LOG_ERROR, "error allocating buffer queue item: out of memory\n");
-            return -1;
-        }
-        // if no pts, then compute it
-        if (pkt->pts == AV_NOPTS_VALUE) {
-            n = f->sdl_channels * av_get_bytes_per_sample(f->sdl_sample_fmt);
-            f->audio_clock += (double)data_size / (double)(n * f->sdl_sample_rate);
-        }
-        return data_size;
-    }
-    return data_size;
 }
 
 // return < 0 if aborted, 0 if no buffer and > 0 if buffer.
@@ -280,11 +117,12 @@ static int buffer_queue_get(BufferQueue *q, BufferList *buf_list, int block) {
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     GroovePlayer *player = opaque;
     GroovePlayerPrivate *p = player->internals;
+    DecodeContext *decode_ctx = &p->decode_ctx;
 
     BufferList buf_list;
 
     while (len > 0) {
-        if (!p->paused && p->audio_buf_index >= p->audio_buf_size) {
+        if (!decode_ctx->paused && p->audio_buf_index >= p->audio_buf_size) {
             av_freep(&p->audio_buf);
             p->audio_buf_index = 0;
             p->audio_buf_size = 0;
@@ -293,7 +131,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
                 p->audio_buf_size = buf_list.size;
             }
         }
-        if (p->paused || !p->audio_buf) {
+        if (decode_ctx->paused || !p->audio_buf) {
             // fill with silence
             memset(stream, 0, len);
             break;
@@ -320,59 +158,6 @@ static int decode_interrupt_cb(void *ctx) {
         return 0;
     GrooveFilePrivate *f = file->internals;
     return f->abort_request;
-}
-
-// return < 0 if error
-static int init_decode(GrooveFile *file) {
-    GrooveFilePrivate *f = file->internals;
-
-    // set all streams to discard. in a few lines here we will find the audio
-    // stream and cancel discarding it
-    for (int i = 0; i < f->ic->nb_streams; i++)
-        f->ic->streams[i]->discard = AVDISCARD_ALL;
-
-    f->audio_stream_index = av_find_best_stream(f->ic, AVMEDIA_TYPE_AUDIO, -1, -1, &f->decoder, 0);
-
-    if (f->audio_stream_index < 0) {
-        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", f->ic->filename);
-        return -1;
-    }
-
-    if (!f->decoder) {
-        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", f->ic->filename);
-        return -1;
-    }
-
-    AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
-
-    if (avcodec_open2(avctx, f->decoder, NULL) < 0) {
-        av_log(NULL, AV_LOG_ERROR, "unable to open decoder\n");
-        return -1;
-    }
-
-    // prepare audio output
-    f->sdl_sample_rate = avctx->sample_rate;
-
-    if (!avctx->channel_layout)
-        avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
-    if (!avctx->channel_layout) {
-        av_log(NULL, AV_LOG_ERROR, "unable to guess channel layout\n");
-        return -1;
-    }
-    f->sdl_channel_layout = (avctx->channels == 1) ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO;
-    f->sdl_channels = av_get_channel_layout_nb_channels(f->sdl_channel_layout);
-
-    f->sdl_sample_fmt          = AV_SAMPLE_FMT_S16;
-    f->resample_sample_fmt     = f->sdl_sample_fmt;
-    f->resample_channel_layout = avctx->channel_layout;
-    f->resample_sample_rate    = avctx->sample_rate;
-
-    f->audio_st = f->ic->streams[f->audio_stream_index];
-    f->audio_st->discard = AVDISCARD_DEFAULT;
-
-    memset(&f->audio_pkt, 0, sizeof(f->audio_pkt));
-
-    return 0;
 }
 
 static GrooveFile * remove_queue_item(GroovePlayer *player, GrooveQueueItem *item) {
@@ -414,6 +199,22 @@ static void next_without_flush(GroovePlayer *player) {
     groove_close(remove_queue_item(player, player->queue_head));
 }
 
+static void player_flush(DecodeContext *decode_ctx) {
+    GroovePlayer *player = decode_ctx->callback_context;
+    GroovePlayerPrivate *p = player->internals;
+    buffer_queue_flush(&p->audioq);
+}
+
+static int player_buffer(DecodeContext *decode_ctx, BufferList *buf_list) {
+    GroovePlayer *player = decode_ctx->callback_context;
+    GroovePlayerPrivate *p = player->internals;
+    if (buffer_queue_put(&p->audioq, buf_list) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "error allocating buffer queue item: out of memory\n");
+        return -1;
+    }
+    return 0;
+}
+
 // this thread is responsible for maintaining the audio queue
 static int decode_thread(void *arg) {
     GroovePlayer *player = arg;
@@ -436,76 +237,8 @@ static int decode_thread(void *arg) {
             continue;
         }
         GrooveFile * file = player->queue_head->file;
-        GrooveFilePrivate * f = file->internals;
-        AVPacket *pkt = &f->audio_pkt;
-
-        // if the file has not been initialized for decoding
-        if (f->audio_stream_index < 0) {
-            int err = init_decode(file);
-            if (err < 0) {
-                // we cannot play this song. skip it
-                next_without_flush(player);
-                continue;
-            }
-        }
-        if (f->abort_request)
-            break;
-        if (p->paused != p->last_paused) {
-            p->last_paused = p->paused;
-            if (p->paused) {
-                av_read_pause(f->ic);
-            } else {
-                av_read_play(f->ic);
-            }
-        }
-        AVCodecContext *dec = f->audio_st->codec;
-        if (f->seek_req) {
-            int64_t seek_target = f->seek_pos;
-            int64_t seek_min    = f->seek_rel > 0 ? seek_target - f->seek_rel + 2: INT64_MIN;
-            int64_t seek_max    = f->seek_rel < 0 ? seek_target - f->seek_rel - 2: INT64_MAX;
-            // FIXME the +-2 is due to rounding being not done in the correct
-            // direction in generation of the seek_pos/seek_rel variables
-            int err = avformat_seek_file(f->ic, -1, seek_min, seek_target, seek_max,
-                    f->seek_flags);
-            if (err < 0) {
-                av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->filename);
-            } else {
-                buffer_queue_flush(&p->audioq);
-                avcodec_flush_buffers(dec);
-            }
-            f->seek_req = 0;
-            f->eof = 0;
-        }
-        if (f->eof) {
-            if (f->audio_st->codec->codec->capabilities & CODEC_CAP_DELAY) {
-                av_init_packet(pkt);
-                pkt->data = NULL;
-                pkt->size = 0;
-                pkt->stream_index = f->audio_stream_index;
-                if (audio_decode_frame(player, file) > 0) {
-                    // keep flushing
-                    continue;
-                }
-            }
+        if (decode(&p->decode_ctx, file) < 0)
             next_without_flush(player);
-            continue;
-        }
-        int err = av_read_frame(f->ic, pkt);
-        if (err < 0) {
-            // treat all errors as EOF, but log non-EOF errors.
-            if (err != AVERROR_EOF) {
-                av_log(NULL, AV_LOG_ERROR, "error reading frames\n");
-            }
-            f->eof = 1;
-            continue;
-        }
-        if (pkt->stream_index != f->audio_stream_index) {
-            // we're only interested in the One True Audio Stream
-            av_free_packet(pkt);
-            continue;
-        }
-        audio_decode_frame(player, file);
-        av_free_packet(pkt);
     }
 
     return 0;
@@ -566,8 +299,12 @@ GroovePlayer * groove_create_player() {
 
     player->internals = p;
 
-    p->frame = avcodec_alloc_frame();
-    if (!p->frame) {
+    p->decode_ctx.callback_context = player;
+    p->decode_ctx.flush = player_flush;
+    p->decode_ctx.buffer = player_buffer;
+
+    p->decode_ctx.frame = avcodec_alloc_frame();
+    if (!p->decode_ctx.frame) {
         av_free(player);
         av_free(p);
         av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
@@ -636,7 +373,7 @@ void groove_destroy_player(GroovePlayer *player) {
 
     p->audio_buf = NULL;
 
-    avcodec_free_frame(&p->frame);
+    avcodec_free_frame(&p->decode_ctx.frame);
     av_free(p);
     av_free(player);
 }
@@ -690,6 +427,8 @@ void groove_close(GrooveFile * file) {
     GrooveFilePrivate * f = file->internals;
 
     if (f) {
+        f->abort_request = 1;
+
         if (f->audio_stream_index >= 0) {
             AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
 
@@ -722,7 +461,7 @@ void groove_player_play(GroovePlayer *player) {
     }
     GroovePlayerPrivate * p = player->internals;
     if (player->state == GROOVE_STATE_STOPPED || player->state == GROOVE_STATE_PAUSED) {
-        p->paused = 0;
+        p->decode_ctx.paused = 0;
         player->state = GROOVE_STATE_PLAYING;
     } else if (player->state == GROOVE_STATE_PLAYING) {
         // nothing to do
@@ -820,7 +559,7 @@ void groove_player_stop(GroovePlayer *player) {
     GroovePlayerPrivate * p = player->internals;
     if (player->state == GROOVE_STATE_PAUSED || player->state == GROOVE_STATE_PLAYING) {
         groove_player_seek_abs(player, 0);
-        p->paused = 1;
+        p->decode_ctx.paused = 1;
         player->state = GROOVE_STATE_STOPPED;
     } else if (player->state == GROOVE_STATE_STOPPED) {
         // nothing to do
@@ -840,7 +579,7 @@ void groove_player_pause(GroovePlayer *player) {
     if (player->state == GROOVE_STATE_STOPPED || player->state == GROOVE_STATE_PAUSED) {
         // nothing to do
     } else if (player->state == GROOVE_STATE_PLAYING) {
-        p->paused = 1;
+        p->decode_ctx.paused = 1;
         player->state = GROOVE_STATE_PAUSED;
     } else {
         fprintf(stderr, "groove_player_stop: player has invalid state: %i\n", player->state);

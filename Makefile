@@ -16,13 +16,22 @@ EX_LDFLAGS := $(LDFLAGS)
 
 all: examples
 
-src/groove.a: src/groove.o
-	ar rcs src/groove.a src/groove.o
+src/groove.a: src/groove.o src/scan.o src/gain_analysis.o src/decode.o
+	ar rcs src/groove.a src/groove.o src/scan.o src/gain_analysis.o src/decode.o
+
+src/decode.o: src/decode.c
+	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
 
 src/groove.o: src/groove.c
 	$(CC) $(CFLAGS) -o src/groove.o -c src/groove.c
 
-examples: example/playlist example/metadata
+src/scan.o: src/scan.c
+	$(CC) $(CFLAGS) -o src/scan.o -c src/scan.c
+
+src/gain_analysis.o: src/gain_analysis.c
+	$(CC) $(CFLAGS) -o src/gain_analysis.o -c src/gain_analysis.c
+
+examples: example/playlist example/metadata example/replaygain
 
 example/metadata: example/metadata.o src/groove.a
 	$(CC) -o example/metadata example/metadata.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
@@ -36,8 +45,15 @@ example/playlist: example/playlist.o src/groove.a
 example/playlist.o: example/playlist.c
 	$(CC) $(EX_CFLAGS) -o example/playlist.o -c example/playlist.c
 
+example/replaygain: example/replaygain.o src/groove.a
+	$(CC) -o example/replaygain example/replaygain.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
+
+example/replaygain.o: example/replaygain.c
+	$(CC) $(EX_CFLAGS) -o example/replaygain.o -c example/replaygain.c
+
 clean:
 	rm -f src/*.o src/*.so src/*.a
 	rm -f example/*.o
 	rm -f example/playlist
 	rm -f example/metadata
+	rm -f example/replaygain

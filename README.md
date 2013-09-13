@@ -11,16 +11,16 @@ Music player backend library.
 
 ## Roadmap
 
- * ReplayGain volume adjustment during playback.
  * Support ReplayGain scanning for every format.
    - add files to a batch job and monitor progress
+ * ReplayGain volume adjustment during playback.
+ * Poll or wait for player events.
  * Ability to keep a buffer filled with encoded audio.
    - This could be used for example for an HTTP streaming server.
 
 ## Dependencies
 
  * libsdl1.2-dev - http://www.libsdl.org/
- * libreplaygain-dev - http://svn.musepack.net/libreplaygain/
  * libav - http://www.libav.org/
    - groove depends on libav version 9.9. As this version is not in Ubuntu or
      Debian's package manager, groove is compiled against libav statically.

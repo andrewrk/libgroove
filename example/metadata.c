@@ -35,7 +35,7 @@ int main(int argc, char * argv[]) {
             }
             char *key = argv[++i];
             char *value = argv[++i];
-            groove_file_metadata_set(file, key, value, GROOVE_TAG_IGNORE_SUFFIX);
+            groove_file_metadata_set(file, key, value, 0);
         } else if (strcmp("--delete", arg) == 0) {
             if (i + 1 >= argc) {
                 groove_close(file);
@@ -43,14 +43,14 @@ int main(int argc, char * argv[]) {
                 return usage(exe);
             }
             char *key = argv[++i];
-            groove_file_metadata_set(file, key, NULL, GROOVE_TAG_IGNORE_SUFFIX);
+            groove_file_metadata_set(file, key, NULL, 0);
         } else {
             groove_close(file);
             return usage(exe);
         }
     }
     GrooveTag *tag = NULL;
-    while ((tag = groove_file_metadata_get(file, "", tag, GROOVE_TAG_IGNORE_SUFFIX)))
+    while ((tag = groove_file_metadata_get(file, "", tag, 0)))
         printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));
     if (file->dirty && groove_file_save(file) < 0)
         fprintf(stderr, "error saving file\n");
