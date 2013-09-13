@@ -78,7 +78,7 @@ typedef union GrooveRgEvent {
 GrooveReplayGainScan * groove_create_replaygainscan();
 // filename is strdup'd. you may not call add after you call exec
 int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename);
-void groove_replaygainscan_exec(GrooveReplayGainScan *scan);
+int groove_replaygainscan_exec(GrooveReplayGainScan *scan);
 // call this to abort a scan or if you never call exec
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
 // returns < 0 on error

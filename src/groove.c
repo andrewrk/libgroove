@@ -47,10 +47,6 @@ typedef struct GroovePlayerPrivate {
     DecodeContext decode_ctx;
 } GroovePlayerPrivate;
 
-
-static int initialized = 0;
-static int initialized_sdl = 0;
-
 static int buffer_queue_put(BufferQueue *q, BufferList *buf_list) {
     BufferList * buf1 = av_malloc(sizeof(BufferList));
 
@@ -244,41 +240,15 @@ static int decode_thread(void *arg) {
     return 0;
 }
 
-static void deinit_network() {
-    avformat_network_deinit();
-}
-
-static int maybe_init() {
-    if (initialized)
-        return 0;
-    initialized = 1;
-
-
-    srand(time(NULL));
-
-    // register all codecs, demux and protocols
-    avcodec_register_all();
-    av_register_all();
-    avformat_network_init();
-
-    atexit(deinit_network);
-
-    av_log_set_level(AV_LOG_QUIET);
-    return 0;
-}
-
-static int maybe_init_sdl() {
-    if (initialized_sdl)
-        return 0;
-    initialized_sdl = 1;
-
-    int flags = SDL_INIT_AUDIO | SDL_INIT_TIMER;
-    if (SDL_Init(flags)) {
-        av_log(NULL, AV_LOG_ERROR, "Could not initialize SDL - %s\n", SDL_GetError());
-        return -1;
+static enum AVSampleFormat sdl_format_to_av_format(Uint16 sdl_format) {
+    switch (sdl_format) {
+        case AUDIO_U8:
+            return AV_SAMPLE_FMT_U8;
+        case AUDIO_S16SYS:
+            return AV_SAMPLE_FMT_S16;
+        default:
+            return AV_SAMPLE_FMT_NONE;
     }
-    atexit(SDL_Quit);
-    return 0;
 }
 
 GroovePlayer * groove_create_player() {
@@ -333,10 +303,21 @@ GroovePlayer * groove_create_player() {
     wanted_spec.callback = sdl_audio_callback;
     wanted_spec.userdata = player;
     if (SDL_OpenAudio(&wanted_spec, &p->spec) < 0) {
-        av_free(player);
-        fprintf(stderr, "unable to open audio device: %s\n", SDL_GetError());
+        groove_destroy_player(player);
+        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
         return NULL;
     }
+    p->decode_ctx.dest_sample_fmt = sdl_format_to_av_format(p->spec.format);
+    if (p->decode_ctx.dest_sample_fmt == AV_SAMPLE_FMT_NONE) {
+        groove_destroy_player(player);
+        av_log(NULL, AV_LOG_ERROR, "unsupported audio device format\n");
+        return NULL;
+    }
+
+    p->decode_ctx.dest_sample_rate = p->spec.freq;
+    p->decode_ctx.dest_channel_layout = p->spec.channels == 2 ?
+        AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
+    p->decode_ctx.dest_channel_count = p->spec.channels;
 
     SDL_PauseAudio(0);
 
@@ -373,7 +354,7 @@ void groove_destroy_player(GroovePlayer *player) {
 
     p->audio_buf = NULL;
 
-    avcodec_free_frame(&p->decode_ctx.frame);
+    cleanup_decode_ctx(&p->decode_ctx);
     av_free(p);
     av_free(player);
 }
@@ -433,8 +414,6 @@ void groove_close(GrooveFile * file) {
             AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
 
             av_free_packet(&f->audio_pkt);
-            if (f->avr)
-                avresample_free(&f->avr);
 
             f->ic->streams[f->audio_stream_index]->discard = AVDISCARD_ALL;
             avcodec_close(avctx);
@@ -487,13 +466,14 @@ static void stream_seek(GrooveFile *file, int64_t pos, int64_t rel, int seek_by_
 static double get_audio_clock(GroovePlayer *player, GrooveFile *file) {
     GroovePlayerPrivate * p = player->internals;
     GrooveFilePrivate * f = file->internals;
+    DecodeContext *decode_ctx = &p->decode_ctx;
 
     double pts = f->audio_clock;
     int hw_buf_size = p->audio_buf_size - p->audio_buf_index;
     int bytes_per_sec = 0;
     if (f->audio_st) {
-        bytes_per_sec = f->sdl_sample_rate * f->sdl_channels *
-                        av_get_bytes_per_sample(f->sdl_sample_fmt);
+        bytes_per_sec = decode_ctx->dest_sample_rate * decode_ctx->dest_channel_count *
+                        av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
     }
     if (bytes_per_sec)
         pts -= (double)hw_buf_size / bytes_per_sec;

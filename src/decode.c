@@ -3,8 +3,51 @@
 
 #include "libavutil/opt.h"
 
+#include <SDL/SDL.h>
+
+static int initialized = 0;
+static int initialized_sdl = 0;
+
+static void deinit_network() {
+    avformat_network_deinit();
+}
+
+int maybe_init() {
+    if (initialized)
+        return 0;
+    initialized = 1;
+
+
+    srand(time(NULL));
+
+    // register all codecs, demux and protocols
+    avcodec_register_all();
+    av_register_all();
+    avformat_network_init();
+
+    atexit(deinit_network);
+
+    av_log_set_level(AV_LOG_QUIET);
+    return 0;
+}
+
+int maybe_init_sdl() {
+    if (initialized_sdl)
+        return 0;
+    initialized_sdl = 1;
+
+    // TODO: can we remove SDL_INIT_TIMER ?
+    int flags = SDL_INIT_AUDIO | SDL_INIT_TIMER;
+    if (SDL_Init(flags)) {
+        av_log(NULL, AV_LOG_ERROR, "Could not initialize SDL - %s\n", SDL_GetError());
+        return -1;
+    }
+    atexit(SDL_Quit);
+    return 0;
+}
+
 // decode one audio packet and return its uncompressed size
-int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
+static int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
 
     AVPacket *pkt = &f->audio_pkt;
@@ -47,65 +90,65 @@ int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
         data_size = av_samples_get_buffer_size(NULL, dec->channels,
                        frame->nb_samples, frame->format, 1);
 
-        int audio_resample = frame->format     != f->sdl_sample_fmt     ||
-                         frame->channel_layout != f->sdl_channel_layout ||
-                         frame->sample_rate    != f->sdl_sample_rate;
+        int audio_resample = frame->format     != decode_ctx->dest_sample_fmt     ||
+                         frame->channel_layout != decode_ctx->dest_channel_layout ||
+                         frame->sample_rate    != decode_ctx->dest_sample_rate;
 
-        int resample_changed = frame->format     != f->resample_sample_fmt     ||
-                           frame->channel_layout != f->resample_channel_layout ||
-                           frame->sample_rate    != f->resample_sample_rate;
+        int resample_changed = frame->format     != decode_ctx->resample_sample_fmt     ||
+                           frame->channel_layout != decode_ctx->resample_channel_layout ||
+                           frame->sample_rate    != decode_ctx->resample_sample_rate;
 
-        if ((!f->avr && audio_resample) || resample_changed) {
+        if ((!decode_ctx->avr && audio_resample) || resample_changed) {
             int ret;
-            if (f->avr) {
-                avresample_close(f->avr);
+            if (decode_ctx->avr) {
+                avresample_close(decode_ctx->avr);
             } else if (audio_resample) {
-                f->avr = avresample_alloc_context();
-                if (!f->avr) {
+                decode_ctx->avr = avresample_alloc_context();
+                if (!decode_ctx->avr) {
                     av_log(NULL, AV_LOG_ERROR, "error allocating AVAudioResampleContext\n");
                     return -1;
                 }
             }
             if (audio_resample) {
-                av_opt_set_int(f->avr, "in_channel_layout",  frame->channel_layout, 0);
-                av_opt_set_int(f->avr, "in_sample_fmt",      frame->format,         0);
-                av_opt_set_int(f->avr, "in_sample_rate",     frame->sample_rate,    0);
-                av_opt_set_int(f->avr, "out_channel_layout", f->sdl_channel_layout,    0);
-                av_opt_set_int(f->avr, "out_sample_fmt",     f->sdl_sample_fmt,        0);
-                av_opt_set_int(f->avr, "out_sample_rate",    f->sdl_sample_rate,       0);
+                av_opt_set_int(decode_ctx->avr, "in_channel_layout",  frame->channel_layout, 0);
+                av_opt_set_int(decode_ctx->avr, "in_sample_fmt",      frame->format,         0);
+                av_opt_set_int(decode_ctx->avr, "in_sample_rate",     frame->sample_rate,    0);
+                av_opt_set_int(decode_ctx->avr, "out_channel_layout", decode_ctx->dest_channel_layout,    0);
+                av_opt_set_int(decode_ctx->avr, "out_sample_fmt",     decode_ctx->dest_sample_fmt,        0);
+                av_opt_set_int(decode_ctx->avr, "out_sample_rate",    decode_ctx->dest_sample_rate,       0);
 
-                if ((ret = avresample_open(f->avr)) < 0) {
+                if ((ret = avresample_open(decode_ctx->avr)) < 0) {
                     av_log(NULL, AV_LOG_ERROR, "error initializing libavresample\n");
                     return -1;
                 }
             }
-            f->resample_sample_fmt     = frame->format;
-            f->resample_channel_layout = frame->channel_layout;
-            f->resample_sample_rate    = frame->sample_rate;
+            decode_ctx->resample_sample_fmt     = frame->format;
+            decode_ctx->resample_channel_layout = frame->channel_layout;
+            decode_ctx->resample_sample_rate    = frame->sample_rate;
         }
 
         BufferList buf_list;
         if (audio_resample) {
-            int osize      = av_get_bytes_per_sample(f->sdl_sample_fmt);
+            int osize      = av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
             int nb_samples = frame->nb_samples;
 
             int out_linesize;
             buf_list.size = av_samples_get_buffer_size(&out_linesize,
-                                  f->sdl_channels, nb_samples, f->sdl_sample_fmt, 0);
+                                  decode_ctx->dest_channel_count, nb_samples, decode_ctx->dest_sample_fmt, 0);
             buf_list.buffer = av_malloc(buf_list.size);
             if (!buf_list.buffer) {
                 av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
                 return -1;
             }
 
-            int out_samples = avresample_convert(f->avr, &buf_list.buffer,
+            int out_samples = avresample_convert(decode_ctx->avr, &buf_list.buffer,
                     out_linesize, nb_samples, frame->data,
                     frame->linesize[0], frame->nb_samples);
             if (out_samples < 0) {
                 av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
                 break;
             }
-            data_size = out_samples * osize * f->sdl_channels;
+            data_size = out_samples * osize * decode_ctx->dest_channel_count;
             buf_list.size = data_size;
         } else {
             buf_list.size = data_size;
@@ -119,8 +162,8 @@ int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
         int err = decode_ctx->buffer(decode_ctx, &buf_list);
         // if no pts, then compute it
         if (pkt->pts == AV_NOPTS_VALUE) {
-            n = f->sdl_channels * av_get_bytes_per_sample(f->sdl_sample_fmt);
-            f->audio_clock += (double)data_size / (double)(n * f->sdl_sample_rate);
+            n = decode_ctx->dest_channel_count * av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
+            f->audio_clock += (double)data_size / (double)(n * decode_ctx->dest_sample_rate);
         }
         return err < 0 ? err : data_size;
     }
@@ -128,7 +171,7 @@ int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
 }
 
 // return < 0 if error
-int init_decode(GrooveFile *file) {
+static int init_decode(GrooveFile *file) {
     GrooveFilePrivate *f = file->internals;
 
     // set all streams to discard. in a few lines here we will find the audio
@@ -156,21 +199,12 @@ int init_decode(GrooveFile *file) {
     }
 
     // prepare audio output
-    f->sdl_sample_rate = avctx->sample_rate;
-
     if (!avctx->channel_layout)
         avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
     if (!avctx->channel_layout) {
         av_log(NULL, AV_LOG_ERROR, "unable to guess channel layout\n");
         return -1;
     }
-    f->sdl_channel_layout = (avctx->channels == 1) ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO;
-    f->sdl_channels = av_get_channel_layout_nb_channels(f->sdl_channel_layout);
-
-    f->sdl_sample_fmt          = AV_SAMPLE_FMT_S16;
-    f->resample_sample_fmt     = f->sdl_sample_fmt;
-    f->resample_channel_layout = avctx->channel_layout;
-    f->resample_sample_rate    = avctx->sample_rate;
 
     f->audio_st = f->ic->streams[f->audio_stream_index];
     f->audio_st->discard = AVDISCARD_DEFAULT;
@@ -252,3 +286,9 @@ int decode(DecodeContext *decode_ctx, GrooveFile *file) {
     return 0;
 }
 
+void cleanup_decode_ctx(DecodeContext *decode_ctx) {
+    if (decode_ctx->avr)
+        avresample_free(&decode_ctx->avr);
+
+    avcodec_free_frame(&decode_ctx->frame);
+}

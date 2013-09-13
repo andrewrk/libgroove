@@ -53,7 +53,11 @@ int main(int argc, char * argv[]) {
         if (scan_dir(dirname) < 0)
             fprintf(stderr, "Error reading dir: %s\n", dirname);
     }
-    groove_replaygainscan_exec(scan);
+    if (groove_replaygainscan_exec(scan) < 0) {
+        groove_replaygainscan_destroy(scan);
+        fprintf(stderr, "Error starting scan.\n");
+        return 1;
+    }
     GrooveRgEvent event;
     while (groove_replaygainscan_event_wait(scan, &event) >= 0) {
         switch (event.type) {

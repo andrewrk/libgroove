@@ -1,4 +1,5 @@
 #include "groove.h"
+#include "decode.h"
 #include "gain_analysis.h"
 
 #include <libavutil/mem.h>
@@ -50,6 +51,7 @@ typedef struct GrooveReplayGainScanPrivate {
     SDL_Thread *thread_id;
     int abort_request;
     GainAnalysis *anal;
+    DecodeContext decode_ctx;
 } GrooveReplayGainScanPrivate;
 
 static void filelist_push(FileListItem **list, FileListItem *item) {
@@ -212,8 +214,9 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
         av_log(NULL, AV_LOG_WARNING, "error opening %s\n", item->filename);
         return -1;
     }
-    if (s) {}
-    // TODO
+
+    DecodeContext *decode_ctx = &s->decode_ctx;
+    while (decode(decode_ctx, file) >= 0) {}
 
     groove_close(file);
     return 0;
@@ -260,6 +263,9 @@ static int scan_thread(void *arg) {
 }
 
 GrooveReplayGainScan * groove_create_replaygainscan() {
+    if (maybe_init() < 0)
+        return NULL;
+
     GrooveReplayGainScan * scan = av_mallocz(sizeof(GrooveReplayGainScan));
     GrooveReplayGainScanPrivate * s = av_mallocz(sizeof(GrooveReplayGainScanPrivate));
     if (!scan || !s) {
@@ -288,17 +294,37 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename) {
     return 0;
 }
 
-void groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
+static int scan_buffer (struct DecodeContext *decode_ctx, BufferList *buf_list) {
+    //GrooveReplayGainScan *scan = decode_ctx->callback_context;
+    //GrooveReplayGainScanPrivate *s = scan->internals;
+    // TODO
+    //double left;
+    //double right;
+    //gain_analyze_samples(s->anal, &left, &right, 1, 2);
+    return 0;
+}
+
+int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
+    if (maybe_init_sdl() < 0)
+        return -1;
     GrooveReplayGainScanPrivate *s = scan->internals;
     if (s->executing) {
         av_log(NULL, AV_LOG_WARNING, "exec called more than once\n");
-        return;
+        return -1;
     }
+    s->decode_ctx.frame = avcodec_alloc_frame();
+    if (!s->decode_ctx.frame) {
+        av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
+        return -1;
+    }
+    s->decode_ctx.callback_context = scan;
+    s->decode_ctx.buffer = scan_buffer;
     s->executing = 1;
     s->progress_event.type = GROOVE_RG_EVENT_PROGRESS;
     event_queue_init(&s->eventq);
     s->anal = gain_create_analysis(44100);
     s->thread_id = SDL_CreateThread(scan_thread, scan);
+    return 0;
 }
 
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
@@ -306,6 +332,7 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
         return;
     GrooveReplayGainScanPrivate *s = scan->internals;
     if (s->executing) {
+        // TODO this should be moved to happen when the replaygain scan ends naturally
         event_queue_abort(&s->eventq);
         event_queue_end(&s->eventq);
         s->abort_request = 1;
@@ -314,6 +341,7 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     }
     // TODO free all the things
 
+    cleanup_decode_ctx(&s->decode_ctx);
     av_free(s);
     av_free(scan);
 }

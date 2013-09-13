@@ -4,6 +4,7 @@
 #include "libavformat/avformat.h"
 #include "libavresample/avresample.h"
 
+// TODO prefix these types with Groove
 typedef struct BufferList {
     uint8_t * buffer;
     int size;
@@ -18,6 +19,16 @@ typedef struct DecodeContext {
     void *callback_context;
     void (*flush)(struct DecodeContext *);
     int (*buffer)(struct DecodeContext *, BufferList *);
+
+    int dest_sample_rate;
+    uint64_t dest_channel_layout;
+    int dest_channel_count;
+    enum AVSampleFormat dest_sample_fmt;
+
+    enum AVSampleFormat resample_sample_fmt;
+    uint64_t resample_channel_layout;
+    int resample_sample_rate;
+    AVAudioResampleContext *avr;
 } DecodeContext;
 
 typedef struct GrooveFilePrivate {
@@ -26,13 +37,6 @@ typedef struct GrooveFilePrivate {
     AVFormatContext *ic;
     int seek_by_bytes;
     AVCodec *decoder;
-    int sdl_sample_rate;
-    uint64_t sdl_channel_layout;
-    int sdl_channels;
-    enum AVSampleFormat sdl_sample_fmt;
-    enum AVSampleFormat resample_sample_fmt;
-    uint64_t resample_channel_layout;
-    int resample_sample_rate;
     AVStream *audio_st;
     int seek_req;
     int seek_flags;
@@ -40,7 +44,6 @@ typedef struct GrooveFilePrivate {
     int64_t seek_rel;
     int eof;
     double audio_clock;
-    AVAudioResampleContext *avr;
     AVPacket audio_pkt;
 
     // state while saving
@@ -48,8 +51,10 @@ typedef struct GrooveFilePrivate {
     int tempfile_exists;
 } GrooveFilePrivate;
 
-int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file);
+// TODO prefix these with groove_
+void cleanup_decode_ctx(DecodeContext *decode_ctx);
 int decode(DecodeContext *decode_ctx, GrooveFile *file);
-int init_decode(GrooveFile *file);
+int maybe_init();
+int maybe_init_sdl();
 
 #endif /* __DECODE_H__ */
