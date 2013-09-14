@@ -223,7 +223,7 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
         return -1;
     }
 
-    // save this pointer to make it easier on the buffer_planar callback
+    // save this pointer to make it easier on the scan_buffer callback
     s->currently_scanning = item;
     DecodeContext *decode_ctx = &s->decode_ctx;
     while (decode(decode_ctx, file) >= 0) {}
@@ -330,29 +330,30 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename) {
     return 0;
 }
 
-static int scan_buffer_planar (struct DecodeContext *decode_ctx,
-        uint8_t *left_buf, uint8_t *right_buf, int data_size)
-{
+static int scan_buffer(DecodeContext *decode_ctx, AVFilterBufferRef *buf) {
     GrooveReplayGainScan *scan = decode_ctx->callback_context;
     GrooveReplayGainScanPrivate *s = scan->internals;
     FileListItem *item = s->currently_scanning;
 
     // keep track of peak
     // assume it's a bunch of doubles
-    size_t count = data_size / sizeof(double);
-    double *left = (double*)left_buf;
-    double *right = (double*)right_buf;
+    size_t count = buf->linesize[0] / sizeof(double);
+    double *left = (double*)buf->data[0];
+    double *right = (double*)buf->data[1];
     for (int i = 0; i < count; i += 1) {
-        double abs_l = abs(left[i]);
-        double abs_r = abs(right[i]);
+        double abs_l = fabs(left[i]);
+        double abs_r = fabs(right[i]);
         double max = abs_l > abs_r ? abs_l : abs_r;
-        if (max > item->peak_amplitude)
+        if (max > item->peak_amplitude) {
             item->peak_amplitude = max;
+        }
         if (max > s->album_item->peak_amplitude)
             s->album_item->peak_amplitude = max;
     }
 
     gain_analyze_samples(s->anal, left, right, count, 2);
+
+    avfilter_unref_buffer(buf);
     return 0;
 }
 
@@ -370,7 +371,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
         return -1;
     }
     s->decode_ctx.callback_context = scan;
-    s->decode_ctx.buffer_planar = scan_buffer_planar;
+    s->decode_ctx.buffer = scan_buffer;
     s->decode_ctx.dest_sample_rate = 44100;
     s->decode_ctx.dest_channel_layout = AV_CH_LAYOUT_STEREO;
     s->decode_ctx.dest_channel_count = 2;

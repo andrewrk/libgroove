@@ -21,8 +21,6 @@ typedef struct DecodeContext {
     void *callback_context;
     void (*flush)(struct DecodeContext *);
     int (*buffer)(struct DecodeContext *, AVFilterBufferRef *);
-    int (*buffer_planar)(struct DecodeContext *,
-            uint8_t *left, uint8_t *right, int data_size);
 
     int dest_sample_rate;
     uint64_t dest_channel_layout;
