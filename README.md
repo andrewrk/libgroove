@@ -29,7 +29,8 @@ Music player backend library.
 ### Building Against libav Statically
 
  1. Download [libav 9.9](https://www.libav.org/download.html#release_9)
- 2. In the source tree of libav you just downloaded,
+ 2. You'll need libbz2-dev and yasm.
+ 3. In the source tree of libav you just downloaded,
     `./configure --prefix=$(pwd)/out && make && make install`
- 3. To build groove, `make LIBAV_PREFIX=/home/you/Downloads/libav9.9/out`
+ 4. To build groove, `make LIBAV_PREFIX=/home/you/Downloads/libav9.9/out`
     (make sure that path is correct)
