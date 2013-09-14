@@ -20,17 +20,8 @@ Music player backend library.
 
 ## Dependencies
 
+These are most likely in your distribution's package manager.
+
  * libsdl1.2-dev - http://www.libsdl.org/
- * libav - http://www.libav.org/
-   - groove depends on libav version 9.9. As this version is not in Ubuntu or
-     Debian's package manager, groove is compiled against libav statically.
-     See instructions below.
-
-### Building Against libav Statically
-
- 1. Download [libav 9.9](https://www.libav.org/download.html#release_9)
- 2. You'll need libbz2-dev and yasm.
- 3. In the source tree of libav you just downloaded,
-    `./configure --prefix=$(pwd)/out && make && make install`
- 4. To build groove, `make LIBAV_PREFIX=/home/you/Downloads/libav9.9/out`
-    (make sure that path is correct)
+ * libbz2-dev - http://www.bzip.org/
+ * yasm - http://yasm.tortall.net/

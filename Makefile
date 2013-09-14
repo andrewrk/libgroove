@@ -1,5 +1,7 @@
 CC = c99
-LIBAV_PREFIX = /usr
+LIBAV_SRC = $(shell pwd)/deps/libav
+LIBAV_PREFIX = $(LIBAV_SRC)/out
+LIBAV_DEP = $(LIBAV_PREFIX)/lib/libavformat.a
 
 # for compiling groove
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
@@ -12,20 +14,20 @@ EX_CFLAGS := -Isrc -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
 EX_STATIC_LIBS := src/groove.a $(STATIC_LIBS)
 EX_LDFLAGS := $(LDFLAGS)
 
-.PHONY: examples clean all
+.PHONY: examples clean all distclean
 
 all: examples
 
 src/groove.a: src/groove.o src/scan.o src/gain_analysis.o src/decode.o
 	ar rcs src/groove.a src/groove.o src/scan.o src/gain_analysis.o src/decode.o
 
-src/decode.o: src/decode.c
+src/decode.o: src/decode.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
 
-src/groove.o: src/groove.c
+src/groove.o: src/groove.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/groove.o -c src/groove.c
 
-src/scan.o: src/scan.c
+src/scan.o: src/scan.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/scan.o -c src/scan.c
 
 src/gain_analysis.o: src/gain_analysis.c
@@ -33,23 +35,26 @@ src/gain_analysis.o: src/gain_analysis.c
 
 examples: example/playlist example/metadata example/replaygain
 
-example/metadata: example/metadata.o src/groove.a
+example/metadata: example/metadata.o src/groove.a $(LIBAV_DEP)
 	$(CC) -o example/metadata example/metadata.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
 
 example/metadata.o: example/metadata.c
 	$(CC) $(EX_CFLAGS) -o example/metadata.o -c example/metadata.c
 
-example/playlist: example/playlist.o src/groove.a
+example/playlist: example/playlist.o src/groove.a $(LIBAV_DEP)
 	$(CC) -o example/playlist example/playlist.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
 
 example/playlist.o: example/playlist.c
 	$(CC) $(EX_CFLAGS) -o example/playlist.o -c example/playlist.c
 
-example/replaygain: example/replaygain.o src/groove.a
+example/replaygain: example/replaygain.o src/groove.a $(LIBAV_DEP)
 	$(CC) -o example/replaygain example/replaygain.o src/groove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
 
 example/replaygain.o: example/replaygain.c
 	$(CC) $(EX_CFLAGS) -o example/replaygain.o -c example/replaygain.c
+
+$(LIBAV_DEP): $(LIBAV_SRC)/configure
+	cd $(LIBAV_SRC) && ./configure --prefix=$(LIBAV_PREFIX) --enable-pic && $(MAKE) && $(MAKE) install
 
 clean:
 	rm -f src/*.o src/*.so src/*.a
@@ -57,3 +62,7 @@ clean:
 	rm -f example/playlist
 	rm -f example/metadata
 	rm -f example/replaygain
+
+distclean: clean
+	rm -rf $(LIBAV_PREFIX)
+	cd $(LIBAV_SRC) && $(MAKE) distclean
