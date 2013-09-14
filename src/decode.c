@@ -36,8 +36,7 @@ int maybe_init_sdl() {
         return 0;
     initialized_sdl = 1;
 
-    // TODO: can we remove SDL_INIT_TIMER ?
-    int flags = SDL_INIT_AUDIO | SDL_INIT_TIMER;
+    int flags = SDL_INIT_AUDIO;
     if (SDL_Init(flags)) {
         av_log(NULL, AV_LOG_ERROR, "Could not initialize SDL - %s\n", SDL_GetError());
         return -1;
@@ -184,7 +183,7 @@ static int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
                         frame->linesize[0], frame->nb_samples);
                 if (out_samples < 0) {
                     av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
-                    break;
+                    return -1;
                 }
                 data_size = out_samples * osize * decode_ctx->dest_channel_count;
                 buf_list.size = data_size;
