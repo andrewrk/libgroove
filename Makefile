@@ -1,5 +1,5 @@
 CC = c99
-LIBAV_SRC = $(shell pwd)/deps/libav
+LIBAV_SRC = $(abspath deps/libav)
 LIBAV_PREFIX = $(LIBAV_SRC)/out
 LIBAV_DEP = $(LIBAV_PREFIX)/lib/libavformat.a
 
