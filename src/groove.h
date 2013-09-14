@@ -56,7 +56,6 @@ typedef struct GrooveReplayGainScan {
 
 enum GrooveRgEventType {
     GROOVE_RG_EVENT_PROGRESS,
-    GROOVE_RG_EVENT_COMPLETE,
 };
 
 typedef struct GrooveRgEventProgress {

@@ -41,7 +41,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    groove_set_logging(1);
+    //groove_set_logging(1);
     scan = groove_create_replaygainscan();
     if (!scan) {
         fprintf(stderr, "Unable to create replaygain scan\n");
@@ -68,9 +68,8 @@ int main(int argc, char * argv[]) {
                     event.rg_progress.update_current, event.rg_progress.update_total);
             fflush(stderr);
             break;
-        case GROOVE_RG_EVENT_COMPLETE:
-            fprintf(stderr, "\nscan complete.\n");
-            return 0;
         }
     }
+    groove_replaygainscan_destroy(scan);
+    fprintf(stderr, "\nscan complete.\n");
 }

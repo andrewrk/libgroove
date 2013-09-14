@@ -127,39 +127,78 @@ static int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
             decode_ctx->resample_sample_rate    = frame->sample_rate;
         }
 
-        BufferList buf_list;
-        if (audio_resample) {
-            int osize      = av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
-            int nb_samples = frame->nb_samples;
+        int err = 0;
+        if (av_sample_fmt_is_planar(decode_ctx->dest_sample_fmt)) {
+            if (audio_resample) {
+                int osize      = av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
+                int nb_samples = frame->nb_samples;
 
-            int out_linesize;
-            buf_list.size = av_samples_get_buffer_size(&out_linesize,
-                                  decode_ctx->dest_channel_count, nb_samples, decode_ctx->dest_sample_fmt, 0);
-            buf_list.buffer = av_malloc(buf_list.size);
-            if (!buf_list.buffer) {
-                av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
-                return -1;
+                int out_linesize;
+                int out_size = av_samples_get_buffer_size(&out_linesize,
+                                      1, nb_samples, decode_ctx->dest_sample_fmt, 0);
+                for (int ch = 0; ch < 2; ch += 1) {
+                    if (decode_ctx->resample_buf_size[ch] < out_size) {
+                        void *tmp_ptr = av_realloc(decode_ctx->resample_buf[ch], out_size);
+                        if (!tmp_ptr) {
+                            av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
+                            return -1;
+                        }
+                        decode_ctx->resample_buf[ch] = tmp_ptr;
+                        decode_ctx->resample_buf_size[ch] = out_size;
+                    }
+                }
+                int out_samples = avresample_convert(decode_ctx->avr, decode_ctx->resample_buf,
+                        out_linesize, nb_samples, frame->data,
+                        frame->linesize[0], frame->nb_samples);
+                if (out_samples < 0) {
+                    av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
+                    break;
+                }
+                int one_channel_size = out_samples * osize;
+                data_size = one_channel_size * decode_ctx->dest_channel_count;
+                err = decode_ctx->buffer_planar(decode_ctx,
+                        decode_ctx->resample_buf[0], decode_ctx->resample_buf[1],
+                        one_channel_size);
+            } else {
+                err = decode_ctx->buffer_planar(decode_ctx,
+                        frame->data[0], frame->data[1], data_size);
             }
-
-            int out_samples = avresample_convert(decode_ctx->avr, &buf_list.buffer,
-                    out_linesize, nb_samples, frame->data,
-                    frame->linesize[0], frame->nb_samples);
-            if (out_samples < 0) {
-                av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
-                break;
-            }
-            data_size = out_samples * osize * decode_ctx->dest_channel_count;
-            buf_list.size = data_size;
         } else {
-            buf_list.size = data_size;
-            buf_list.buffer = av_malloc(buf_list.size);
-            if (!buf_list.buffer) {
-                av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
-                return -1;
+            BufferList buf_list;
+            if (audio_resample) {
+                int osize      = av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
+                int nb_samples = frame->nb_samples;
+
+                int out_linesize;
+                buf_list.size = av_samples_get_buffer_size(&out_linesize,
+                                      decode_ctx->dest_channel_count, nb_samples,
+                                      decode_ctx->dest_sample_fmt, 0);
+                buf_list.buffer = av_malloc(buf_list.size);
+                if (!buf_list.buffer) {
+                    av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
+                    return -1;
+                }
+
+                int out_samples = avresample_convert(decode_ctx->avr, &buf_list.buffer,
+                        out_linesize, nb_samples, frame->data,
+                        frame->linesize[0], frame->nb_samples);
+                if (out_samples < 0) {
+                    av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
+                    break;
+                }
+                data_size = out_samples * osize * decode_ctx->dest_channel_count;
+                buf_list.size = data_size;
+            } else {
+                buf_list.size = data_size;
+                buf_list.buffer = av_malloc(buf_list.size);
+                if (!buf_list.buffer) {
+                    av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
+                    return -1;
+                }
+                memcpy(buf_list.buffer, frame->data[0], buf_list.size);
             }
-            memcpy(buf_list.buffer, frame->data[0], buf_list.size);
+            err = decode_ctx->buffer(decode_ctx, &buf_list);
         }
-        int err = decode_ctx->buffer(decode_ctx, &buf_list);
         // if no pts, then compute it
         if (pkt->pts == AV_NOPTS_VALUE) {
             n = decode_ctx->dest_channel_count * av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
@@ -287,6 +326,15 @@ int decode(DecodeContext *decode_ctx, GrooveFile *file) {
 }
 
 void cleanup_decode_ctx(DecodeContext *decode_ctx) {
+    if (decode_ctx->resample_buf[0]) {
+        av_free(decode_ctx->resample_buf[0]);
+        decode_ctx->resample_buf[0] = NULL;
+    }
+    if (decode_ctx->resample_buf[1]) {
+        av_free(decode_ctx->resample_buf[1]);
+        decode_ctx->resample_buf[1] = NULL;
+    }
+
     if (decode_ctx->avr)
         avresample_free(&decode_ctx->avr);
 

@@ -19,6 +19,8 @@ typedef struct DecodeContext {
     void *callback_context;
     void (*flush)(struct DecodeContext *);
     int (*buffer)(struct DecodeContext *, BufferList *);
+    int (*buffer_planar)(struct DecodeContext *,
+            uint8_t *left, uint8_t *right, int data_size);
 
     int dest_sample_rate;
     uint64_t dest_channel_layout;
@@ -29,6 +31,8 @@ typedef struct DecodeContext {
     uint64_t resample_channel_layout;
     int resample_sample_rate;
     AVAudioResampleContext *avr;
+    uint8_t *resample_buf[2];
+    size_t resample_buf_size[2];
 } DecodeContext;
 
 typedef struct GrooveFilePrivate {

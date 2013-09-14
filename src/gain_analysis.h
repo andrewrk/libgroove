@@ -43,24 +43,21 @@
 extern "C" {
 #endif
 
-typedef struct GainAnalysis {
-    long samplefreq;
-    void * internals;
-} GainAnalysis;
+typedef void GainAnalysis;
 
 // Here's the deal : Call
-GainAnalysis *gain_create_analysis(long samplefreq);
+GainAnalysis *gain_create_analysis();
 
 // to create a gain analyzer. Call
+int gain_init_analysis(GainAnalysis *anal, long samplefreq);
+// to start an album.
+
+// Call
 int gain_analyze_samples(GainAnalysis *anal, const double *left_samples,
         const double *right_samples, size_t num_samples, int num_channels);
 // as many times as you want, with as many or as few samples as you want.
 // If mono, pass the sample buffer in through left_samples, leave
 // right_samples NULL, and make sure num_channels = 1.
-
-double gain_get_chapter(GainAnalysis *anal);
-// will return the recommended dB level change for all samples analyzed
-// SINCE THE LAST TIME you called gain_get_chapter() OR gain_init_analysis() OR gain_get_title.
 
 double gain_get_title(GainAnalysis *anal);
 // will return the recommended dB level change for all samples analyzed

@@ -58,7 +58,7 @@
 #define BUTTER_ORDER        2
 #define RMS_PERCENTILE      0.95        // percentile which is louder than the proposed level
 // when changing MAX_SAMP_FREQ you must also update MAX_SAMPLES_PER_WINDOW
-#define MAX_SAMP_FREQ   48000.          // maximum allowed sample frequency [Hz]
+#define MAX_SAMP_FREQ   96000.          // maximum allowed sample frequency [Hz]
 // when changing RMS_WINDOW_TIME you must also update MAX_SAMPLES_PER_WINDOW
 #define RMS_WINDOW_TIME     0.050       // Time slice size [s]
 #define STEPS_per_dB      100           // Table entries per dB
@@ -66,8 +66,7 @@
 
 #define MAX_ORDER               (BUTTER_ORDER > YULE_ORDER ? BUTTER_ORDER : YULE_ORDER)
 // max. Samples per Time slice
-#define MAX_SAMPLES_PER_WINDOW  2400 // (size_t) (MAX_SAMP_FREQ * RMS_WINDOW_TIME)
-#define ANALYZE_SIZE			(STEPS_per_dB * MAX_dB)
+#define MAX_SAMPLES_PER_WINDOW  4801 // (size_t) (MAX_SAMP_FREQ * RMS_WINDOW_TIME + 1)
 #define PINK_REF                64.82 //298640883795     // calibration value
 
 typedef struct GainAnalysisPrivate {
@@ -88,29 +87,34 @@ typedef struct GainAnalysisPrivate {
     double   lsum;
     double   rsum;
     int      freqindex;
-    int		chap_void;	// if == 0 gain_analyze_samples as been called
-    uint32_t A [ANALYZE_SIZE];	// chapter
-    uint32_t B [ANALYZE_SIZE];	// title
-    uint32_t C [ANALYZE_SIZE];	// album
+    int        chap_void;    // if == 0 gain_analyze_samples as been called
+    uint32_t A [STEPS_per_dB * MAX_dB];
+    uint32_t B [STEPS_per_dB * MAX_dB];
 } GainAnalysisPrivate;
 
 
 // for each filter:
 // [0] 48 kHz, [1] 44.1 kHz, [2] 32 kHz, [3] 24 kHz, [4] 22050 Hz, [5] 16 kHz, [6] 12 kHz, [7] is 11025 Hz, [8] 8 kHz
 
-static const double ABYule[9][2*YULE_ORDER + 1] = {
-    {0.03857599435200, -3.84664617118067, -0.02160367184185,  7.81501653005538, -0.00123395316851,-11.34170355132042, -0.00009291677959, 13.05504219327545, -0.01655260341619,-12.28759895145294,  0.02161526843274,  9.48293806319790, -0.02074045215285, -5.87257861775999,  0.00594298065125,  2.75465861874613,  0.00306428023191, -0.86984376593551,  0.00012025322027,  0.13919314567432,  0.00288463683916 },
-    {0.05418656406430, -3.47845948550071, -0.02911007808948,  6.36317777566148, -0.00848709379851, -8.54751527471874, -0.00851165645469,  9.47693607801280, -0.00834990904936, -8.81498681370155,  0.02245293253339,  6.85401540936998, -0.02596338512915, -4.39470996079559,  0.01624864962975,  2.19611684890774, -0.00240879051584, -0.75104302451432,  0.00674613682247,  0.13149317958808, -0.00187763777362 },
-    {0.15457299681924, -2.37898834973084, -0.09331049056315,  2.84868151156327, -0.06247880153653, -2.64577170229825,  0.02163541888798,  2.23697657451713, -0.05588393329856, -1.67148153367602,  0.04781476674921,  1.00595954808547,  0.00222312597743, -0.45953458054983,  0.03174092540049,  0.16378164858596, -0.01390589421898, -0.05032077717131,  0.00651420667831,  0.02347897407020, -0.00881362733839 },
-    {0.30296907319327, -1.61273165137247, -0.22613988682123,  1.07977492259970, -0.08587323730772, -0.25656257754070,  0.03282930172664, -0.16276719120440, -0.00915702933434, -0.22638893773906, -0.02364141202522,  0.39120800788284, -0.00584456039913, -0.22138138954925,  0.06276101321749,  0.04500235387352, -0.00000828086748,  0.02005851806501,  0.00205861885564,  0.00302439095741, -0.02950134983287 },
-    {0.33642304856132, -1.49858979367799, -0.25572241425570,  0.87350271418188, -0.11828570177555,  0.12205022308084,  0.11921148675203, -0.80774944671438, -0.07834489609479,  0.47854794562326, -0.00469977914380, -0.12453458140019, -0.00589500224440, -0.04067510197014,  0.05724228140351,  0.08333755284107,  0.00832043980773, -0.04237348025746, -0.01635381384540,  0.02977207319925, -0.01760176568150 },
-    {0.44915256608450, -0.62820619233671, -0.14351757464547,  0.29661783706366, -0.22784394429749, -0.37256372942400, -0.01419140100551,  0.00213767857124,  0.04078262797139, -0.42029820170918, -0.12398163381748,  0.22199650564824,  0.04097565135648,  0.00613424350682,  0.10478503600251,  0.06747620744683, -0.01863887810927,  0.05784820375801, -0.03193428438915,  0.03222754072173,  0.00541907748707 },
-    {0.56619470757641, -1.04800335126349, -0.75464456939302,  0.29156311971249,  0.16242137742230, -0.26806001042947,  0.16744243493672,  0.00819999645858, -0.18901604199609,  0.45054734505008,  0.30931782841830, -0.33032403314006, -0.27562961986224,  0.06739368333110,  0.00647310677246, -0.04784254229033,  0.08647503780351,  0.01639907836189, -0.03788984554840,  0.01807364323573, -0.00588215443421 },
-    {0.58100494960553, -0.51035327095184, -0.53174909058578, -0.31863563325245, -0.14289799034253, -0.20256413484477,  0.17520704835522,  0.14728154134330,  0.02377945217615,  0.38952639978999,  0.15558449135573, -0.23313271880868, -0.25344790059353, -0.05246019024463,  0.01628462406333, -0.02505961724053,  0.06920467763959,  0.02442357316099, -0.03721611395801,  0.01818801111503, -0.00749618797172 },
-    {0.53648789255105, -0.25049871956020, -0.42163034350696, -0.43193942311114, -0.00275953611929, -0.03424681017675,  0.04267842219415, -0.04678328784242, -0.10214864179676,  0.26408300200955,  0.14590772289388,  0.15113130533216, -0.02459864859345, -0.17556493366449, -0.11202315195388, -0.18823009262115, -0.04060034127000,  0.05477720428674,  0.04788665548180,  0.04704409688120, -0.02217936801134 }
+static const double ABYule[12][2*YULE_ORDER + 1] = {
+	{0.006471345933032, -7.22103125152679, -0.02567678242161,  24.7034187975904,   0.049805860704367, -52.6825833623896,  -0.05823001743528,  77.4825736677539,   0.040611847441914, -82.0074753444205,  -0.010912036887501, 63.1566097101925,  -0.00901635868667,  -34.889569769245,    0.012448886238123, 13.2126852760198,  -0.007206683749426, -3.09445623301669,  0.002167156433951, 0.340344741393305, -0.000261819276949},
+	{0.015415414474287, -7.19001570087017, -0.07691359399407,  24.4109412087159,   0.196677418516518, -51.6306373580801,  -0.338855114128061, 75.3978476863163,   0.430094579594561, -79.4164552507386,  -0.415015413747894, 61.0373661948115,   0.304942508151101, -33.7446462547014,  -0.166191795926663, 12.8168791146274,   0.063198189938739, -3.01332198541437, -0.015003978694525, 0.223619893831468,  0.001748085184539},
+	{0.021776466467053, -5.74819833657784, -0.062376961003801, 16.246507961894,    0.107731165328514, -29.9691822642542,  -0.150994515142316, 40.027597579378,    0.170334807313632, -40.3209196052655,  -0.157984942890531, 30.8542077487718,   0.121639833268721, -17.5965138737281,  -0.074094040816409,  7.10690214103873,  0.031282852041061, -1.82175564515191, -0.00755421235941,  0.223619893831468,  0.00117925454213 },
+    {0.03857599435200,  -3.84664617118067, -0.02160367184185,   7.81501653005538, -0.00123395316851,  -11.34170355132042, -0.00009291677959,  13.05504219327545, -0.01655260341619,  -12.28759895145294,  0.02161526843274,   9.48293806319790, -0.02074045215285,   -5.87257861775999,  0.00594298065125,   2.75465861874613,  0.00306428023191,  -0.86984376593551,  0.00012025322027,  0.13919314567432,   0.00288463683916 },
+    {0.05418656406430,  -3.47845948550071, -0.02911007808948,   6.36317777566148, -0.00848709379851,   -8.54751527471874, -0.00851165645469,   9.47693607801280, -0.00834990904936,   -8.81498681370155,  0.02245293253339,   6.85401540936998, -0.02596338512915,   -4.39470996079559,  0.01624864962975,   2.19611684890774, -0.00240879051584,  -0.75104302451432,  0.00674613682247,  0.13149317958808,  -0.00187763777362 },
+    {0.15457299681924,  -2.37898834973084, -0.09331049056315,   2.84868151156327, -0.06247880153653,   -2.64577170229825,  0.02163541888798,   2.23697657451713, -0.05588393329856,   -1.67148153367602,  0.04781476674921,   1.00595954808547,  0.00222312597743,   -0.45953458054983,  0.03174092540049,   0.16378164858596, -0.01390589421898,  -0.05032077717131,  0.00651420667831,  0.02347897407020,  -0.00881362733839 },
+    {0.30296907319327,  -1.61273165137247, -0.22613988682123,   1.07977492259970, -0.08587323730772,   -0.25656257754070,  0.03282930172664,  -0.16276719120440, -0.00915702933434,   -0.22638893773906, -0.02364141202522,   0.39120800788284, -0.00584456039913,   -0.22138138954925,  0.06276101321749,   0.04500235387352, -0.00000828086748,   0.02005851806501,  0.00205861885564,  0.00302439095741,  -0.02950134983287 },
+    {0.33642304856132,  -1.49858979367799, -0.25572241425570,   0.87350271418188, -0.11828570177555,    0.12205022308084,  0.11921148675203,  -0.80774944671438, -0.07834489609479,    0.47854794562326, -0.00469977914380,  -0.12453458140019, -0.00589500224440,   -0.04067510197014,  0.05724228140351,   0.08333755284107,  0.00832043980773,  -0.04237348025746, -0.01635381384540,  0.02977207319925,  -0.01760176568150 },
+    {0.44915256608450,  -0.62820619233671, -0.14351757464547,   0.29661783706366, -0.22784394429749,   -0.37256372942400, -0.01419140100551,   0.00213767857124,  0.04078262797139,   -0.42029820170918, -0.12398163381748,   0.22199650564824,  0.04097565135648,    0.00613424350682,  0.10478503600251,   0.06747620744683, -0.01863887810927,   0.05784820375801, -0.03193428438915,  0.03222754072173,   0.00541907748707 },
+    {0.56619470757641,  -1.04800335126349, -0.75464456939302,   0.29156311971249,  0.16242137742230,   -0.26806001042947,  0.16744243493672,   0.00819999645858, -0.18901604199609,    0.45054734505008,  0.30931782841830,  -0.33032403314006, -0.27562961986224,    0.06739368333110,  0.00647310677246,  -0.04784254229033,  0.08647503780351,   0.01639907836189, -0.03788984554840,  0.01807364323573,  -0.00588215443421 },
+    {0.58100494960553,  -0.51035327095184, -0.53174909058578,  -0.31863563325245, -0.14289799034253,   -0.20256413484477,  0.17520704835522,   0.14728154134330,  0.02377945217615,    0.38952639978999,  0.15558449135573,  -0.23313271880868, -0.25344790059353,   -0.05246019024463,  0.01628462406333,  -0.02505961724053,  0.06920467763959,   0.02442357316099, -0.03721611395801,  0.01818801111503,  -0.00749618797172 },
+    {0.53648789255105,  -0.25049871956020, -0.42163034350696,  -0.43193942311114, -0.00275953611929,   -0.03424681017675,  0.04267842219415,  -0.04678328784242, -0.10214864179676,    0.26408300200955,  0.14590772289388,   0.15113130533216, -0.02459864859345,   -0.17556493366449, -0.11202315195388,  -0.18823009262115, -0.04060034127000,   0.05477720428674,  0.04788665548180,  0.04704409688120,  -0.02217936801134 }
 };
 
-static const double ABButter[9][2*BUTTER_ORDER + 1] = {
+static const double ABButter[12][2*BUTTER_ORDER + 1] = {
+	{0.99308203517541, -1.98611621154089, -1.98616407035082,  0.986211929160751, 0.99308203517541 },
+	{0.992472550461293,-1.98488843762334, -1.98494510092258,  0.979389350028798, 0.992472550461293},
+	{0.989641019334721,-1.97917472731008, -1.97928203866944,  0.979389350028798, 0.989641019334721},
     {0.98621192462708, -1.97223372919527, -1.97242384925416,  0.97261396931306,  0.98621192462708 },
     {0.98500175787242, -1.96977855582618, -1.97000351574484,  0.97022847566350,  0.98500175787242 },
     {0.97938932735214, -1.95835380975398, -1.95877865470428,  0.95920349965459,  0.97938932735214 },
@@ -171,35 +175,26 @@ static void filterButter (const double* input, double* output, size_t nSamples, 
     }
 }
 
-
-GainAnalysis * gain_create_analysis(long samplefreq) {
-    GainAnalysis *anal = malloc(sizeof(GainAnalysis));
-    GainAnalysisPrivate *a = malloc(sizeof(GainAnalysisPrivate));
-    if (!anal || !a) {
-        free(anal);
-        free(a);
-        return NULL;
-    }
-
+static int reset_sample_frequency(GainAnalysisPrivate *a, long samplefreq) {
     // zero out initial values
     for (int i = 0; i < MAX_ORDER; i += 1)
         a->linprebuf[i] = a->lstepbuf[i] = a->loutbuf[i] = a->rinprebuf[i] =
             a->rstepbuf[i] = a->routbuf[i] = 0.0;
 
-    switch (samplefreq) {
-        case 48000: a->freqindex = 0; break;
-        case 44100: a->freqindex = 1; break;
-        case 32000: a->freqindex = 2; break;
-        case 24000: a->freqindex = 3; break;
-        case 22050: a->freqindex = 4; break;
-        case 16000: a->freqindex = 5; break;
-        case 12000: a->freqindex = 6; break;
-        case 11025: a->freqindex = 7; break;
-        case  8000: a->freqindex = 8; break;
-        default:
-            free(anal);
-            free(a);
-            return NULL;
+    switch ( (int)(samplefreq) ) {
+        case 96000: a->freqindex = 0; break;
+        case 88200: a->freqindex = 1; break;
+        case 64000: a->freqindex = 2; break;
+        case 48000: a->freqindex = 3; break;
+        case 44100: a->freqindex = 4; break;
+        case 32000: a->freqindex = 5; break;
+        case 24000: a->freqindex = 6; break;
+        case 22050: a->freqindex = 7; break;
+        case 16000: a->freqindex = 8; break;
+        case 12000: a->freqindex = 9; break;
+        case 11025: a->freqindex = 10; break;
+        case  8000: a->freqindex = 11; break;
+        default:    return INIT_GAIN_ANALYSIS_ERROR;
     }
 
     a->sampleWindow = (int) ceil(samplefreq * RMS_WINDOW_TIME);
@@ -210,6 +205,15 @@ GainAnalysis * gain_create_analysis(long samplefreq) {
 
     memset(a->A, 0, sizeof(a->A));
 
+    return INIT_GAIN_ANALYSIS_OK;
+}
+
+int gain_init_analysis(GainAnalysis *anal, long samplefreq) {
+    GainAnalysisPrivate *a = anal;
+    int err = reset_sample_frequency(a, samplefreq);
+    if (err != INIT_GAIN_ANALYSIS_OK)
+        return err;
+
     a->linpre       = a->linprebuf + MAX_ORDER;
     a->rinpre       = a->rinprebuf + MAX_ORDER;
     a->lstep        = a->lstepbuf  + MAX_ORDER;
@@ -218,15 +222,20 @@ GainAnalysis * gain_create_analysis(long samplefreq) {
     a->rout         = a->routbuf   + MAX_ORDER;
 
     memset(a->B, 0, sizeof(a->B));
-	memset(a->C, 0, sizeof(a->C));
-	a->chap_void = 1;
 
+    return INIT_GAIN_ANALYSIS_OK;
+}
+
+GainAnalysis * gain_create_analysis() {
+    GainAnalysis *anal = malloc(sizeof(GainAnalysisPrivate));
+    if (!anal) {
+        free(anal);
+        return NULL;
+    }
     return anal;
 }
 
 void gain_destroy_analysis(GainAnalysis *anal) {
-    GainAnalysisPrivate *a = anal->internals;
-    free(a);
     free(anal);
 }
 
@@ -237,7 +246,7 @@ static __inline double fsqr(const double d) {
 int gain_analyze_samples (GainAnalysis *anal, const double* left_samples,
         const double* right_samples, size_t num_samples, int num_channels )
 {
-    GainAnalysisPrivate *a = anal->internals;
+    GainAnalysisPrivate *a = anal;
     const double*  curleft;
     const double*  curright;
     long            batchsamples;
@@ -249,7 +258,7 @@ int gain_analyze_samples (GainAnalysis *anal, const double* left_samples,
         return GAIN_ANALYSIS_OK;
 
     cursamplepos = 0;
-    batchsamples = num_samples;
+    batchsamples = (long)num_samples;
 
     switch ( num_channels) {
     case  1: right_samples = left_samples;
@@ -338,7 +347,8 @@ int gain_analyze_samples (GainAnalysis *anal, const double* left_samples,
             double  val  = STEPS_per_dB * 10. * log10 ( (a->lsum+a->rsum) / a->totsamp * 0.5 + 1.e-37 );
             int     ival = (int) val;
             if ( ival <                     0 ) ival = 0;
-			if ( ival >= ANALYZE_SIZE ) ival = ANALYZE_SIZE - 1;
+            if ( ival >= (int)(sizeof(a->A)/sizeof(*a->A)) )
+                ival = sizeof(a->A)/sizeof(*a->A) - 1;
             a->A [ival]++;
             a->lsum = a->rsum = 0.;
             memmove ( a->loutbuf , a->loutbuf  + a->totsamp, MAX_ORDER * sizeof(double) );
@@ -360,7 +370,6 @@ int gain_analyze_samples (GainAnalysis *anal, const double* left_samples,
         memcpy  ( a->linprebuf, left_samples  + num_samples - MAX_ORDER, MAX_ORDER * sizeof(double) );
         memcpy  ( a->rinprebuf, right_samples + num_samples - MAX_ORDER, MAX_ORDER * sizeof(double) );
     }
-	a->chap_void = 0;
 
     return GAIN_ANALYSIS_OK;
 }
@@ -383,18 +392,18 @@ static double analyzeResult ( uint32_t* Array, size_t len ) {
             break;
     }
 
-    return (double)i / (double)STEPS_per_dB;
+    return (double) ((double)PINK_REF - (double)i / (double)STEPS_per_dB);
 }
 
 
-double gain_get_chapter(GainAnalysis *anal) {
-    GainAnalysisPrivate *a = anal->internals;
+double gain_get_title(GainAnalysis *anal) {
+    GainAnalysisPrivate *a = anal;
     double  retval;
     int    i;
 
-	retval = analyzeResult ( a->A, ANALYZE_SIZE );
+    retval = analyzeResult ( a->A, sizeof(a->A)/sizeof(*a->A) );
 
-	for ( i = 0; i < ANALYZE_SIZE; i++ ) {
+    for ( i = 0; i < (int)(sizeof(a->A)/sizeof(*a->A)); i++ ) {
         a->B[i] += a->A[i];
         a->A[i]  = 0;
     }
@@ -404,31 +413,12 @@ double gain_get_chapter(GainAnalysis *anal) {
 
     a->totsamp = 0;
     a->lsum    = a->rsum = 0.;
-	a->chap_void = 1;
     return retval;
-}
-
-double gain_get_title(GainAnalysis *anal) {
-    GainAnalysisPrivate *a = anal->internals;
-	double  retval;
-	int    i;
-	
-	if (a->chap_void == 0)
-		gain_get_chapter(anal);
-	
-	retval = analyzeResult (a->B, ANALYZE_SIZE );
-	
-	for ( i = 0; i < ANALYZE_SIZE; i++ ) {
-		a->C[i] += a->B[i];
-		a->B[i]  = 0;
-	}
-	
-	return retval;
 }
 
 
 double gain_get_album(GainAnalysis *anal) {
-    GainAnalysisPrivate *a = anal->internals;
-	return analyzeResult(a->C, ANALYZE_SIZE);
+    GainAnalysisPrivate *a = anal;
+    return analyzeResult(a->B, sizeof(a->B)/sizeof(*a->B));
 }
 

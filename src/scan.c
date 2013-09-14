@@ -23,7 +23,7 @@ typedef struct EventQueue {
 
 typedef struct FileListItem {
     char *filename;
-    double peak_amplitude; // in dB
+    double peak_amplitude; // scale of 0 to 1
     double replay_gain; // in dB
     struct FileListItem *next;
 } FileListItem;
@@ -31,7 +31,7 @@ typedef struct FileListItem {
 typedef struct AlbumListItem {
     char *album_name;
     FileListItem *first_file; // first pointer to list of tracks in this album
-    double peak_amplitude; // in dB
+    double peak_amplitude; // scale of 0 to 1
     double replay_gain; // in dB
     struct AlbumListItem *next; // next pointer in list of albums
 } AlbumListItem;
@@ -45,6 +45,8 @@ typedef struct GrooveReplayGainScanPrivate {
     // when album_item->first_file is NULL, scanned_file_item will be a list of
     // scanned files for a complete album and should have its metadata updated
     FileListItem *scanned_file_item;
+    // this pointer only exists while replaygain scanning
+    FileListItem *currently_scanning;
     int executing;
     GrooveRgEvent progress_event;
     EventQueue eventq;
@@ -155,6 +157,13 @@ static int event_queue_get(EventQueue *q, GrooveRgEvent *event, int block) {
     return ret;
 }
 
+static void albumlist_pop(AlbumListItem **list) {
+    AlbumListItem *popped = *list;
+    *list = (*list)->next;
+    av_free(popped->album_name);
+    av_free(popped);
+}
+
 static int albumlist_push(AlbumListItem **list, FileListItem *item, const char *album_name) {
     AlbumListItem *album_item = av_mallocz(sizeof(AlbumListItem));
     if (!album_item)
@@ -162,8 +171,7 @@ static int albumlist_push(AlbumListItem **list, FileListItem *item, const char *
     album_item->next = *list;
     album_item->album_name = av_strdup(album_name);
     *list = album_item;
-    FileListItem *file_list = (*list)->first_file;
-    filelist_push(&file_list, item);
+    filelist_push(&(*list)->first_file, item);
     return 0;
 }
 
@@ -178,8 +186,7 @@ static int albumlist_push_match(AlbumListItem **list, FileListItem *item,
     while (node) {
         if (node->album_name && strcmp(node->album_name, album_name) == 0) {
             // add to this album list
-            FileListItem *file_list = node->first_file;
-            filelist_push(&file_list, item);
+            filelist_push(&node->first_file, item);
             return 0;
         }
         node = node->next;
@@ -215,17 +222,25 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
         return -1;
     }
 
+    // save this pointer to make it easier on the buffer_planar callback
+    s->currently_scanning = item;
     DecodeContext *decode_ctx = &s->decode_ctx;
     while (decode(decode_ctx, file) >= 0) {}
-
     groove_close(file);
+    s->currently_scanning = NULL;
+
+    item->replay_gain = gain_get_title(s->anal);
+
     return 0;
 }
 
 static int update_with_rg_info(GrooveReplayGainScan *scan, AlbumListItem *album_item,
         FileListItem *file_item)
 {
-    // TODO
+    fprintf(stderr, "\nUpdate %s track replaygain %f\n"
+            "album replaygain %f\ntrack peak: %f\nalbum peak: %f\n", file_item->filename,
+            file_item->replay_gain, album_item->replay_gain, file_item->peak_amplitude,
+            album_item->peak_amplitude);
     return -1;
 }
 
@@ -236,23 +251,42 @@ static int scan_thread(void *arg) {
     while (!s->abort_request) {
         if (s->file_item) {
             // scan for metadata and group by album
+            // item ends up going into an album_item
             FileListItem *item = filelist_pop(&s->file_item);
             if (metadata_scan(scan, item) >= 0)
                 rg_prog->scanning_total += 1;
             rg_prog->metadata_current += 1;
-        } else if (s->album_item && s->album_item->first_file) {
-            // replaygain scan a track from an album
-            FileListItem *item = filelist_pop(&s->album_item->first_file);
-            if (replaygain_scan(scan, item) >= 0)
-                rg_prog->update_total += 1;
-            rg_prog->scanning_current += 1;
-        } else if (s->scanned_file_item) {
-            // update tracks from an album which has completed
-            FileListItem *item = filelist_pop(&s->scanned_file_item);
-            update_with_rg_info(scan, s->album_item, item);
-            rg_prog->update_current += 1;
+        } else if (s->album_item) {
+            if (s->album_item->first_file) {
+                // replaygain scan a track from an album
+                // item ends up going into scanned_file_item
+                FileListItem *item = filelist_pop(&s->album_item->first_file);
+                if (replaygain_scan(scan, item) >= 0)
+                    rg_prog->update_total += 1;
+                rg_prog->scanning_current += 1;
+                filelist_push(&s->scanned_file_item, item);
+                // if we're done scanning the entire album, get the replay_gain
+                if (!s->album_item->first_file) {
+                    s->album_item->replay_gain = gain_get_album(s->anal);
+                    gain_init_analysis(s->anal, s->decode_ctx.dest_sample_rate);
+                }
+            } else if (s->scanned_file_item) {
+                // update tracks from an album which has completed
+                // we are responsible for freeing item
+                FileListItem *item = filelist_pop(&s->scanned_file_item);
+                update_with_rg_info(scan, s->album_item, item);
+                rg_prog->update_current += 1;
+                av_freep(&item->filename);
+                av_freep(&item);
+                // if we're done updating track metadata, move on to scanning the
+                // next album
+                if (!s->scanned_file_item)
+                    albumlist_pop(&s->album_item);
+            }
         } else {
             // we must be done.
+            s->executing = 2;
+            event_queue_abort(&s->eventq);
             break;
         }
         // put progress event on the queue
@@ -294,13 +328,29 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename) {
     return 0;
 }
 
-static int scan_buffer (struct DecodeContext *decode_ctx, BufferList *buf_list) {
-    //GrooveReplayGainScan *scan = decode_ctx->callback_context;
-    //GrooveReplayGainScanPrivate *s = scan->internals;
-    // TODO
-    //double left;
-    //double right;
-    //gain_analyze_samples(s->anal, &left, &right, 1, 2);
+static int scan_buffer_planar (struct DecodeContext *decode_ctx,
+        uint8_t *left_buf, uint8_t *right_buf, int data_size)
+{
+    GrooveReplayGainScan *scan = decode_ctx->callback_context;
+    GrooveReplayGainScanPrivate *s = scan->internals;
+    FileListItem *item = s->currently_scanning;
+
+    // keep track of peak
+    // assume it's a bunch of doubles
+    size_t count = data_size / sizeof(double);
+    double *left = (double*)left_buf;
+    double *right = (double*)right_buf;
+    for (int i = 0; i < count; i += 1) {
+        double abs_l = abs(left[i]);
+        double abs_r = abs(right[i]);
+        double max = abs_l > abs_r ? abs_l : abs_r;
+        if (max > item->peak_amplitude)
+            item->peak_amplitude = max;
+        if (max > s->album_item->peak_amplitude)
+            s->album_item->peak_amplitude = max;
+    }
+
+    gain_analyze_samples(s->anal, left, right, count, 2);
     return 0;
 }
 
@@ -318,30 +368,54 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
         return -1;
     }
     s->decode_ctx.callback_context = scan;
-    s->decode_ctx.buffer = scan_buffer;
+    s->decode_ctx.buffer_planar = scan_buffer_planar;
+    s->decode_ctx.dest_sample_rate = 44100;
+    s->decode_ctx.dest_channel_layout = AV_CH_LAYOUT_STEREO;
+    s->decode_ctx.dest_channel_count = 2;
+    s->decode_ctx.dest_sample_fmt = AV_SAMPLE_FMT_DBLP;
     s->executing = 1;
     s->progress_event.type = GROOVE_RG_EVENT_PROGRESS;
     event_queue_init(&s->eventq);
-    s->anal = gain_create_analysis(44100);
+    s->anal = gain_create_analysis();
+    gain_init_analysis(s->anal, s->decode_ctx.dest_sample_rate);
     s->thread_id = SDL_CreateThread(scan_thread, scan);
     return 0;
+}
+
+static void filelist_cleanup(FileListItem **list) {
+    while (*list) {
+        FileListItem *node = filelist_pop(list);
+        av_free(node->filename);
+        av_free(node);
+    }
+    *list = NULL;
+}
+
+static void albumlist_cleanup(AlbumListItem **list) {
+    while (*list)
+        albumlist_pop(list);
+    *list = NULL;
 }
 
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     if (!scan)
         return;
     GrooveReplayGainScanPrivate *s = scan->internals;
-    if (s->executing) {
-        // TODO this should be moved to happen when the replaygain scan ends naturally
+    if (s->executing == 1) {
+        s->executing = 2;
         event_queue_abort(&s->eventq);
-        event_queue_end(&s->eventq);
         s->abort_request = 1;
         SDL_WaitThread(s->thread_id, NULL);
-        gain_destroy_analysis(s->anal);
     }
-    // TODO free all the things
-
-    cleanup_decode_ctx(&s->decode_ctx);
+    if (s->executing == 2) {
+        s->executing = 0;
+        event_queue_end(&s->eventq);
+        gain_destroy_analysis(s->anal);
+        cleanup_decode_ctx(&s->decode_ctx);
+    }
+    albumlist_cleanup(&s->album_item);
+    filelist_cleanup(&s->file_item);
+    filelist_cleanup(&s->scanned_file_item);
     av_free(s);
     av_free(scan);
 }
