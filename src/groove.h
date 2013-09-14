@@ -35,7 +35,10 @@ typedef struct GroovePlayer {
     enum GrooveState state; // read-only
     GrooveQueueItem * queue_head;
     GrooveQueueItem * queue_tail;
-    enum GrooveReplayGainMode replaygain_mode;
+    enum GrooveReplayGainMode replaygain_mode; // read-only
+    double replaygain_preamp; // read-only, defaults to 0.25
+    double replaygain_default; // read-only, defaults to 0.5
+    double volume; // read-only, defaults to 1.0
 
     void * internals;
 } GroovePlayer;
@@ -150,6 +153,10 @@ void groove_player_clear(GroovePlayer *player);
 int groove_player_count(GroovePlayer *player);
 
 void groove_player_set_replaygain_mode(GroovePlayer *player, enum GrooveReplayGainMode mode);
+void groove_player_set_replaygain_preamp(GroovePlayer *player, double preamp);
+void groove_player_set_replaygain_default(GroovePlayer *player, double value);
+
+void groove_player_set_volume(GroovePlayer *player, double volume);
 
 
 

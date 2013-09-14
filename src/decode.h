@@ -5,11 +5,10 @@
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
-#include <libavfilter/avfiltergraph.h>
 
 // TODO prefix these types with Groove
 typedef struct BufferList {
-    AVFilterBufferRef *buffer;
+    AVFrame *frame;
     struct BufferList *next;
 } BufferList;
 
@@ -20,16 +19,20 @@ typedef struct DecodeContext {
     int last_paused;
     void *callback_context;
     void (*flush)(struct DecodeContext *);
-    int (*buffer)(struct DecodeContext *, AVFilterBufferRef *);
+    int (*buffer)(struct DecodeContext *, AVFrame *);
+
+    int in_sample_rate;
+    uint64_t in_channel_layout;
+    enum AVSampleFormat in_sample_fmt;
+    AVRational in_time_base;
 
     int dest_sample_rate;
     uint64_t dest_channel_layout;
     int dest_channel_count;
     enum AVSampleFormat dest_sample_fmt;
 
-    char args[512];
+    char strbuf[512];
     AVFilterGraph *filter_graph;
-    int graph_configured;
     AVFilterContext *abuffer_ctx;
     AVFilterContext *volume_ctx;
     AVFilterContext *aformat_ctx;

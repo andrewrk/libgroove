@@ -330,16 +330,16 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename) {
     return 0;
 }
 
-static int scan_buffer(DecodeContext *decode_ctx, AVFilterBufferRef *buf) {
+static int scan_buffer(DecodeContext *decode_ctx, AVFrame *frame) {
     GrooveReplayGainScan *scan = decode_ctx->callback_context;
     GrooveReplayGainScanPrivate *s = scan->internals;
     FileListItem *item = s->currently_scanning;
 
     // keep track of peak
     // assume it's a bunch of doubles
-    size_t count = buf->linesize[0] / sizeof(double);
-    double *left = (double*)buf->data[0];
-    double *right = (double*)buf->data[1];
+    size_t count = frame->linesize[0] / sizeof(double);
+    double *left = (double*)frame->data[0];
+    double *right = (double*)frame->data[1];
     for (int i = 0; i < count; i += 1) {
         double abs_l = fabs(left[i]);
         double abs_r = fabs(right[i]);
@@ -353,7 +353,7 @@ static int scan_buffer(DecodeContext *decode_ctx, AVFilterBufferRef *buf) {
 
     gain_analyze_samples(s->anal, left, right, count, 2);
 
-    avfilter_unref_buffer(buf);
+    av_frame_free(&frame);
     return 0;
 }
 

@@ -42,19 +42,19 @@ typedef struct GroovePlayerPrivate {
     int abort_request;
     BufferQueue audioq;
     SDL_AudioSpec spec;
-    AVFilterBufferRef *audio_buf;
+    AVFrame *audio_buf;
     size_t audio_buf_size; // in bytes
     size_t audio_buf_index; // in bytes
     DecodeContext decode_ctx;
 } GroovePlayerPrivate;
 
-static int buffer_queue_put(BufferQueue *q, AVFilterBufferRef *buf) {
+static int buffer_queue_put(BufferQueue *q, AVFrame *frame) {
     BufferList * buf1 = av_malloc(sizeof(BufferList));
 
     if (!buf1)
         return -1;
 
-    buf1->buffer = buf;
+    buf1->frame = frame;
     buf1->next = NULL;
 
     SDL_LockMutex(q->mutex);
@@ -66,7 +66,7 @@ static int buffer_queue_put(BufferQueue *q, AVFilterBufferRef *buf) {
     q->last_buf = buf1;
 
     q->nb_buffers += 1;
-    q->size += buf1->buffer->linesize[0];
+    q->size += buf1->frame->linesize[0];
 
     SDL_CondSignal(q->cond);
     SDL_UnlockMutex(q->mutex);
@@ -75,7 +75,7 @@ static int buffer_queue_put(BufferQueue *q, AVFilterBufferRef *buf) {
 }
 
 // return < 0 if aborted, 0 if no buffer and > 0 if buffer.
-static int buffer_queue_get(BufferQueue *q, AVFilterBufferRef **buf, int block) {
+static int buffer_queue_get(BufferQueue *q, AVFrame **frame, int block) {
     BufferList *buf1;
     int ret;
 
@@ -93,8 +93,8 @@ static int buffer_queue_get(BufferQueue *q, AVFilterBufferRef **buf, int block) 
             if (!q->first_buf)
                 q->last_buf = NULL;
             q->nb_buffers -= 1;
-            q->size -= buf1->buffer->linesize[0];
-            *buf = buf1->buffer;
+            q->size -= buf1->frame->linesize[0];
+            *frame = buf1->frame;
             av_free(buf1);
             ret = 1;
             break;
@@ -118,7 +118,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
 
     while (len > 0) {
         if (!decode_ctx->paused && p->audio_buf_index >= p->audio_buf_size) {
-            avfilter_unref_bufferp(&p->audio_buf);
+            av_frame_free(&p->audio_buf);
             p->audio_buf_index = 0;
             p->audio_buf_size = 0;
             if (buffer_queue_get(&p->audioq, &p->audio_buf, 1) > 0)
@@ -178,7 +178,7 @@ static void buffer_queue_flush(BufferQueue *q) {
     BufferList *buf1;
     for (buf = q->first_buf; buf != NULL; buf = buf1) {
         buf1 = buf->next;
-        avfilter_unref_buffer(buf->buffer);
+        av_frame_free(&buf->frame);
         av_free(buf);
     }
     q->last_buf = NULL;
@@ -198,10 +198,10 @@ static void player_flush(DecodeContext *decode_ctx) {
     buffer_queue_flush(&p->audioq);
 }
 
-static int player_buffer(DecodeContext *decode_ctx, AVFilterBufferRef *buf) {
+static int player_buffer(DecodeContext *decode_ctx, AVFrame *frame) {
     GroovePlayer *player = decode_ctx->callback_context;
     GroovePlayerPrivate *p = player->internals;
-    if (buffer_queue_put(&p->audioq, buf) < 0) {
+    if (buffer_queue_put(&p->audioq, frame) < 0) {
         av_log(NULL, AV_LOG_ERROR, "error allocating buffer queue item: out of memory\n");
         return -1;
     }
@@ -349,7 +349,7 @@ void groove_destroy_player(GroovePlayer *player) {
     p->abort_request = 1;
     SDL_WaitThread(p->thread_id, NULL);
 
-    avfilter_unref_bufferp(&p->audio_buf);
+    av_frame_free(&p->audio_buf);
 
     cleanup_decode_ctx(&p->decode_ctx);
     av_free(p);
