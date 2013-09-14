@@ -2,7 +2,7 @@ CC = c99
 LIBAV_PREFIX = /usr
 
 # for compiling groove
-ALLAVLIBS = avfilter avformat avcodec avresample avutil
+ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
 CFLAGS := -I$(LIBAV_PREFIX)/include -pedantic -Werror -Wall -g -O0 -fPIC 
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a)
 LDFLAGS := -lSDL -lbz2 -lz -lm -pthread

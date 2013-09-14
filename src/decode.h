@@ -1,14 +1,16 @@
 #ifndef __DECODE_H__
 #define __DECODE_H__
 
-#include "libavformat/avformat.h"
-#include "libavresample/avresample.h"
+#include <libavformat/avformat.h>
+#include <libavfilter/avfilter.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
+#include <libavfilter/avfiltergraph.h>
 
 // TODO prefix these types with Groove
 typedef struct BufferList {
-    uint8_t * buffer;
-    int size;
-    struct BufferList * next;
+    AVFilterBufferRef *buffer;
+    struct BufferList *next;
 } BufferList;
 
 typedef struct DecodeContext {
@@ -18,7 +20,7 @@ typedef struct DecodeContext {
     int last_paused;
     void *callback_context;
     void (*flush)(struct DecodeContext *);
-    int (*buffer)(struct DecodeContext *, BufferList *);
+    int (*buffer)(struct DecodeContext *, AVFilterBufferRef *);
     int (*buffer_planar)(struct DecodeContext *,
             uint8_t *left, uint8_t *right, int data_size);
 
@@ -27,12 +29,13 @@ typedef struct DecodeContext {
     int dest_channel_count;
     enum AVSampleFormat dest_sample_fmt;
 
-    enum AVSampleFormat resample_sample_fmt;
-    uint64_t resample_channel_layout;
-    int resample_sample_rate;
-    AVAudioResampleContext *avr;
-    uint8_t *resample_buf[2];
-    size_t resample_buf_size[2];
+    char args[512];
+    AVFilterGraph *filter_graph;
+    int graph_configured;
+    AVFilterContext *abuffer_ctx;
+    AVFilterContext *volume_ctx;
+    AVFilterContext *aformat_ctx;
+    AVFilterContext *abuffersink_ctx;
 } DecodeContext;
 
 typedef struct GrooveFilePrivate {

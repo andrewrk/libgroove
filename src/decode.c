@@ -1,7 +1,8 @@
 #include "groove.h"
 #include "decode.h"
 
-#include "libavutil/opt.h"
+#include <libavutil/opt.h>
+#include <libavutil/channel_layout.h>
 
 #include <SDL/SDL.h>
 
@@ -24,8 +25,10 @@ int maybe_init() {
     avcodec_register_all();
     av_register_all();
     avformat_network_init();
+    avfilter_register_all();
 
     atexit(deinit_network);
+    atexit(avfilter_uninit);
 
     av_log_set_level(AV_LOG_QUIET);
     return 0;
@@ -86,130 +89,131 @@ static int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
                 return 0;
             continue;
         }
-        data_size = av_samples_get_buffer_size(NULL, dec->channels,
-                       frame->nb_samples, frame->format, 1);
 
-        int audio_resample = frame->format     != decode_ctx->dest_sample_fmt     ||
-                         frame->channel_layout != decode_ctx->dest_channel_layout ||
-                         frame->sample_rate    != decode_ctx->dest_sample_rate;
-
-        int resample_changed = frame->format     != decode_ctx->resample_sample_fmt     ||
-                           frame->channel_layout != decode_ctx->resample_channel_layout ||
-                           frame->sample_rate    != decode_ctx->resample_sample_rate;
-
-        if ((!decode_ctx->avr && audio_resample) || resample_changed) {
-            int ret;
-            if (decode_ctx->avr) {
-                avresample_close(decode_ctx->avr);
-            } else if (audio_resample) {
-                decode_ctx->avr = avresample_alloc_context();
-                if (!decode_ctx->avr) {
-                    av_log(NULL, AV_LOG_ERROR, "error allocating AVAudioResampleContext\n");
-                    return -1;
-                }
-            }
-            if (audio_resample) {
-                av_opt_set_int(decode_ctx->avr, "in_channel_layout",  frame->channel_layout, 0);
-                av_opt_set_int(decode_ctx->avr, "in_sample_fmt",      frame->format,         0);
-                av_opt_set_int(decode_ctx->avr, "in_sample_rate",     frame->sample_rate,    0);
-                av_opt_set_int(decode_ctx->avr, "out_channel_layout", decode_ctx->dest_channel_layout,    0);
-                av_opt_set_int(decode_ctx->avr, "out_sample_fmt",     decode_ctx->dest_sample_fmt,        0);
-                av_opt_set_int(decode_ctx->avr, "out_sample_rate",    decode_ctx->dest_sample_rate,       0);
-
-                if ((ret = avresample_open(decode_ctx->avr)) < 0) {
-                    av_log(NULL, AV_LOG_ERROR, "error initializing libavresample\n");
-                    return -1;
-                }
-            }
-            decode_ctx->resample_sample_fmt     = frame->format;
-            decode_ctx->resample_channel_layout = frame->channel_layout;
-            decode_ctx->resample_sample_rate    = frame->sample_rate;
+        // push the audio data from decoded frame into the filtergraph
+        int err = av_buffersrc_write_frame(decode_ctx->abuffer_ctx, frame);
+        if (err < 0) {
+            av_strerror(err, decode_ctx->args, sizeof(decode_ctx->args));
+            av_log(NULL, AV_LOG_ERROR, "error writing frame to buffersrc: %s\n",
+                    decode_ctx->args);
+            return -1;
         }
 
-        int err = 0;
-        if (av_sample_fmt_is_planar(decode_ctx->dest_sample_fmt)) {
-            if (audio_resample) {
-                int osize      = av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
-                int nb_samples = frame->nb_samples;
-
-                int out_linesize;
-                int out_size = av_samples_get_buffer_size(&out_linesize,
-                                      1, nb_samples, decode_ctx->dest_sample_fmt, 0);
-                for (int ch = 0; ch < 2; ch += 1) {
-                    if (decode_ctx->resample_buf_size[ch] < out_size) {
-                        void *tmp_ptr = av_realloc(decode_ctx->resample_buf[ch], out_size);
-                        if (!tmp_ptr) {
-                            av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
-                            return -1;
-                        }
-                        decode_ctx->resample_buf[ch] = tmp_ptr;
-                        decode_ctx->resample_buf_size[ch] = out_size;
-                    }
-                }
-                int out_samples = avresample_convert(decode_ctx->avr, decode_ctx->resample_buf,
-                        out_linesize, nb_samples, frame->data,
-                        frame->linesize[0], frame->nb_samples);
-                if (out_samples < 0) {
-                    av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
-                    break;
-                }
-                int one_channel_size = out_samples * osize;
-                data_size = one_channel_size * decode_ctx->dest_channel_count;
-                err = decode_ctx->buffer_planar(decode_ctx,
-                        decode_ctx->resample_buf[0], decode_ctx->resample_buf[1],
-                        one_channel_size);
-            } else {
-                err = decode_ctx->buffer_planar(decode_ctx,
-                        frame->data[0], frame->data[1], data_size);
+        // pull filtered audio from the filtergraph
+        AVFilterBufferRef *buf;
+        for (;;) {
+            int err = av_buffersink_read(decode_ctx->abuffersink_ctx, &buf);
+            if (err == AVERROR_EOF || err == AVERROR(EAGAIN))
+                break;
+            if (err < 0) {
+                av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
+                return -1;
             }
-        } else {
-            BufferList buf_list;
-            if (audio_resample) {
-                int osize      = av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
-                int nb_samples = frame->nb_samples;
-
-                int out_linesize;
-                buf_list.size = av_samples_get_buffer_size(&out_linesize,
-                                      decode_ctx->dest_channel_count, nb_samples,
-                                      decode_ctx->dest_sample_fmt, 0);
-                buf_list.buffer = av_malloc(buf_list.size);
-                if (!buf_list.buffer) {
-                    av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
-                    return -1;
-                }
-
-                int out_samples = avresample_convert(decode_ctx->avr, &buf_list.buffer,
-                        out_linesize, nb_samples, frame->data,
-                        frame->linesize[0], frame->nb_samples);
-                if (out_samples < 0) {
-                    av_log(NULL, AV_LOG_ERROR, "avresample_convert() failed\n");
-                    return -1;
-                }
-                data_size = out_samples * osize * decode_ctx->dest_channel_count;
-                buf_list.size = data_size;
-            } else {
-                buf_list.size = data_size;
-                buf_list.buffer = av_malloc(buf_list.size);
-                if (!buf_list.buffer) {
-                    av_log(NULL, AV_LOG_ERROR, "error allocating buffer: out of memory\n");
-                    return -1;
-                }
-                memcpy(buf_list.buffer, frame->data[0], buf_list.size);
-            }
-            err = decode_ctx->buffer(decode_ctx, &buf_list);
+            data_size += buf->linesize[0];
+            err = decode_ctx->buffer(decode_ctx, buf);
+            if (err < 0)
+                return err;
         }
+
         // if no pts, then compute it
         if (pkt->pts == AV_NOPTS_VALUE) {
             n = decode_ctx->dest_channel_count * av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
             f->audio_clock += (double)data_size / (double)(n * decode_ctx->dest_sample_rate);
         }
-        return err < 0 ? err : data_size;
+        return data_size;
     }
     return data_size;
 }
 
+static void cleanup_orphan_filters(DecodeContext *decode_ctx) {
+    if (decode_ctx->abuffer_ctx) {
+        avfilter_free(decode_ctx->abuffer_ctx);
+        decode_ctx->abuffer_ctx = NULL;
+    }
+    if (decode_ctx->volume_ctx) {
+        avfilter_free(decode_ctx->volume_ctx);
+        decode_ctx->volume_ctx = NULL;
+    }
+    if (decode_ctx->aformat_ctx) {
+        avfilter_free(decode_ctx->aformat_ctx);
+        decode_ctx->aformat_ctx = NULL;
+    }
+    if (decode_ctx->abuffersink_ctx) {
+        avfilter_free(decode_ctx->abuffersink_ctx);
+        decode_ctx->abuffersink_ctx = NULL;
+    }
+}
+
+static int init_filter_graph(DecodeContext *decode_ctx) {
+    decode_ctx->filter_graph = avfilter_graph_alloc();
+    if (!decode_ctx->filter_graph) {
+        av_log(NULL, AV_LOG_ERROR, "unable to create filter graph: out of memory\n");
+        return -1;
+    }
+
+    AVFilter *abuffer = avfilter_get_by_name("abuffer");
+    AVFilter *volume = avfilter_get_by_name("volume");
+    AVFilter *aformat = avfilter_get_by_name("aformat");
+    AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
+
+    int err = 0;
+    // create filter instances
+    if (err >= 0) err = avfilter_open(&decode_ctx->abuffer_ctx, abuffer, NULL);
+    if (err >= 0) err = avfilter_open(&decode_ctx->volume_ctx, volume, NULL);
+    if (err >= 0) err = avfilter_open(&decode_ctx->aformat_ctx, aformat, NULL);
+    if (err >= 0) err = avfilter_open(&decode_ctx->abuffersink_ctx, abuffersink, NULL);
+    // connect the inputs and outputs
+    if (err >= 0) err = avfilter_link(decode_ctx->abuffer_ctx, 0, decode_ctx->volume_ctx, 0);
+    if (err >= 0) err = avfilter_link(decode_ctx->volume_ctx, 0, decode_ctx->aformat_ctx, 0);
+    if (err >= 0) err = avfilter_link(decode_ctx->aformat_ctx, 0, decode_ctx->abuffersink_ctx, 0);
+    if (err < 0) {
+        cleanup_orphan_filters(decode_ctx);
+        av_log(NULL, AV_LOG_ERROR, "error creating filters\n");
+        return err;
+    }
+    // initialize parameters
+    snprintf(decode_ctx->args, sizeof(decode_ctx->args),
+            "sample_fmts=%s:channel_layouts=0x%"PRIx64":sample_rates=%d", 
+            av_get_sample_fmt_name(decode_ctx->dest_sample_fmt),
+            decode_ctx->dest_channel_layout,
+            decode_ctx->dest_sample_rate);
+    err = avfilter_init_filter(decode_ctx->aformat_ctx, decode_ctx->args, NULL);
+    if (err < 0) {
+        cleanup_orphan_filters(decode_ctx);
+        av_log(NULL, AV_LOG_ERROR, "error initializing aformat filter\n");
+        return err;
+    }
+
+    // add them all to the filter graph
+    if (avfilter_graph_add_filter(decode_ctx->filter_graph, decode_ctx->abuffer_ctx) < 0) {
+        cleanup_orphan_filters(decode_ctx);
+        av_log(NULL, AV_LOG_ERROR, "error adding abuffer to graph\n");
+        return -1;
+    }
+    if (avfilter_graph_add_filter(decode_ctx->filter_graph, decode_ctx->volume_ctx) < 0) {
+        avfilter_free(decode_ctx->volume_ctx);
+        avfilter_free(decode_ctx->aformat_ctx);
+        avfilter_free(decode_ctx->abuffersink_ctx);
+        av_log(NULL, AV_LOG_ERROR, "error adding volume to graph\n");
+        return -1;
+    }
+    if (avfilter_graph_add_filter(decode_ctx->filter_graph, decode_ctx->aformat_ctx) < 0) {
+        avfilter_free(decode_ctx->aformat_ctx);
+        avfilter_free(decode_ctx->abuffersink_ctx);
+        av_log(NULL, AV_LOG_ERROR, "error adding aformat to graph\n");
+        return -1;
+    }
+    if (avfilter_graph_add_filter(decode_ctx->filter_graph, decode_ctx->abuffersink_ctx) < 0) {
+        avfilter_free(decode_ctx->abuffersink_ctx);
+        av_log(NULL, AV_LOG_ERROR, "error adding abuffersink to graph\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 // return < 0 if error
-static int init_decode(GrooveFile *file) {
+static int init_decode(DecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate *f = file->internals;
 
     // set all streams to discard. in a few lines here we will find the audio
@@ -229,7 +233,8 @@ static int init_decode(GrooveFile *file) {
         return -1;
     }
 
-    AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
+    f->audio_st = f->ic->streams[f->audio_stream_index];
+    AVCodecContext *avctx = f->audio_st->codec;
 
     if (avcodec_open2(avctx, f->decoder, NULL) < 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to open decoder\n");
@@ -244,10 +249,35 @@ static int init_decode(GrooveFile *file) {
         return -1;
     }
 
-    f->audio_st = f->ic->streams[f->audio_stream_index];
     f->audio_st->discard = AVDISCARD_DEFAULT;
 
     memset(&f->audio_pkt, 0, sizeof(f->audio_pkt));
+
+    if (!decode_ctx->filter_graph) {
+        int err = init_filter_graph(decode_ctx);
+        if (err < 0) return err;
+    }
+    // configure abuffer filter with correct parameters
+    AVRational time_base = f->audio_st->time_base;
+    snprintf(decode_ctx->args, sizeof(decode_ctx->args),
+            "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64, 
+            time_base.num, time_base.den, avctx->sample_rate,
+            av_get_sample_fmt_name(avctx->sample_fmt),
+            avctx->channel_layout);
+    int err = avfilter_init_filter(decode_ctx->abuffer_ctx, decode_ctx->args, NULL);
+    if (err < 0) {
+        // cleanup_decode_ctx will clean up for us when it is called later
+        av_log(NULL, AV_LOG_ERROR, "error initializing abuffer filter\n");
+        return err;
+    }
+    if (!decode_ctx->graph_configured) {
+        decode_ctx->graph_configured = 1;
+        err = avfilter_graph_config(decode_ctx->filter_graph, NULL);
+        if (err < 0) {
+            av_log(NULL, AV_LOG_ERROR, "error configuring the filter graph\n");
+            return err;
+        }
+    }
 
     return 0;
 }
@@ -258,7 +288,7 @@ int decode(DecodeContext *decode_ctx, GrooveFile *file) {
 
     // if the file has not been initialized for decoding
     if (f->audio_stream_index < 0) {
-        int err = init_decode(file);
+        int err = init_decode(decode_ctx, file);
         if (err < 0)
             return err;
     }
@@ -325,17 +355,7 @@ int decode(DecodeContext *decode_ctx, GrooveFile *file) {
 }
 
 void cleanup_decode_ctx(DecodeContext *decode_ctx) {
-    if (decode_ctx->resample_buf[0]) {
-        av_free(decode_ctx->resample_buf[0]);
-        decode_ctx->resample_buf[0] = NULL;
-    }
-    if (decode_ctx->resample_buf[1]) {
-        av_free(decode_ctx->resample_buf[1]);
-        decode_ctx->resample_buf[1] = NULL;
-    }
-
-    if (decode_ctx->avr)
-        avresample_free(&decode_ctx->avr);
-
+    if (decode_ctx->filter_graph)
+        avfilter_graph_free(&decode_ctx->filter_graph);
     avcodec_free_frame(&decode_ctx->frame);
 }

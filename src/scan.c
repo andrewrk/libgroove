@@ -4,6 +4,7 @@
 
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
+#include <libavutil/channel_layout.h>
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
@@ -237,6 +238,7 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
 static int update_with_rg_info(GrooveReplayGainScan *scan, AlbumListItem *album_item,
         FileListItem *file_item)
 {
+    // TODO actually update the file with the replaygain info
     fprintf(stderr, "\nUpdate %s track replaygain %f\n"
             "album replaygain %f\ntrack peak: %f\nalbum peak: %f\n", file_item->filename,
             file_item->replay_gain, album_item->replay_gain, file_item->peak_amplitude,
