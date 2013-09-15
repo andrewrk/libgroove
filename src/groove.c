@@ -691,7 +691,7 @@ GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
 {
     GrooveFilePrivate *f = file->internals;
     const AVDictionaryEntry *e = prev;
-    return av_dict_get(f->ic->metadata, key, e, flags&AV_DICT_IGNORE_SUFFIX);
+    return av_dict_get(f->ic->metadata, key, e, flags|AV_DICT_IGNORE_SUFFIX);
 }
 
 int groove_file_metadata_set(GrooveFile *file, const char *key,
@@ -699,7 +699,7 @@ int groove_file_metadata_set(GrooveFile *file, const char *key,
 {
     file->dirty = 1;
     GrooveFilePrivate *f = file->internals;
-    return av_dict_set(&f->ic->metadata, key, value, flags&AV_DICT_IGNORE_SUFFIX);
+    return av_dict_set(&f->ic->metadata, key, value, flags|AV_DICT_IGNORE_SUFFIX);
 }
 
 const char * groove_tag_key(GrooveTag *tag) {
