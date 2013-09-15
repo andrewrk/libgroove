@@ -431,7 +431,12 @@ GrooveFile * groove_open(char* filename) {
         return NULL;
     }
 
-    memset(&f->audio_pkt, 0, sizeof(f->audio_pkt));
+    // copy the audio stream metadata to the context metadata
+    AVDictionaryEntry *tag = NULL;
+    while((tag = av_dict_get(f->audio_st->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
+        av_dict_set(&f->ic->metadata, tag->key, tag->value, AV_DICT_IGNORE_SUFFIX);
+    }
+
     return file;
 }
 
