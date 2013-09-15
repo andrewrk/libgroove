@@ -1,6 +1,5 @@
 #include "groove.h"
 #include "decode.h"
-#include "gain_analysis.h"
 
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
@@ -8,6 +7,8 @@
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
+
+#include <ebur128.h>
 
 typedef struct EventList {
     GrooveRgEvent event;
@@ -32,6 +33,7 @@ typedef struct FileListItem {
 typedef struct AlbumListItem {
     char *album_name;
     FileListItem *first_file; // first pointer to list of tracks in this album
+    size_t track_count;
     double peak_amplitude; // scale of 0 to 1
     double replay_gain; // in dB
     struct AlbumListItem *next; // next pointer in list of albums
@@ -46,15 +48,16 @@ typedef struct GrooveReplayGainScanPrivate {
     // when album_item->first_file is NULL, scanned_file_item will be a list of
     // scanned files for a complete album and should have its metadata updated
     FileListItem *scanned_file_item;
-    // this pointer only exists while replaygain scanning
-    FileListItem *currently_scanning;
     int executing;
     GrooveRgEvent progress_event;
     EventQueue eventq;
     SDL_Thread *thread_id;
     int abort_request;
-    GainAnalysis *anal;
     DecodeContext decode_ctx;
+
+    ebur128_state **ebur_states;
+    size_t next_ebur_state_index;
+    size_t ebur_state_count;
 } GrooveReplayGainScanPrivate;
 
 static void filelist_push(FileListItem **list, FileListItem *item) {
@@ -171,6 +174,7 @@ static int albumlist_push(AlbumListItem **list, FileListItem *item, const char *
         return -1;
     album_item->next = *list;
     album_item->album_name = av_strdup(album_name);
+    album_item->track_count += 1;
     *list = album_item;
     filelist_push(&(*list)->first_file, item);
     return 0;
@@ -187,6 +191,7 @@ static int albumlist_push_match(AlbumListItem **list, FileListItem *item,
     while (node) {
         if (node->album_name && strcmp(node->album_name, album_name) == 0) {
             // add to this album list
+            node->track_count += 1;
             filelist_push(&node->first_file, item);
             return 0;
         }
@@ -223,14 +228,9 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
         return -1;
     }
 
-    // save this pointer to make it easier on the scan_buffer callback
-    s->currently_scanning = item;
     DecodeContext *decode_ctx = &s->decode_ctx;
     while (decode(decode_ctx, file) >= 0) {}
     groove_close(file);
-    s->currently_scanning = NULL;
-
-    item->replay_gain = gain_get_title(s->anal);
 
     return 0;
 }
@@ -244,6 +244,38 @@ static int update_with_rg_info(GrooveReplayGainScan *scan, AlbumListItem *album_
             file_item->replay_gain, album_item->replay_gain, file_item->peak_amplitude,
             album_item->peak_amplitude);
     return -1;
+}
+
+static void cleanup_ebur(GrooveReplayGainScan *scan) {
+    GrooveReplayGainScanPrivate *s = scan->internals;
+    for (int i = 0; i < s->ebur_state_count; i += 1) {
+        if (s->ebur_states[i])
+            ebur128_destroy(&s->ebur_states[i]);
+    }
+    av_freep(&s->ebur_states);
+    s->ebur_state_count = 0;
+    s->next_ebur_state_index = 0;
+}
+
+static int init_ebur(GrooveReplayGainScan *scan, size_t count) {
+    GrooveReplayGainScanPrivate *s = scan->internals;
+    s->next_ebur_state_index = 0;
+    s->ebur_state_count = count;
+    s->ebur_states = av_malloc(count * sizeof(ebur128_state*));
+    if (!s->ebur_states) {
+        av_log(NULL, AV_LOG_ERROR, "error initializing loudness scanner: out of memory\n");
+        return -1;
+    }
+    int destroy = 0;
+    for (int i = 0; i < count; i += 1) {
+        s->ebur_states[i] = ebur128_init(2, 44100, EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
+        destroy = destroy || !s->ebur_states[i];
+    }
+    if (destroy) {
+        cleanup_ebur(scan);
+        return -1;
+    }
+    return 0;
 }
 
 static int scan_thread(void *arg) {
@@ -260,17 +292,37 @@ static int scan_thread(void *arg) {
             rg_prog->metadata_current += 1;
         } else if (s->album_item) {
             if (s->album_item->first_file) {
+                if (!s->ebur_states && init_ebur(scan, s->album_item->track_count) < 0)
+                    break;
                 // replaygain scan a track from an album
                 // item ends up going into scanned_file_item
                 FileListItem *item = filelist_pop(&s->album_item->first_file);
                 if (replaygain_scan(scan, item) >= 0)
                     rg_prog->update_total += 1;
                 rg_prog->scanning_current += 1;
+
+                // grab the loudness value and the peak value
+                ebur128_state *st = s->ebur_states[s->next_ebur_state_index];
+                s->next_ebur_state_index += 1;
+                ebur128_loudness_global(st, &item->replay_gain);
+                double out;
+                ebur128_sample_peak(st, 0, &out);
+                s->album_item->peak_amplitude = s->album_item->peak_amplitude > out ?
+                    s->album_item->peak_amplitude : out;
+                item->peak_amplitude = item->peak_amplitude > out ?
+                    item->peak_amplitude : out;
+                ebur128_sample_peak(st, 1, &out);
+                s->album_item->peak_amplitude = s->album_item->peak_amplitude > out ?
+                    s->album_item->peak_amplitude : out;
+                item->peak_amplitude = item->peak_amplitude > out ?
+                    item->peak_amplitude : out;
+
                 filelist_push(&s->scanned_file_item, item);
-                // if we're done scanning the entire album, get the replay_gain
+                // if we're done scanning the entire album, get the loudness
                 if (!s->album_item->first_file) {
-                    s->album_item->replay_gain = gain_get_album(s->anal);
-                    gain_init_analysis(s->anal, s->decode_ctx.dest_sample_rate);
+                    ebur128_loudness_global_multiple(s->ebur_states, s->ebur_state_count,
+                            &s->album_item->replay_gain);
+                    cleanup_ebur(scan);
                 }
             } else if (s->scanned_file_item) {
                 // update tracks from an album which has completed
@@ -287,14 +339,14 @@ static int scan_thread(void *arg) {
             }
         } else {
             // we must be done.
-            s->executing = 2;
-            event_queue_abort(&s->eventq);
             break;
         }
         // put progress event on the queue
         if (event_queue_put(&s->eventq, &s->progress_event) < 0)
             av_log(NULL, AV_LOG_WARNING, "unable to create progress event: out of memory\n");
     }
+    s->executing = 2;
+    event_queue_abort(&s->eventq);
     return 0;
 }
 
@@ -333,25 +385,10 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename) {
 static int scan_buffer(DecodeContext *decode_ctx, AVFrame *frame) {
     GrooveReplayGainScan *scan = decode_ctx->callback_context;
     GrooveReplayGainScanPrivate *s = scan->internals;
-    FileListItem *item = s->currently_scanning;
 
-    // keep track of peak
-    // assume it's a bunch of doubles
-    size_t count = frame->linesize[0] / sizeof(double);
-    double *left = (double*)frame->data[0];
-    double *right = (double*)frame->data[1];
-    for (int i = 0; i < count; i += 1) {
-        double abs_l = fabs(left[i]);
-        double abs_r = fabs(right[i]);
-        double max = abs_l > abs_r ? abs_l : abs_r;
-        if (max > item->peak_amplitude) {
-            item->peak_amplitude = max;
-        }
-        if (max > s->album_item->peak_amplitude)
-            s->album_item->peak_amplitude = max;
-    }
-
-    gain_analyze_samples(s->anal, left, right, count, 2);
+    ebur128_state *st = s->ebur_states[s->next_ebur_state_index];
+    size_t frame_count = frame->linesize[0] / sizeof(double) / 2;
+    ebur128_add_frames_double(st, (double*)frame->data[0], frame_count);
 
     av_frame_free(&frame);
     return 0;
@@ -375,12 +412,10 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
     s->decode_ctx.dest_sample_rate = 44100;
     s->decode_ctx.dest_channel_layout = AV_CH_LAYOUT_STEREO;
     s->decode_ctx.dest_channel_count = 2;
-    s->decode_ctx.dest_sample_fmt = AV_SAMPLE_FMT_DBLP;
+    s->decode_ctx.dest_sample_fmt = AV_SAMPLE_FMT_DBL;
     s->executing = 1;
     s->progress_event.type = GROOVE_RG_EVENT_PROGRESS;
     event_queue_init(&s->eventq);
-    s->anal = gain_create_analysis();
-    gain_init_analysis(s->anal, s->decode_ctx.dest_sample_rate);
     s->thread_id = SDL_CreateThread(scan_thread, scan);
     return 0;
 }
@@ -413,7 +448,7 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     if (s->executing == 2) {
         s->executing = 0;
         event_queue_end(&s->eventq);
-        gain_destroy_analysis(s->anal);
+        cleanup_ebur(scan);
         cleanup_decode_ctx(&s->decode_ctx);
     }
     albumlist_cleanup(&s->album_item);

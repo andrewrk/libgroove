@@ -5,3 +5,4 @@
 /example/metadata
 /example/replaygain
 /deps/libav/out
+/deps/ebur128/build
