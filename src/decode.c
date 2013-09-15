@@ -9,6 +9,12 @@
 static int initialized = 0;
 static int initialized_sdl = 0;
 
+static double dB_scale;
+
+static double dBtoFloat(double dB) {
+    return exp(dB * dB_scale);
+}
+
 static void deinit_network() {
     avformat_network_deinit();
 }
@@ -18,6 +24,7 @@ int groove_maybe_init() {
         return 0;
     initialized = 1;
 
+    dB_scale = log(10.0) * 0.05;
 
     srand(time(NULL));
 
@@ -299,4 +306,15 @@ int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
 void groove_cleanup_decode_ctx(GrooveDecodeContext *decode_ctx) {
     avfilter_graph_free(&decode_ctx->filter_graph);
     avcodec_free_frame(&decode_ctx->frame);
+}
+
+int groove_init_decode_ctx(GrooveDecodeContext *decode_ctx) {
+    decode_ctx->frame = avcodec_alloc_frame();
+    if (!decode_ctx->frame) {
+        av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
+        return -1;
+    }
+    decode_ctx->dest_channel_count =
+        av_get_channel_layout_nb_channels(decode_ctx->dest_channel_layout);
+    return 0;
 }

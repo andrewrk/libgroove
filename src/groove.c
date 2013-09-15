@@ -266,31 +266,6 @@ GroovePlayer * groove_create_player() {
 
     player->internals = p;
 
-    p->decode_ctx.callback_context = player;
-    p->decode_ctx.flush = player_flush;
-    p->decode_ctx.buffer = player_buffer;
-
-    p->decode_ctx.frame = avcodec_alloc_frame();
-    if (!p->decode_ctx.frame) {
-        av_free(player);
-        av_free(p);
-        av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
-        return NULL;
-    }
-
-    p->audio_buf_size  = 0;
-    p->audio_buf_index = 0;
-
-    p->thread_id = SDL_CreateThread(decode_thread, player);
-
-    if (!p->thread_id) {
-        av_free(player);
-        av_log(NULL, AV_LOG_ERROR, "Error creating player thread: Out of memory\n");
-        return NULL;
-    }
-
-    buffer_queue_init(&p->audioq);
-
     SDL_AudioSpec wanted_spec;
     wanted_spec.format = AUDIO_S16SYS;
     wanted_spec.freq = 44100;
@@ -311,10 +286,32 @@ GroovePlayer * groove_create_player() {
         return NULL;
     }
 
+    p->decode_ctx.callback_context = player;
+    p->decode_ctx.flush = player_flush;
+    p->decode_ctx.buffer = player_buffer;
+
     p->decode_ctx.dest_sample_rate = p->spec.freq;
     p->decode_ctx.dest_channel_layout = p->spec.channels == 2 ?
         AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
-    p->decode_ctx.dest_channel_count = p->spec.channels;
+
+    if (groove_init_decode_ctx(&p->decode_ctx) < 0) {
+        groove_destroy_player(player);
+        return NULL;
+    };
+
+    p->audio_buf_size  = 0;
+    p->audio_buf_index = 0;
+
+    p->thread_id = SDL_CreateThread(decode_thread, player);
+
+    if (!p->thread_id) {
+        groove_destroy_player(player);
+        av_log(NULL, AV_LOG_ERROR, "Error creating player thread: Out of memory\n");
+        return NULL;
+    }
+
+    buffer_queue_init(&p->audioq);
+
 
     SDL_PauseAudio(0);
 
@@ -670,8 +667,9 @@ void groove_set_logging(int enabled) {
     }
 }
 
-void groove_player_set_replaygain_mode(GroovePlayer *player, enum GrooveReplayGainMode mode) {
-    player->replaygain_mode = mode;
+void groove_player_set_replaygain_mode(GroovePlayer *player, GrooveQueueItem *item,
+        enum GrooveReplayGainMode mode)
+{
 
     // TODO adjust the volume property of the filter
 }

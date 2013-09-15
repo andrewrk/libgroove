@@ -27,8 +27,8 @@ typedef struct GrooveDecodeContext {
 
     int dest_sample_rate;
     uint64_t dest_channel_layout;
-    int dest_channel_count;
     enum AVSampleFormat dest_sample_fmt;
+    int dest_channel_count;
 
     char strbuf[512];
     AVFilterGraph *filter_graph;
@@ -36,6 +36,11 @@ typedef struct GrooveDecodeContext {
     AVFilterContext *volume_ctx;
     AVFilterContext *aformat_ctx;
     AVFilterContext *abuffersink_ctx;
+
+    enum GrooveReplayGainMode replaygain_mode;
+    double replaygain_preamp;
+    double replaygain_default;
+    double volume;
 } GrooveDecodeContext;
 
 typedef struct GrooveFilePrivate {
@@ -57,6 +62,10 @@ typedef struct GrooveFilePrivate {
     AVFormatContext *oc;
     int tempfile_exists;
 } GrooveFilePrivate;
+
+// call this after you have set dest_sample_rate, dest_channel_layout,
+// and dest_sample_fmt
+int groove_init_decode_ctx(GrooveDecodeContext *decode_ctx);
 
 void groove_cleanup_decode_ctx(GrooveDecodeContext *decode_ctx);
 int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file);

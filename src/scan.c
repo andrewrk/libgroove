@@ -418,17 +418,15 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
         av_log(NULL, AV_LOG_WARNING, "exec called more than once\n");
         return -1;
     }
-    s->decode_ctx.frame = avcodec_alloc_frame();
-    if (!s->decode_ctx.frame) {
-        av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
-        return -1;
-    }
     s->decode_ctx.callback_context = scan;
     s->decode_ctx.buffer = scan_buffer;
     s->decode_ctx.dest_sample_rate = 44100;
     s->decode_ctx.dest_channel_layout = AV_CH_LAYOUT_STEREO;
-    s->decode_ctx.dest_channel_count = 2;
     s->decode_ctx.dest_sample_fmt = AV_SAMPLE_FMT_DBL;
+
+    if (groove_init_decode_ctx(&s->decode_ctx) < 0)
+        return -1;
+
     s->executing = 1;
     s->progress_event.type = GROOVE_RG_EVENT_PROGRESS;
     event_queue_init(&s->eventq);

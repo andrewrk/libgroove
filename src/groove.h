@@ -35,10 +35,6 @@ typedef struct GroovePlayer {
     enum GrooveState state; // read-only
     GrooveQueueItem * queue_head;
     GrooveQueueItem * queue_tail;
-    enum GrooveReplayGainMode replaygain_mode; // read-only
-    double replaygain_preamp; // read-only, defaults to 0.25
-    double replaygain_default; // read-only, defaults to 0.5
-    double volume; // read-only, defaults to 1.0
 
     void * internals;
 } GroovePlayer;
@@ -152,10 +148,23 @@ void groove_player_clear(GroovePlayer *player);
 // return the count of queue items
 int groove_player_count(GroovePlayer *player);
 
-void groove_player_set_replaygain_mode(GroovePlayer *player, enum GrooveReplayGainMode mode);
+// default value: GROOVE_REPLAYGAINMODE_ALBUM
+// this method sets the replaygain mode on a queue item so that the volume is
+// seamlessly updated at exactly the right time when the player progresses to
+// the item on the queue.
+void groove_player_set_replaygain_mode(GroovePlayer *player, GrooveQueueItem *item,
+        enum GrooveReplayGainMode mode);
+
+// value is in float format. defaults to 0.25
+// this value is applied when replaygain is on to make headroom for replaygain
+// adjustments.
 void groove_player_set_replaygain_preamp(GroovePlayer *player, double preamp);
+
+// value is in float format. defaults to 0.5
+// this is the replaygain value that is used if tags are missing.
 void groove_player_set_replaygain_default(GroovePlayer *player, double value);
 
+// value is in float format. defaults to 1.0
 void groove_player_set_volume(GroovePlayer *player, double volume);
 
 

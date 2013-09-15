@@ -13,7 +13,7 @@ Music player backend library.
 
 ## Roadmap
 
- * ReplayGain volume adjustment during playback.
+ * Loudness compensation using ReplayGain tags during playback.
  * Poll or wait for player events.
  * Ability to keep a buffer filled with encoded audio.
    - This could be used for example for an HTTP streaming server.
