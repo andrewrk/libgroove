@@ -1,6 +1,4 @@
-* add replaygain scanning example
 * make it obey replaygain tags
-* cli which takes a list of songs, sorts them by album and replaygains them all
 * live encoding
 * poll/wait events for player
 * make sure no symbols are leaking out
