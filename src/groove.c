@@ -394,6 +394,47 @@ GrooveFile * groove_open(char* filename) {
     }
 
     f->seek_by_bytes = !!(f->ic->iformat->flags & AVFMT_TS_DISCONT);
+
+    // set all streams to discard. in a few lines here we will find the audio
+    // stream and cancel discarding it
+    for (int i = 0; i < f->ic->nb_streams; i++)
+        f->ic->streams[i]->discard = AVDISCARD_ALL;
+
+    f->audio_stream_index = av_find_best_stream(f->ic, AVMEDIA_TYPE_AUDIO, -1, -1, &f->decoder, 0);
+
+    if (f->audio_stream_index < 0) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", f->ic->filename);
+        return NULL;
+    }
+
+    if (!f->decoder) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", f->ic->filename);
+        return NULL;
+    }
+
+    f->audio_st = f->ic->streams[f->audio_stream_index];
+    f->audio_st->discard = AVDISCARD_DEFAULT;
+
+    AVCodecContext *avctx = f->audio_st->codec;
+
+    if (avcodec_open2(avctx, f->decoder, NULL) < 0) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "unable to open decoder\n");
+        return NULL;
+    }
+
+    // prepare audio output
+    if (!avctx->channel_layout)
+        avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
+    if (!avctx->channel_layout) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "unable to guess channel layout\n");
+        return NULL;
+    }
+
+    memset(&f->audio_pkt, 0, sizeof(f->audio_pkt));
     return file;
 }
 

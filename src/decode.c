@@ -227,60 +227,11 @@ static int maybe_init_filter_graph(DecodeContext *decode_ctx, GrooveFile *file) 
     return 0;
 }
 
-// return < 0 if error
-static int init_decode(DecodeContext *decode_ctx, GrooveFile *file) {
-    GrooveFilePrivate *f = file->internals;
-
-    // set all streams to discard. in a few lines here we will find the audio
-    // stream and cancel discarding it
-    for (int i = 0; i < f->ic->nb_streams; i++)
-        f->ic->streams[i]->discard = AVDISCARD_ALL;
-
-    f->audio_stream_index = av_find_best_stream(f->ic, AVMEDIA_TYPE_AUDIO, -1, -1, &f->decoder, 0);
-
-    if (f->audio_stream_index < 0) {
-        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", f->ic->filename);
-        return -1;
-    }
-
-    if (!f->decoder) {
-        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", f->ic->filename);
-        return -1;
-    }
-
-    f->audio_st = f->ic->streams[f->audio_stream_index];
-    AVCodecContext *avctx = f->audio_st->codec;
-
-    if (avcodec_open2(avctx, f->decoder, NULL) < 0) {
-        av_log(NULL, AV_LOG_ERROR, "unable to open decoder\n");
-        return -1;
-    }
-
-    // prepare audio output
-    if (!avctx->channel_layout)
-        avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
-    if (!avctx->channel_layout) {
-        av_log(NULL, AV_LOG_ERROR, "unable to guess channel layout\n");
-        return -1;
-    }
-
-    f->audio_st->discard = AVDISCARD_DEFAULT;
-
-    memset(&f->audio_pkt, 0, sizeof(f->audio_pkt));
-
-    return 0;
-}
 
 int decode(DecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
     AVPacket *pkt = &f->audio_pkt;
 
-    // if the file has not been initialized for decoding
-    if (f->audio_stream_index < 0) {
-        int err = init_decode(decode_ctx, file);
-        if (err < 0)
-            return err;
-    }
     if (maybe_init_filter_graph(decode_ctx, file) < 0)
         return -1;
     if (f->abort_request)
