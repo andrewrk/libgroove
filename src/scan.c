@@ -58,6 +58,7 @@ typedef struct GrooveReplayGainScanPrivate {
     ebur128_state **ebur_states;
     size_t next_ebur_state_index;
     size_t ebur_state_count;
+    char strbuf[100];
 } GrooveReplayGainScanPrivate;
 
 static void filelist_push(FileListItem **list, FileListItem *item) {
@@ -238,12 +239,27 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
 static int update_with_rg_info(GrooveReplayGainScan *scan, AlbumListItem *album_item,
         FileListItem *file_item)
 {
-    // TODO actually update the file with the replaygain info
-    fprintf(stderr, "\nUpdate %s track replaygain %f\n"
-            "album replaygain %f\ntrack peak: %f\nalbum peak: %f\n", file_item->filename,
-            file_item->replay_gain, album_item->replay_gain, file_item->peak_amplitude,
-            album_item->peak_amplitude);
-    return -1;
+    GrooveFile *file = groove_open(file_item->filename);
+    if (!file) {
+        av_log(NULL, AV_LOG_WARNING, "error opening %s\n", file_item->filename);
+        return -1;
+    }
+    GrooveReplayGainScanPrivate *s = scan->internals;
+    snprintf(s->strbuf, sizeof(s->strbuf), "%.2f dB", file_item->replay_gain);
+    groove_file_metadata_set(file, "REPLAYGAIN_TRACK_GAIN", s->strbuf, 0);
+
+    snprintf(s->strbuf, sizeof(s->strbuf), "%.2f dB", album_item->replay_gain);
+    groove_file_metadata_set(file, "REPLAYGAIN_ALBUM_GAIN", s->strbuf, 0);
+
+    snprintf(s->strbuf, sizeof(s->strbuf), "%f", file_item->peak_amplitude);
+    groove_file_metadata_set(file, "REPLAYGAIN_TRACK_PEAK", s->strbuf, 0);
+
+    snprintf(s->strbuf, sizeof(s->strbuf), "%f", album_item->peak_amplitude);
+    groove_file_metadata_set(file, "REPLAYGAIN_ALBUM_PEAK", s->strbuf, 0);
+
+    int err = groove_file_save(file);
+    groove_close(file);
+    return err;
 }
 
 static void cleanup_ebur(GrooveReplayGainScan *scan) {

@@ -673,7 +673,7 @@ void groove_set_logging(int enabled) {
 void groove_player_set_replaygain_mode(GroovePlayer *player, enum GrooveReplayGainMode mode) {
     player->replaygain_mode = mode;
 
-    // TODO
+    // TODO adjust the volume property of the filter
 }
 
 char * groove_file_filename(GrooveFile *file) {
