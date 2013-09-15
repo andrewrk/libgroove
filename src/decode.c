@@ -11,7 +11,7 @@ static int initialized_sdl = 0;
 
 static double dB_scale;
 
-static double dBtoFloat(double dB) {
+static double dB_to_float(double dB) {
     return exp(dB * dB_scale);
 }
 
@@ -131,8 +131,25 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
     return data_size;
 }
 
+static double get_replaygain_adjustment(GrooveDecodeContext *decode_ctx,
+        GrooveFile *file, const char *tag_name)
+{
+    GrooveTag *tag = groove_file_metadata_get(file, "REPLAYGAIN_TRACK_GAIN", NULL, 0);
+    if (tag) {
+        const char *tag_value = groove_tag_value(tag);
+        double gain_value;
+        if (sscanf(tag_value, "%lf", &gain_value) == 1)
+            return dB_to_float(gain_value);
+        GrooveFilePrivate *f = file->internals;
+        av_log(NULL, AV_LOG_WARNING, "track %s lacks replaygain metadata\n", f->ic->filename);
+    }
+    return decode_ctx->replaygain_default;
+}
+
 static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate *f = file->internals;
+
+    decode_ctx->last_decoded_file = file;
 
     // destruct old graph
     avfilter_graph_free(&decode_ctx->filter_graph);
@@ -171,9 +188,28 @@ static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) 
         return err;
     }
     // create volume filter
-    // TODO take into account replay gain and other volume settings
-    double vol = 1.0;
+    double vol = decode_ctx->volume;
+    switch(decode_ctx->replaygain_mode) {
+    case GROOVE_REPLAYGAINMODE_TRACK:
+        vol *= get_replaygain_adjustment(decode_ctx, file, "REPLAYGAIN_TRACK_GAIN");
+        vol *= decode_ctx->replaygain_preamp;
+        break;
+    case GROOVE_REPLAYGAINMODE_ALBUM:
+        vol *= get_replaygain_adjustment(decode_ctx, file, "REPLAYGAIN_ALBUM_GAIN");
+        vol *= decode_ctx->replaygain_preamp;
+        break;
+    case GROOVE_REPLAYGAINMODE_OFF:
+        break;
+    }
+    if (vol > 1.0) vol = 1.0;
+    if (vol < 0.0) vol = 0.0;
     snprintf(decode_ctx->strbuf, sizeof(decode_ctx->strbuf), "volume=%f", vol);
+    // save these values so we can compare later and check
+    // whether we have to reconstruct the graph
+    decode_ctx->filter_replaygain_mode = decode_ctx->replaygain_mode;
+    decode_ctx->filter_replaygain_preamp = decode_ctx->replaygain_preamp;
+    decode_ctx->filter_replaygain_default = decode_ctx->replaygain_default;
+    decode_ctx->filter_volume = decode_ctx->volume;
     err = avfilter_graph_create_filter(&decode_ctx->volume_ctx, volume, NULL,
             decode_ctx->strbuf, NULL, decode_ctx->filter_graph);
     if (err < 0) {
@@ -218,16 +254,33 @@ static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) 
 }
 
 static int maybe_init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
+    if (!decode_ctx->filter_graph)
+        return init_filter_graph(decode_ctx, file);
+
     GrooveFilePrivate *f = file->internals;
     AVCodecContext *avctx = f->audio_st->codec;
     AVRational time_base = f->audio_st->time_base;
 
+    // if the input format stuff has changed, then we need to re-build the graph
     if (decode_ctx->in_sample_rate != avctx->sample_rate ||
         decode_ctx->in_channel_layout != avctx->channel_layout ||
         decode_ctx->in_sample_fmt != avctx->sample_fmt ||
         decode_ctx->in_time_base.num != time_base.num ||
         decode_ctx->in_time_base.den != time_base.den)
     {
+        return init_filter_graph(decode_ctx, file);
+    }
+
+    // if any of the volume settings have changed, we need to re-build the graph
+    if (decode_ctx->replaygain_mode != decode_ctx->filter_replaygain_mode ||
+        decode_ctx->replaygain_preamp != decode_ctx->filter_replaygain_preamp ||
+        decode_ctx->replaygain_default != decode_ctx->filter_replaygain_default ||
+        decode_ctx->volume != decode_ctx->filter_volume)
+    {
+        return init_filter_graph(decode_ctx, file);
+    }
+
+    if (decode_ctx->last_decoded_file != file) {
         return init_filter_graph(decode_ctx, file);
     }
 
@@ -304,6 +357,7 @@ int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
 }
 
 void groove_cleanup_decode_ctx(GrooveDecodeContext *decode_ctx) {
+    decode_ctx->last_decoded_file = NULL;
     avfilter_graph_free(&decode_ctx->filter_graph);
     avcodec_free_frame(&decode_ctx->frame);
 }
@@ -316,5 +370,10 @@ int groove_init_decode_ctx(GrooveDecodeContext *decode_ctx) {
     }
     decode_ctx->dest_channel_count =
         av_get_channel_layout_nb_channels(decode_ctx->dest_channel_layout);
+
+    decode_ctx->volume = 1.0;
+    decode_ctx->replaygain_preamp = 0.75;
+    decode_ctx->replaygain_default = 0.25;
+    decode_ctx->replaygain_mode = GROOVE_REPLAYGAINMODE_ALBUM;
     return 0;
 }

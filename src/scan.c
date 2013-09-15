@@ -26,7 +26,7 @@ typedef struct EventQueue {
 typedef struct FileListItem {
     char *filename;
     double peak_amplitude; // scale of 0 to 1
-    double replay_gain; // in dB
+    double loudness; // in LUFS
     struct FileListItem *next;
 } FileListItem;
 
@@ -35,7 +35,7 @@ typedef struct AlbumListItem {
     FileListItem *first_file; // first pointer to list of tracks in this album
     size_t track_count;
     double peak_amplitude; // scale of 0 to 1
-    double replay_gain; // in dB
+    double loudness; // in dB
     struct AlbumListItem *next; // next pointer in list of albums
 } AlbumListItem;
 
@@ -236,6 +236,21 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
     return 0;
 }
 
+static double clamp_rg(double x) {
+    if (x < -51.0) return -51.0;
+    else if (x > 51.0) return 51.0;
+    else return x;
+}
+
+static double loudness_to_replaygain(double loudness) {
+    // loudness is in LUFS. The goal is for the loudness to be -23 LUFS.
+    // however replaygain is a suggestion of how many dB to adjust the gain
+    // so that it equals -18 dB.
+    // 1 LUFS = 1 dB
+
+    return clamp_rg(-18.0 - loudness);
+}
+
 static int update_with_rg_info(GrooveReplayGainScan *scan, AlbumListItem *album_item,
         FileListItem *file_item)
 {
@@ -245,10 +260,13 @@ static int update_with_rg_info(GrooveReplayGainScan *scan, AlbumListItem *album_
         return -1;
     }
     GrooveReplayGainScanPrivate *s = scan->internals;
-    snprintf(s->strbuf, sizeof(s->strbuf), "%.2f dB", file_item->replay_gain);
+
+    snprintf(s->strbuf, sizeof(s->strbuf), "%.2f dB",
+            loudness_to_replaygain(file_item->loudness));
     groove_file_metadata_set(file, "REPLAYGAIN_TRACK_GAIN", s->strbuf, 0);
 
-    snprintf(s->strbuf, sizeof(s->strbuf), "%.2f dB", album_item->replay_gain);
+    snprintf(s->strbuf, sizeof(s->strbuf), "%.2f dB",
+            loudness_to_replaygain(album_item->loudness));
     groove_file_metadata_set(file, "REPLAYGAIN_ALBUM_GAIN", s->strbuf, 0);
 
     snprintf(s->strbuf, sizeof(s->strbuf), "%f", file_item->peak_amplitude);
@@ -320,7 +338,7 @@ static int scan_thread(void *arg) {
                 // grab the loudness value and the peak value
                 ebur128_state *st = s->ebur_states[s->next_ebur_state_index];
                 s->next_ebur_state_index += 1;
-                ebur128_loudness_global(st, &item->replay_gain);
+                ebur128_loudness_global(st, &item->loudness);
                 double out;
                 ebur128_sample_peak(st, 0, &out);
                 s->album_item->peak_amplitude = s->album_item->peak_amplitude > out ?
@@ -337,7 +355,7 @@ static int scan_thread(void *arg) {
                 // if we're done scanning the entire album, get the loudness
                 if (!s->album_item->first_file) {
                     ebur128_loudness_global_multiple(s->ebur_states, s->ebur_state_count,
-                            &s->album_item->replay_gain);
+                            &s->album_item->loudness);
                     cleanup_ebur(scan);
                 }
             } else if (s->scanned_file_item) {
@@ -426,6 +444,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
 
     if (groove_init_decode_ctx(&s->decode_ctx) < 0)
         return -1;
+    s->decode_ctx.replaygain_mode = GROOVE_REPLAYGAINMODE_OFF;
 
     s->executing = 1;
     s->progress_event.type = GROOVE_RG_EVENT_PROGRESS;

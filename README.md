@@ -8,12 +8,12 @@ Music player backend library.
  * Add and remove entries on a playlist for gapless playback.
  * Supports pause, play, stop, and seek during playback.
  * Read and write metadata tags for every supported format.
- * Support [EBU R 128](http://tech.ebu.ch/loudness) loudness scanning for every format.
+ * [EBU R 128](http://tech.ebu.ch/loudness) loudness scanning for every format.
    - add files to a batch job and monitor progress
+ * Loudness compensation using ReplayGain tags during playback.
 
 ## Roadmap
 
- * Loudness compensation using ReplayGain tags during playback.
  * Poll or wait for player events.
  * Ability to keep a buffer filled with encoded audio.
    - This could be used for example for an HTTP streaming server.

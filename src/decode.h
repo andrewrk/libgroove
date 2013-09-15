@@ -37,10 +37,19 @@ typedef struct GrooveDecodeContext {
     AVFilterContext *aformat_ctx;
     AVFilterContext *abuffersink_ctx;
 
+    // these are the desired settings
     enum GrooveReplayGainMode replaygain_mode;
     double replaygain_preamp;
     double replaygain_default;
     double volume;
+
+    // these are the settings that were used to build the filter graph
+    enum GrooveReplayGainMode filter_replaygain_mode;
+    double filter_replaygain_preamp;
+    double filter_replaygain_default;
+    double filter_volume;
+
+    GrooveFile *last_decoded_file;
 } GrooveDecodeContext;
 
 typedef struct GrooveFilePrivate {
