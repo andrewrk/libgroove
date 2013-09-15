@@ -13,7 +13,7 @@ static void deinit_network() {
     avformat_network_deinit();
 }
 
-int maybe_init() {
+int groove_maybe_init() {
     if (initialized)
         return 0;
     initialized = 1;
@@ -33,7 +33,7 @@ int maybe_init() {
     return 0;
 }
 
-int maybe_init_sdl() {
+int groove_maybe_init_sdl() {
     if (initialized_sdl)
         return 0;
     initialized_sdl = 1;
@@ -48,7 +48,7 @@ int maybe_init_sdl() {
 }
 
 // decode one audio packet and return its uncompressed size
-static int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
+static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
 
     AVPacket *pkt = &f->audio_pkt;
@@ -124,7 +124,7 @@ static int audio_decode_frame(DecodeContext *decode_ctx, GrooveFile *file) {
     return data_size;
 }
 
-static int init_filter_graph(DecodeContext *decode_ctx, GrooveFile *file) {
+static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate *f = file->internals;
 
     // destruct old graph
@@ -210,7 +210,7 @@ static int init_filter_graph(DecodeContext *decode_ctx, GrooveFile *file) {
     return 0;
 }
 
-static int maybe_init_filter_graph(DecodeContext *decode_ctx, GrooveFile *file) {
+static int maybe_init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate *f = file->internals;
     AVCodecContext *avctx = f->audio_st->codec;
     AVRational time_base = f->audio_st->time_base;
@@ -228,7 +228,7 @@ static int maybe_init_filter_graph(DecodeContext *decode_ctx, GrooveFile *file) 
 }
 
 
-int decode(DecodeContext *decode_ctx, GrooveFile *file) {
+int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
     AVPacket *pkt = &f->audio_pkt;
 
@@ -296,7 +296,7 @@ int decode(DecodeContext *decode_ctx, GrooveFile *file) {
     return 0;
 }
 
-void cleanup_decode_ctx(DecodeContext *decode_ctx) {
+void groove_cleanup_decode_ctx(GrooveDecodeContext *decode_ctx) {
     avfilter_graph_free(&decode_ctx->filter_graph);
     avcodec_free_frame(&decode_ctx->frame);
 }

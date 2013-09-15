@@ -28,8 +28,8 @@
 #define QUEUE_FULL_DELAY 10
 
 typedef struct BufferQueue {
-    BufferList *first_buf;
-    BufferList *last_buf;
+    GrooveBufferList *first_buf;
+    GrooveBufferList *last_buf;
     int nb_buffers;
     int size;
     int abort_request;
@@ -45,11 +45,11 @@ typedef struct GroovePlayerPrivate {
     AVFrame *audio_buf;
     size_t audio_buf_size; // in bytes
     size_t audio_buf_index; // in bytes
-    DecodeContext decode_ctx;
+    GrooveDecodeContext decode_ctx;
 } GroovePlayerPrivate;
 
 static int buffer_queue_put(BufferQueue *q, AVFrame *frame) {
-    BufferList * buf1 = av_malloc(sizeof(BufferList));
+    GrooveBufferList * buf1 = av_malloc(sizeof(GrooveBufferList));
 
     if (!buf1)
         return -1;
@@ -76,7 +76,7 @@ static int buffer_queue_put(BufferQueue *q, AVFrame *frame) {
 
 // return < 0 if aborted, 0 if no buffer and > 0 if buffer.
 static int buffer_queue_get(BufferQueue *q, AVFrame **frame, int block) {
-    BufferList *buf1;
+    GrooveBufferList *buf1;
     int ret;
 
     SDL_LockMutex(q->mutex);
@@ -114,7 +114,7 @@ static int buffer_queue_get(BufferQueue *q, AVFrame **frame, int block) {
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     GroovePlayer *player = opaque;
     GroovePlayerPrivate *p = player->internals;
-    DecodeContext *decode_ctx = &p->decode_ctx;
+    GrooveDecodeContext *decode_ctx = &p->decode_ctx;
 
     while (len > 0) {
         if (!decode_ctx->paused && p->audio_buf_index >= p->audio_buf_size) {
@@ -174,8 +174,8 @@ static GrooveFile * remove_queue_item(GroovePlayer *player, GrooveQueueItem *ite
 static void buffer_queue_flush(BufferQueue *q) {
     SDL_LockMutex(q->mutex);
 
-    BufferList *buf;
-    BufferList *buf1;
+    GrooveBufferList *buf;
+    GrooveBufferList *buf1;
     for (buf = q->first_buf; buf != NULL; buf = buf1) {
         buf1 = buf->next;
         av_frame_free(&buf->frame);
@@ -192,13 +192,13 @@ static void next_without_flush(GroovePlayer *player) {
     groove_close(remove_queue_item(player, player->queue_head));
 }
 
-static void player_flush(DecodeContext *decode_ctx) {
+static void player_flush(GrooveDecodeContext *decode_ctx) {
     GroovePlayer *player = decode_ctx->callback_context;
     GroovePlayerPrivate *p = player->internals;
     buffer_queue_flush(&p->audioq);
 }
 
-static int player_buffer(DecodeContext *decode_ctx, AVFrame *frame) {
+static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     GroovePlayer *player = decode_ctx->callback_context;
     GroovePlayerPrivate *p = player->internals;
     if (buffer_queue_put(&p->audioq, frame) < 0) {
@@ -230,7 +230,7 @@ static int decode_thread(void *arg) {
             continue;
         }
         GrooveFile * file = player->queue_head->file;
-        if (decode(&p->decode_ctx, file) < 0)
+        if (groove_decode(&p->decode_ctx, file) < 0)
             next_without_flush(player);
     }
 
@@ -249,10 +249,10 @@ static enum AVSampleFormat sdl_format_to_av_format(Uint16 sdl_format) {
 }
 
 GroovePlayer * groove_create_player() {
-    if (maybe_init() < 0)
+    if (groove_maybe_init() < 0)
         return NULL;
 
-    if (maybe_init_sdl() < 0)
+    if (groove_maybe_init_sdl() < 0)
         return NULL;
 
     GroovePlayer * player = av_mallocz(sizeof(GroovePlayer));
@@ -351,13 +351,13 @@ void groove_destroy_player(GroovePlayer *player) {
 
     av_frame_free(&p->audio_buf);
 
-    cleanup_decode_ctx(&p->decode_ctx);
+    groove_cleanup_decode_ctx(&p->decode_ctx);
     av_free(p);
     av_free(player);
 }
 
 GrooveFile * groove_open(char* filename) {
-    if (maybe_init() < 0)
+    if (groove_maybe_init() < 0)
         return NULL;
 
     GrooveFile * file = av_mallocz(sizeof(GrooveFile));
@@ -504,7 +504,7 @@ static void stream_seek(GrooveFile *file, int64_t pos, int64_t rel, int seek_by_
 static double get_audio_clock(GroovePlayer *player, GrooveFile *file) {
     GroovePlayerPrivate * p = player->internals;
     GrooveFilePrivate * f = file->internals;
-    DecodeContext *decode_ctx = &p->decode_ctx;
+    GrooveDecodeContext *decode_ctx = &p->decode_ctx;
 
     double pts = f->audio_clock;
     int hw_buf_size = p->audio_buf_size - p->audio_buf_index;
@@ -662,7 +662,7 @@ int groove_player_count(GroovePlayer *player) {
 }
 
 void groove_set_logging(int enabled) {
-    maybe_init();
+    groove_maybe_init();
     if (enabled) {
         av_log_set_level(AV_LOG_WARNING);
     } else {

@@ -53,7 +53,7 @@ typedef struct GrooveReplayGainScanPrivate {
     EventQueue eventq;
     SDL_Thread *thread_id;
     int abort_request;
-    DecodeContext decode_ctx;
+    GrooveDecodeContext decode_ctx;
 
     ebur128_state **ebur_states;
     size_t next_ebur_state_index;
@@ -229,8 +229,8 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
         return -1;
     }
 
-    DecodeContext *decode_ctx = &s->decode_ctx;
-    while (decode(decode_ctx, file) >= 0) {}
+    GrooveDecodeContext *decode_ctx = &s->decode_ctx;
+    while (groove_decode(decode_ctx, file) >= 0) {}
     groove_close(file);
 
     return 0;
@@ -367,7 +367,7 @@ static int scan_thread(void *arg) {
 }
 
 GrooveReplayGainScan * groove_create_replaygainscan() {
-    if (maybe_init() < 0)
+    if (groove_maybe_init() < 0)
         return NULL;
 
     GrooveReplayGainScan * scan = av_mallocz(sizeof(GrooveReplayGainScan));
@@ -398,7 +398,7 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename) {
     return 0;
 }
 
-static int scan_buffer(DecodeContext *decode_ctx, AVFrame *frame) {
+static int scan_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     GrooveReplayGainScan *scan = decode_ctx->callback_context;
     GrooveReplayGainScanPrivate *s = scan->internals;
 
@@ -411,7 +411,7 @@ static int scan_buffer(DecodeContext *decode_ctx, AVFrame *frame) {
 }
 
 int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
-    if (maybe_init_sdl() < 0)
+    if (groove_maybe_init_sdl() < 0)
         return -1;
     GrooveReplayGainScanPrivate *s = scan->internals;
     if (s->executing) {
@@ -465,7 +465,7 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
         s->executing = 0;
         event_queue_end(&s->eventq);
         cleanup_ebur(scan);
-        cleanup_decode_ctx(&s->decode_ctx);
+        groove_cleanup_decode_ctx(&s->decode_ctx);
     }
     albumlist_cleanup(&s->album_item);
     filelist_cleanup(&s->file_item);

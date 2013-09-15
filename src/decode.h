@@ -6,20 +6,19 @@
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 
-// TODO prefix these types with Groove
-typedef struct BufferList {
+typedef struct GrooveBufferList {
     AVFrame *frame;
-    struct BufferList *next;
-} BufferList;
+    struct GrooveBufferList *next;
+} GrooveBufferList;
 
-typedef struct DecodeContext {
+typedef struct GrooveDecodeContext {
     AVPacket audio_pkt_temp;
     AVFrame *frame;
     int paused;
     int last_paused;
     void *callback_context;
-    void (*flush)(struct DecodeContext *);
-    int (*buffer)(struct DecodeContext *, AVFrame *);
+    void (*flush)(struct GrooveDecodeContext *);
+    int (*buffer)(struct GrooveDecodeContext *, AVFrame *);
 
     int in_sample_rate;
     uint64_t in_channel_layout;
@@ -37,7 +36,7 @@ typedef struct DecodeContext {
     AVFilterContext *volume_ctx;
     AVFilterContext *aformat_ctx;
     AVFilterContext *abuffersink_ctx;
-} DecodeContext;
+} GrooveDecodeContext;
 
 typedef struct GrooveFilePrivate {
     int audio_stream_index;
@@ -59,10 +58,9 @@ typedef struct GrooveFilePrivate {
     int tempfile_exists;
 } GrooveFilePrivate;
 
-// TODO prefix these with groove_
-void cleanup_decode_ctx(DecodeContext *decode_ctx);
-int decode(DecodeContext *decode_ctx, GrooveFile *file);
-int maybe_init();
-int maybe_init_sdl();
+void groove_cleanup_decode_ctx(GrooveDecodeContext *decode_ctx);
+int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file);
+int groove_maybe_init();
+int groove_maybe_init_sdl();
 
 #endif /* __DECODE_H__ */
