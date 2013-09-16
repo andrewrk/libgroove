@@ -19,7 +19,7 @@
 #define MIN_AUDIOQ_SIZE (44100 * 2 * 2 / 4)
 #define QUEUE_FULL_DELAY 10
 
-typedef struct BufferQueue {
+typedef struct GrooveBufferQueue {
     GrooveBufferList *first_buf;
     GrooveBufferList *last_buf;
     int nb_buffers;
@@ -27,12 +27,12 @@ typedef struct BufferQueue {
     int abort_request;
     SDL_mutex *mutex;
     SDL_cond *cond;
-} BufferQueue;
+} GrooveBufferQueue;
 
 typedef struct GroovePlayerPrivate {
     SDL_Thread *thread_id;
     int abort_request;
-    BufferQueue audioq;
+    GrooveBufferQueue audioq;
     SDL_AudioSpec spec;
     AVFrame *audio_buf;
     size_t audio_buf_size; // in bytes
@@ -40,7 +40,7 @@ typedef struct GroovePlayerPrivate {
     GrooveDecodeContext decode_ctx;
 } GroovePlayerPrivate;
 
-static int buffer_queue_put(BufferQueue *q, AVFrame *frame) {
+static int buffer_queue_put(GrooveBufferQueue *q, AVFrame *frame) {
     GrooveBufferList * buf1 = av_malloc(sizeof(GrooveBufferList));
 
     if (!buf1)
@@ -67,7 +67,7 @@ static int buffer_queue_put(BufferQueue *q, AVFrame *frame) {
 }
 
 // return < 0 if aborted, 0 if no buffer and > 0 if buffer.
-static int buffer_queue_get(BufferQueue *q, AVFrame **frame, int block) {
+static int buffer_queue_get(GrooveBufferQueue *q, AVFrame **frame, int block) {
     GrooveBufferList *buf1;
     int ret;
 
@@ -131,8 +131,8 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     }
 }
 
-static void buffer_queue_init(BufferQueue *q) {
-    memset(q, 0, sizeof(BufferQueue));
+static void buffer_queue_init(GrooveBufferQueue *q) {
+    memset(q, 0, sizeof(GrooveBufferQueue));
     q->mutex = SDL_CreateMutex();
     q->cond = SDL_CreateCond();
 }
@@ -155,7 +155,7 @@ static GrooveFile * remove_queue_item(GroovePlayer *player, GrooveQueueItem *ite
     return file;
 }
 
-static void buffer_queue_flush(BufferQueue *q) {
+static void buffer_queue_flush(GrooveBufferQueue *q) {
     SDL_LockMutex(q->mutex);
 
     GrooveBufferList *buf;
@@ -302,7 +302,7 @@ GroovePlayer * groove_create_player() {
     return player;
 }
 
-static void buffer_queue_abort(BufferQueue *q) {
+static void buffer_queue_abort(GrooveBufferQueue *q) {
     SDL_LockMutex(q->mutex);
 
     q->abort_request = 1;
@@ -311,7 +311,7 @@ static void buffer_queue_abort(BufferQueue *q) {
     SDL_UnlockMutex(q->mutex);
 }
 
-static void buffer_queue_end(BufferQueue *q)
+static void buffer_queue_end(GrooveBufferQueue *q)
 {
     buffer_queue_flush(q);
     SDL_DestroyMutex(q->mutex);
