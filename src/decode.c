@@ -6,9 +6,6 @@
 
 #include <SDL/SDL.h>
 
-static int initialized = 0;
-static int initialized_sdl = 0;
-
 static double dB_scale;
 
 static double dB_to_float(double dB) {
@@ -19,11 +16,7 @@ static void deinit_network() {
     avformat_network_deinit();
 }
 
-int groove_maybe_init() {
-    if (initialized)
-        return 0;
-    initialized = 1;
-
+int groove_init() {
     dB_scale = log(10.0) * 0.05;
 
     srand(time(NULL));
@@ -36,21 +29,13 @@ int groove_maybe_init() {
 
     atexit(deinit_network);
 
-    av_log_set_level(AV_LOG_QUIET);
-    return 0;
-}
-
-int groove_maybe_init_sdl() {
-    if (initialized_sdl)
-        return 0;
-    initialized_sdl = 1;
-
-    int flags = SDL_INIT_AUDIO;
-    if (SDL_Init(flags)) {
+    if (SDL_Init(SDL_INIT_AUDIO)) {
         av_log(NULL, AV_LOG_ERROR, "Could not initialize SDL - %s\n", SDL_GetError());
         return -1;
     }
     atexit(SDL_Quit);
+
+    av_log_set_level(AV_LOG_QUIET);
     return 0;
 }
 
@@ -390,9 +375,6 @@ static int decode_interrupt_cb(void *ctx) {
 }
 
 GrooveFile * groove_open(char* filename) {
-    if (groove_maybe_init() < 0)
-        return NULL;
-
     GrooveFile * file = av_mallocz(sizeof(GrooveFile));
     GrooveFilePrivate * f = av_mallocz(sizeof(GrooveFilePrivate));
     if (!file || !f) {
@@ -508,7 +490,6 @@ void groove_close(GrooveFile * file) {
 }
 
 void groove_set_logging(int level) {
-    groove_maybe_init();
     av_log_set_level(level);
 }
 

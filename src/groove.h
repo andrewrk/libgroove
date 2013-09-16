@@ -8,11 +8,59 @@ extern "C"
 
 #include <stdint.h>
 
+/************* global *************/
+// call once at the beginning of your program
+int groove_init();
+// enable/disable logging of errors
+#define GROOVE_LOG_QUIET    -8
+#define GROOVE_LOG_ERROR    16
+#define GROOVE_LOG_WARNING  24
+#define GROOVE_LOG_INFO     32
+void groove_set_logging(int level);
+
+
+/************* GrooveFile *************/
 typedef struct GrooveFile {
     int dirty; // read-only
     void * internals;
 } GrooveFile;
 
+// flags to groove_file_metadata_*
+#define GROOVE_TAG_MATCH_CASE      1
+#define GROOVE_TAG_DONT_OVERWRITE 16
+
+// If the entry already exists, append to it.  Note that no
+// delimiter is added, the strings are simply concatenated.
+#define GROOVE_TAG_APPEND         32
+
+typedef void GrooveTag;
+
+const char * groove_tag_key(GrooveTag *tag);
+const char * groove_tag_value(GrooveTag *tag);
+
+GrooveFile * groove_open(char* filename);
+void groove_close(GrooveFile * file);
+
+char * groove_file_filename(GrooveFile *file);
+
+GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
+        const GrooveTag *prev, int flags);
+// key entry to add to metadata. will be strdup'd
+// value entry to add to metadata. will be strdup'd
+//    passing NULL causes existing entry to be deleted.
+// return >= 0 on success otherwise an error code < 0
+// note that this will not save the file; you must call groove_file_save to do that.
+int groove_file_metadata_set(GrooveFile *file, const char *key, const char *value, int flags);
+
+// a comma separated list of short names for the format
+const char * groove_file_short_names(GrooveFile *file);
+
+// write changes made to metadata to disk.
+// return < 0 on error
+int groove_file_save(GrooveFile *file);
+
+
+/************* GroovePlayer *************/
 enum GrooveReplayGainMode {
     GROOVE_REPLAYGAINMODE_OFF,
     GROOVE_REPLAYGAINMODE_TRACK,
@@ -40,92 +88,13 @@ typedef struct GroovePlayer {
     void * internals;
 } GroovePlayer;
 
-// flags to groove_file_metadata_*
-#define GROOVE_TAG_MATCH_CASE      1
-#define GROOVE_TAG_DONT_OVERWRITE 16
-
-// If the entry already exists, append to it.  Note that no
-// delimiter is added, the strings are simply concatenated.
-#define GROOVE_TAG_APPEND         32
-
-typedef void GrooveTag;
-
-typedef struct GrooveReplayGainScan {
-    void * internals;
-} GrooveReplayGainScan;
-
-enum GrooveRgEventType {
-    GROOVE_RG_EVENT_PROGRESS,
+enum GroovePlayerEventType {
+    GROOVE_PLAYER_EVENT_NOWPLAYING, // when the currently playing track changes.
 };
 
-typedef struct GrooveRgEventProgress {
-    enum GrooveRgEventType type;
-    int metadata_current;
-    int metadata_total;
-    int scanning_current;
-    int scanning_total;
-    int update_current;
-    int update_total;
-} GrooveRgEventProgress;
-
-typedef union GrooveRgEvent {
-    enum GrooveRgEventType type;
-    GrooveRgEventProgress rg_progress;
-} GrooveRgEvent;
-
-/* GrooveReplayGainScan methods */
-GrooveReplayGainScan * groove_create_replaygainscan();
-// filename is strdup'd. you may not call add after you call exec
-int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename);
-int groove_replaygainscan_exec(GrooveReplayGainScan *scan);
-// call this to abort a scan or if you never call exec
-void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
-// returns < 0 on error
-int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event);
-// returns < 0 on error
-int groove_replaygainscan_event_wait(GrooveReplayGainScan *scan, GrooveRgEvent *event);
-
-
-/* GrooveTag methods */
-const char * groove_tag_key(GrooveTag *tag);
-const char * groove_tag_value(GrooveTag *tag);
-
-
-/* misc methods */
-// enable/disable logging of errors
-#define GROOVE_LOG_QUIET    -8
-#define GROOVE_LOG_ERROR    16
-#define GROOVE_LOG_WARNING  24
-#define GROOVE_LOG_INFO     32
-void groove_set_logging(int level);
-
-
-
-/* GrooveFile methods */
-
-GrooveFile * groove_open(char* filename);
-void groove_close(GrooveFile * file);
-
-char * groove_file_filename(GrooveFile *file);
-
-GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
-        const GrooveTag *prev, int flags);
-// key entry to add to metadata. will be strdup'd
-// value entry to add to metadata. will be strdup'd
-//    passing NULL causes existing entry to be deleted.
-// return >= 0 on success otherwise an error code < 0
-// note that this will not save the file; you must call groove_file_save to do that.
-int groove_file_metadata_set(GrooveFile *file, const char *key, const char *value, int flags);
-
-// a comma separated list of short names for the format
-const char * groove_file_short_names(GrooveFile *file);
-
-// write changes made to metadata to disk.
-// return < 0 on error
-int groove_file_save(GrooveFile *file);
-
-
-/* GroovePlayer methods */
+typedef union GroovePlayerEvent {
+    enum GroovePlayerEventType type;
+} GroovePlayerEvent;
 
 // you may not create two simultaneous players on the same device
 GroovePlayer * groove_create_player();
@@ -171,6 +140,49 @@ void groove_player_set_replaygain_default(GroovePlayer *player, double value);
 
 // value is in float format. defaults to 1.0
 void groove_player_set_volume(GroovePlayer *player, double volume);
+
+// returns < 0 on error
+int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);
+// returns < 0 on error
+int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event);
+
+
+/************* GrooveReplayGainScan *************/
+typedef struct GrooveReplayGainScan {
+    void * internals;
+} GrooveReplayGainScan;
+
+enum GrooveRgEventType {
+    GROOVE_RG_EVENT_PROGRESS,
+    GROOVE_RG_EVENT_COMPLETE,
+};
+
+typedef struct GrooveRgEventProgress {
+    enum GrooveRgEventType type;
+    int metadata_current;
+    int metadata_total;
+    int scanning_current;
+    int scanning_total;
+    int update_current;
+    int update_total;
+} GrooveRgEventProgress;
+
+typedef union GrooveRgEvent {
+    enum GrooveRgEventType type;
+    GrooveRgEventProgress rg_progress;
+} GrooveRgEvent;
+
+GrooveReplayGainScan * groove_create_replaygainscan();
+// filename is strdup'd. you may not call add after you call exec
+int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename);
+int groove_replaygainscan_exec(GrooveReplayGainScan *scan);
+// call this to abort a scan or if you never call exec
+void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
+// returns < 0 on error
+int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event);
+// returns < 0 on error
+int groove_replaygainscan_event_wait(GrooveReplayGainScan *scan, GrooveRgEvent *event);
+
 
 
 

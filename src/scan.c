@@ -1,5 +1,6 @@
 #include "groove.h"
 #include "decode.h"
+#include "queue.h"
 
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
@@ -9,19 +10,6 @@
 #include <SDL/SDL_thread.h>
 
 #include <ebur128.h>
-
-typedef struct EventList {
-    GrooveRgEvent event;
-    struct EventList *next;
-} EventList;
-
-typedef struct EventQueue {
-    EventList *first;
-    EventList *last;
-    SDL_mutex *mutex;
-    SDL_cond *cond;
-    int abort_request;
-} EventQueue;
 
 typedef struct FileListItem {
     char *filename;
@@ -50,7 +38,7 @@ typedef struct GrooveReplayGainScanPrivate {
     FileListItem *scanned_file_item;
     int executing;
     GrooveRgEvent progress_event;
-    EventQueue eventq;
+    GrooveQueue *eventq;
     SDL_Thread *thread_id;
     int abort_request;
     GrooveDecodeContext decode_ctx;
@@ -70,96 +58,6 @@ static FileListItem * filelist_pop(FileListItem **list) {
     FileListItem *popped = *list;
     *list = (*list)->next;
     return popped;
-}
-
-static void event_queue_init(EventQueue *q) {
-    memset(q, 0, sizeof(EventQueue));
-    q->mutex = SDL_CreateMutex();
-    q->cond = SDL_CreateCond();
-}
-
-static void event_queue_flush(EventQueue *q) {
-    SDL_LockMutex(q->mutex);
-
-    EventList *el;
-    EventList *el1;
-    for (el = q->first; el != NULL; el = el1) {
-        el1 = el->next;
-        av_free(el);
-    }
-    q->first = NULL;
-    SDL_UnlockMutex(q->mutex);
-}
-
-static void event_queue_end(EventQueue *q) {
-    event_queue_flush(q);
-    SDL_DestroyMutex(q->mutex);
-    SDL_DestroyCond(q->cond);
-}
-
-static void event_queue_abort(EventQueue *q) {
-    SDL_LockMutex(q->mutex);
-
-    q->abort_request = 1;
-
-    SDL_CondSignal(q->cond);
-    SDL_UnlockMutex(q->mutex);
-}
-
-static int event_queue_put(EventQueue *q, GrooveRgEvent *event) {
-    EventList * el1 = av_mallocz(sizeof(EventList));
-
-    if (!el1)
-        return -1;
-
-    el1->event = *event;
-
-    SDL_LockMutex(q->mutex);
-
-    if (!q->last)
-        q->first = el1;
-    else
-        q->last->next = el1;
-    q->last = el1;
-
-    SDL_CondSignal(q->cond);
-    SDL_UnlockMutex(q->mutex);
-
-    return 0;
-}
-
-// return < 0 if aborted, 0 if no buffer and > 0 if buffer.
-static int event_queue_get(EventQueue *q, GrooveRgEvent *event, int block) {
-    EventList *ev1;
-    int ret;
-
-    SDL_LockMutex(q->mutex);
-
-    for (;;) {
-        if (q->abort_request) {
-            ret = -1;
-            break;
-        }
-
-        ev1 = q->first;
-        if (ev1) {
-            q->first = ev1->next;
-            if (!q->first)
-                q->last = NULL;
-            *event = ev1->event;
-            av_free(ev1);
-            ret = 1;
-            break;
-        } else if(!block) {
-            ret = 0;
-            break;
-        } else {
-            SDL_CondWait(q->cond, q->mutex);
-        }
-    }
-
-    SDL_UnlockMutex(q->mutex);
-    return ret;
 }
 
 static void albumlist_pop(AlbumListItem **list) {
@@ -376,18 +274,28 @@ static int scan_thread(void *arg) {
             break;
         }
         // put progress event on the queue
-        if (event_queue_put(&s->eventq, &s->progress_event) < 0)
+        GrooveRgEvent *evt = av_malloc(sizeof(GrooveRgEvent));
+        if (!evt) {
             av_log(NULL, AV_LOG_WARNING, "unable to create progress event: out of memory\n");
+            break;
+        }
+        *evt = s->progress_event;
+        if (groove_queue_put(s->eventq, evt) < 0)
+            break;
     }
-    s->executing = 2;
-    event_queue_abort(&s->eventq);
+
+    GrooveRgEvent *done_evt = av_malloc(sizeof(GrooveRgEvent));
+    if (!done_evt) {
+        av_log(NULL, AV_LOG_ERROR, "unable to create event: out of memory\n");
+        return 0;
+    }
+    done_evt->type = GROOVE_RG_EVENT_COMPLETE;
+    if (groove_queue_put(s->eventq, done_evt) < 0)
+        av_log(NULL, AV_LOG_ERROR, "unable to put event on queue: out of memory\n");
     return 0;
 }
 
 GrooveReplayGainScan * groove_create_replaygainscan() {
-    if (groove_maybe_init() < 0)
-        return NULL;
-
     GrooveReplayGainScan * scan = av_mallocz(sizeof(GrooveReplayGainScan));
     GrooveReplayGainScanPrivate * s = av_mallocz(sizeof(GrooveReplayGainScanPrivate));
     if (!scan || !s) {
@@ -429,8 +337,6 @@ static int scan_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
 }
 
 int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
-    if (groove_maybe_init_sdl() < 0)
-        return -1;
     GrooveReplayGainScanPrivate *s = scan->internals;
     if (s->executing) {
         av_log(NULL, AV_LOG_WARNING, "exec called more than once\n");
@@ -446,9 +352,14 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
         return -1;
     s->decode_ctx.replaygain_mode = GROOVE_REPLAYGAINMODE_OFF;
 
-    s->executing = 1;
     s->progress_event.type = GROOVE_RG_EVENT_PROGRESS;
-    event_queue_init(&s->eventq);
+    s->eventq = groove_queue_create(groove_queue_cleanup_free);
+    if (!s->eventq) {
+        av_log(NULL, AV_LOG_WARNING, "unable to create event queue: out of memory\n");
+        return -1;
+    }
+    s->executing = 1;
+
     s->thread_id = SDL_CreateThread(scan_thread, scan);
     return 0;
 }
@@ -472,18 +383,18 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     if (!scan)
         return;
     GrooveReplayGainScanPrivate *s = scan->internals;
-    if (s->executing == 1) {
-        s->executing = 2;
-        event_queue_abort(&s->eventq);
+
+    if (s->eventq)
+        groove_queue_abort(s->eventq);
+
+    if (s->thread_id) {
         s->abort_request = 1;
         SDL_WaitThread(s->thread_id, NULL);
     }
-    if (s->executing == 2) {
-        s->executing = 0;
-        event_queue_end(&s->eventq);
-        cleanup_ebur(scan);
-        groove_cleanup_decode_ctx(&s->decode_ctx);
-    }
+    cleanup_ebur(scan);
+    groove_cleanup_decode_ctx(&s->decode_ctx);
+    if (s->eventq)
+        groove_queue_destroy(s->eventq);
     albumlist_cleanup(&s->album_item);
     filelist_cleanup(&s->file_item);
     filelist_cleanup(&s->scanned_file_item);
@@ -491,12 +402,21 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     av_free(scan);
 }
 
-int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event) {
+static int get_event(GrooveReplayGainScan *scan, GrooveRgEvent *event, int block) {
     GrooveReplayGainScanPrivate *s = scan->internals;
-    return event_queue_get(&s->eventq, event, 0);
+    GrooveRgEvent *tmp;
+    int err = groove_queue_get(s->eventq, (void **)&tmp, block);
+    if (err < 0)
+        return err;
+    *event = *tmp;
+    av_free(tmp);
+    return 0;
+}
+
+int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event) {
+    return get_event(scan, event, 0);
 }
 
 int groove_replaygainscan_event_wait(GrooveReplayGainScan *scan, GrooveRgEvent *event) {
-    GrooveReplayGainScanPrivate *s = scan->internals;
-    return event_queue_get(&s->eventq, event, 1);
+    return get_event(scan, event, 1);
 }

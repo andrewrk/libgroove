@@ -21,11 +21,14 @@ EX_LDFLAGS := $(LDFLAGS)
 
 all: examples
 
-src/libgroove.a: src/scan.o src/decode.o src/player.o
-	ar rcs src/libgroove.a src/scan.o src/decode.o src/player.o
+src/libgroove.a: src/scan.o src/decode.o src/player.o src/queue.o
+	ar rcs src/libgroove.a src/scan.o src/decode.o src/player.o src/queue.o
 
 src/decode.o: src/decode.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
+
+src/queue.o: src/queue.c $(LIBAV_DEP)
+	$(CC) $(CFLAGS) -o src/queue.o -c src/queue.c
 
 src/scan.o: src/scan.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/scan.o -c src/scan.c

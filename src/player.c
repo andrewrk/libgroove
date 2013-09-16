@@ -1,5 +1,6 @@
 #include "groove.h"
 #include "decode.h"
+#include "queue.h"
 
 #include <libavutil/channel_layout.h>
 
@@ -31,6 +32,7 @@ typedef struct GrooveBufferQueue {
 
 typedef struct GroovePlayerPrivate {
     SDL_Thread *thread_id;
+    GrooveQueue *eventq;
     int abort_request;
     GrooveBufferQueue audioq;
     SDL_AudioSpec spec;
@@ -39,6 +41,7 @@ typedef struct GroovePlayerPrivate {
     size_t audio_buf_index; // in bytes
     GrooveDecodeContext decode_ctx;
 } GroovePlayerPrivate;
+
 
 static int buffer_queue_put(GrooveBufferQueue *q, AVFrame *frame) {
     GrooveBufferList * buf1 = av_malloc(sizeof(GrooveBufferList));
@@ -172,14 +175,30 @@ static void buffer_queue_flush(GrooveBufferQueue *q) {
     SDL_UnlockMutex(q->mutex);
 }
 
+static void emit_nowplaying(GroovePlayer *player) {
+    // put an event on the queue
+    GroovePlayerEvent *evt = av_malloc(sizeof(GroovePlayerEvent));
+    if (!evt) {
+        av_log(NULL, AV_LOG_WARNING, "unable to create event: out of memory\n");
+        return;
+    }
+    evt->type = GROOVE_PLAYER_EVENT_NOWPLAYING;
+    GroovePlayerPrivate *p = player->internals;
+    if (groove_queue_put(p->eventq, evt) < 0)
+        av_log(NULL, AV_LOG_WARNING, "unable to put event on queue: out of memory\n");
+}
+
 static void next_without_flush(GroovePlayer *player) {
     groove_close(remove_queue_item(player, player->queue_head));
+    emit_nowplaying(player);
 }
 
 static void player_flush(GrooveDecodeContext *decode_ctx) {
     GroovePlayer *player = decode_ctx->callback_context;
     GroovePlayerPrivate *p = player->internals;
     buffer_queue_flush(&p->audioq);
+    // TODO: also flush p->audio_buf
+    // note this would require careful use of mutexes
 }
 
 static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
@@ -233,12 +252,6 @@ static enum AVSampleFormat sdl_format_to_av_format(Uint16 sdl_format) {
 }
 
 GroovePlayer * groove_create_player() {
-    if (groove_maybe_init() < 0)
-        return NULL;
-
-    if (groove_maybe_init_sdl() < 0)
-        return NULL;
-
     GroovePlayer * player = av_mallocz(sizeof(GroovePlayer));
     GroovePlayerPrivate * p = av_mallocz(sizeof(GroovePlayerPrivate));
     if (!player || !p) {
@@ -249,6 +262,14 @@ GroovePlayer * groove_create_player() {
     }
 
     player->internals = p;
+
+    p->eventq = groove_queue_create(groove_queue_cleanup_free);
+    if (!p->eventq) {
+        av_free(player);
+        av_free(p);
+        av_log(NULL, AV_LOG_WARNING, "unable to create event queue: out of memory\n");
+        return NULL;
+    }
 
     SDL_AudioSpec wanted_spec;
     wanted_spec.format = AUDIO_S16SYS;
@@ -323,12 +344,18 @@ void groove_destroy_player(GroovePlayer *player) {
 
     GroovePlayerPrivate * p = player->internals;
 
+
     buffer_queue_abort(&p->audioq);
     SDL_CloseAudio();
     buffer_queue_end(&p->audioq);
 
     p->abort_request = 1;
+    if (p->eventq)
+        groove_queue_abort(p->eventq);
     SDL_WaitThread(p->thread_id, NULL);
+
+    if (p->eventq)
+        groove_queue_destroy(p->eventq);
 
     av_frame_free(&p->audio_buf);
 
@@ -474,7 +501,7 @@ void groove_player_pause(GroovePlayer *player) {
 
 void groove_player_next(GroovePlayer *player) {
     GroovePlayerPrivate * p = player->internals;
-    buffer_queue_flush(&p->audioq);
+    player_flush(&p->decode_ctx);
     next_without_flush(player);
 }
 
@@ -484,6 +511,7 @@ GrooveQueueItem * groove_player_queue(GroovePlayer *player, GrooveFile *file) {
     if (!player->queue_head) {
         player->queue_head = item;
         player->queue_tail = item;
+        emit_nowplaying(player);
     } else {
         player->queue_tail->next = item;
         player->queue_tail = item;
@@ -495,7 +523,8 @@ GrooveFile * groove_player_remove(GroovePlayer *player, GrooveQueueItem *item) {
     // if it's currently being played, we stop playback and start playback on
     // the next item
     int resume_playback = 0;
-    if (item == player->queue_head && player->state != GROOVE_STATE_STOPPED) {
+    int removing_head = item == player->queue_head;
+    if (removing_head && player->state != GROOVE_STATE_STOPPED) {
         groove_player_stop(player);
         resume_playback = player->state == GROOVE_STATE_PLAYING;
     }
@@ -504,6 +533,8 @@ GrooveFile * groove_player_remove(GroovePlayer *player, GrooveQueueItem *item) {
 
     if (resume_playback)
         groove_player_play(player);
+    if (removing_head)
+        emit_nowplaying(player);
 
     return file;
 }
@@ -511,11 +542,13 @@ GrooveFile * groove_player_remove(GroovePlayer *player, GrooveQueueItem *item) {
 void groove_player_clear(GroovePlayer *player) {
     groove_player_stop(player);
     GrooveQueueItem * node = player->queue_head;
+    if (!node) return;
     while (node) {
         GrooveFile * file = groove_player_remove(player, node);
         groove_close(file);
         node = node->next;
     }
+    emit_nowplaying(player);
 }
 
 int groove_player_count(GroovePlayer *player) {
@@ -535,3 +568,21 @@ void groove_player_set_replaygain_mode(GroovePlayer *player, GrooveQueueItem *it
     // TODO adjust the volume property of the filter
 }
 
+static int get_event(GroovePlayer *player, GroovePlayerEvent *event, int block) {
+    GroovePlayerPrivate *p = player->internals;
+    GroovePlayerEvent *tmp;
+    int err = groove_queue_get(p->eventq, (void **)&tmp, block);
+    if (err < 0)
+        return err;
+    *event = *tmp;
+    av_free(tmp);
+    return 0;
+}
+
+int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event) {
+    return get_event(player, event, 0);
+}
+
+int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event) {
+    return get_event(player, event, 1);
+}

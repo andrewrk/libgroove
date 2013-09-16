@@ -41,6 +41,10 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
+    if (groove_init() < 0) {
+        fprintf(stderr, "error initializing libgroove\n");
+        return 1;
+    }
     //groove_set_logging(GROOVE_LOG_INFO);
     scan = groove_create_replaygainscan();
     if (!scan) {
@@ -68,8 +72,11 @@ int main(int argc, char * argv[]) {
                     event.rg_progress.update_current, event.rg_progress.update_total);
             fflush(stderr);
             break;
+        case GROOVE_RG_EVENT_COMPLETE:
+            groove_replaygainscan_destroy(scan);
+            fprintf(stderr, "\nscan complete.\n");
+            return 0;
         }
     }
-    groove_replaygainscan_destroy(scan);
-    fprintf(stderr, "\nscan complete.\n");
+    return 1;
 }

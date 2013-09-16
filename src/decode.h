@@ -78,7 +78,5 @@ int groove_init_decode_ctx(GrooveDecodeContext *decode_ctx);
 
 void groove_cleanup_decode_ctx(GrooveDecodeContext *decode_ctx);
 int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file);
-int groove_maybe_init();
-int groove_maybe_init_sdl();
 
 #endif /* __DECODE_H__ */
