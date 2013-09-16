@@ -14,7 +14,6 @@ Music player backend library.
 
 ## Roadmap
 
- * Poll or wait for player events.
  * Fix race conditions / flesh out playlist management API
  * Ability to keep a buffer filled with encoded audio.
    - This could be used for example for an HTTP streaming server.

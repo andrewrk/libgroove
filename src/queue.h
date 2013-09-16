@@ -1,7 +1,13 @@
-typedef void GrooveQueue;
+typedef struct GrooveQueue {
+    void *context;
+    void (*cleanup)(void *obj); // defaults to freeing the memory
+    void (*put)(struct GrooveQueue*, void *obj);
+    void (*get)(struct GrooveQueue*, void *obj);
+    void (*flush)(struct GrooveQueue*);
+    void *internals;
+} GrooveQueue;
 
-// you may pass NULL for cleanup if you do not need a cleanup function.
-GrooveQueue * groove_queue_create(int (*cleanup)(void *obj));
+GrooveQueue * groove_queue_create();
 
 void groove_queue_flush(GrooveQueue *queue);
 
@@ -12,6 +18,3 @@ void groove_queue_abort(GrooveQueue *queue);
 int groove_queue_put(GrooveQueue *queue, void *obj);
 
 int groove_queue_get(GrooveQueue *queue, void **obj_ptr, int block);
-
-// you may pass this if your cleanup function is simply to free the memory
-int groove_queue_cleanup_free(void *obj);

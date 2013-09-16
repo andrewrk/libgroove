@@ -20,89 +20,49 @@
 #define MIN_AUDIOQ_SIZE (44100 * 2 * 2 / 4)
 #define QUEUE_FULL_DELAY 10
 
-typedef struct GrooveBufferQueue {
-    GrooveBufferList *first_buf;
-    GrooveBufferList *last_buf;
-    int nb_buffers;
-    int size;
-    int abort_request;
-    SDL_mutex *mutex;
-    SDL_cond *cond;
-} GrooveBufferQueue;
-
 typedef struct GroovePlayerPrivate {
     SDL_Thread *thread_id;
-    GrooveQueue *eventq;
     int abort_request;
-    GrooveBufferQueue audioq;
-    SDL_AudioSpec spec;
+
+    GrooveDecodeContext decode_ctx;
+
     AVFrame *audio_buf;
     size_t audio_buf_size; // in bytes
     size_t audio_buf_index; // in bytes
-    GrooveDecodeContext decode_ctx;
+
+    GrooveQueue *audioq;
+    int audioq_buf_count;
+    int audioq_size;
+
+    GrooveQueue *eventq;
 } GroovePlayerPrivate;
 
-
-static int buffer_queue_put(GrooveBufferQueue *q, AVFrame *frame) {
-    GrooveBufferList * buf1 = av_malloc(sizeof(GrooveBufferList));
-
-    if (!buf1)
-        return -1;
-
-    buf1->frame = frame;
-    buf1->next = NULL;
-
-    SDL_LockMutex(q->mutex);
-
-    if (!q->last_buf)
-        q->first_buf = buf1;
-    else
-        q->last_buf->next = buf1;
-    q->last_buf = buf1;
-
-    q->nb_buffers += 1;
-    q->size += buf1->frame->linesize[0];
-
-    SDL_CondSignal(q->cond);
-    SDL_UnlockMutex(q->mutex);
-
-    return 0;
+static void audioq_put(GrooveQueue *queue, void *obj) {
+    AVFrame *frame = obj;
+    GroovePlayer *player = queue->context;
+    GroovePlayerPrivate *p = player->internals;
+    p->audioq_buf_count += 1;
+    p->audioq_size += frame->linesize[0];
 }
 
-// return < 0 if aborted, 0 if no buffer and > 0 if buffer.
-static int buffer_queue_get(GrooveBufferQueue *q, AVFrame **frame, int block) {
-    GrooveBufferList *buf1;
-    int ret;
+static void audioq_get(GrooveQueue *queue, void *obj) {
+    AVFrame *frame = obj;
+    GroovePlayer *player = queue->context;
+    GroovePlayerPrivate *p = player->internals;
+    p->audioq_buf_count -= 1;
+    p->audioq_size -= frame->linesize[0];
+}
 
-    SDL_LockMutex(q->mutex);
+static void audioq_cleanup(void *obj) {
+    AVFrame *frame = obj;
+    av_frame_free(&frame);
+}
 
-    for (;;) {
-        if (q->abort_request) {
-            ret = -1;
-            break;
-        }
-
-        buf1 = q->first_buf;
-        if (buf1) {
-            q->first_buf = buf1->next;
-            if (!q->first_buf)
-                q->last_buf = NULL;
-            q->nb_buffers -= 1;
-            q->size -= buf1->frame->linesize[0];
-            *frame = buf1->frame;
-            av_free(buf1);
-            ret = 1;
-            break;
-        } else if(!block) {
-            ret = 0;
-            break;
-        } else {
-            SDL_CondWait(q->cond, q->mutex);
-        }
-    }
-
-    SDL_UnlockMutex(q->mutex);
-    return ret;
+static void audioq_flush(GrooveQueue *queue) {
+    GroovePlayer *player = queue->context;
+    GroovePlayerPrivate *p = player->internals;
+    p->audioq_buf_count = 0;
+    p->audioq_size = 0;
 }
 
 // prepare a new audio buffer
@@ -116,7 +76,8 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
             av_frame_free(&p->audio_buf);
             p->audio_buf_index = 0;
             p->audio_buf_size = 0;
-            if (buffer_queue_get(&p->audioq, &p->audio_buf, 1) > 0)
+
+            if (groove_queue_get(p->audioq, (void**)&p->audio_buf, 1) > 0)
                 p->audio_buf_size = p->audio_buf->linesize[0];
         }
         if (decode_ctx->paused || !p->audio_buf) {
@@ -132,12 +93,6 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
         stream += len1;
         p->audio_buf_index += len1;
     }
-}
-
-static void buffer_queue_init(GrooveBufferQueue *q) {
-    memset(q, 0, sizeof(GrooveBufferQueue));
-    q->mutex = SDL_CreateMutex();
-    q->cond = SDL_CreateCond();
 }
 
 static GrooveFile * remove_queue_item(GroovePlayer *player, GrooveQueueItem *item) {
@@ -156,23 +111,6 @@ static GrooveFile * remove_queue_item(GroovePlayer *player, GrooveQueueItem *ite
     av_free(item);
 
     return file;
-}
-
-static void buffer_queue_flush(GrooveBufferQueue *q) {
-    SDL_LockMutex(q->mutex);
-
-    GrooveBufferList *buf;
-    GrooveBufferList *buf1;
-    for (buf = q->first_buf; buf != NULL; buf = buf1) {
-        buf1 = buf->next;
-        av_frame_free(&buf->frame);
-        av_free(buf);
-    }
-    q->last_buf = NULL;
-    q->first_buf = NULL;
-    q->nb_buffers = 0;
-    q->size = 0;
-    SDL_UnlockMutex(q->mutex);
 }
 
 static void emit_nowplaying(GroovePlayer *player) {
@@ -196,7 +134,7 @@ static void next_without_flush(GroovePlayer *player) {
 static void player_flush(GrooveDecodeContext *decode_ctx) {
     GroovePlayer *player = decode_ctx->callback_context;
     GroovePlayerPrivate *p = player->internals;
-    buffer_queue_flush(&p->audioq);
+    groove_queue_flush(p->audioq);
     // TODO: also flush p->audio_buf
     // note this would require careful use of mutexes
 }
@@ -204,7 +142,7 @@ static void player_flush(GrooveDecodeContext *decode_ctx) {
 static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     GroovePlayer *player = decode_ctx->callback_context;
     GroovePlayerPrivate *p = player->internals;
-    if (buffer_queue_put(&p->audioq, frame) < 0) {
+    if (groove_queue_put(p->audioq, frame) < 0) {
         av_log(NULL, AV_LOG_ERROR, "error allocating buffer queue item: out of memory\n");
         return -1;
     }
@@ -228,7 +166,7 @@ static int decode_thread(void *arg) {
             continue;
         }
         // if the queue is full, no need to read more
-        if (p->audioq.size > MIN_AUDIOQ_SIZE) {
+        if (p->audioq_size > MIN_AUDIOQ_SIZE) {
             SDL_Delay(QUEUE_FULL_DELAY);
             continue;
         }
@@ -263,15 +201,28 @@ GroovePlayer * groove_create_player() {
 
     player->internals = p;
 
-    p->eventq = groove_queue_create(groove_queue_cleanup_free);
+    p->eventq = groove_queue_create();
     if (!p->eventq) {
         av_free(player);
         av_free(p);
         av_log(NULL, AV_LOG_WARNING, "unable to create event queue: out of memory\n");
         return NULL;
     }
+    p->audioq = groove_queue_create();
+    if (!p->audioq) {
+        groove_queue_destroy(p->eventq);
+        av_free(player);
+        av_free(p);
+        av_log(NULL, AV_LOG_WARNING, "unable to create audio queue: out of memory\n");
+        return NULL;
+    }
+    p->audioq->context = player;
+    p->audioq->cleanup = audioq_cleanup;
+    p->audioq->put = audioq_put;
+    p->audioq->get = audioq_get;
+    p->audioq->flush = audioq_flush;
 
-    SDL_AudioSpec wanted_spec;
+    SDL_AudioSpec wanted_spec, spec;
     wanted_spec.format = AUDIO_S16SYS;
     wanted_spec.freq = 44100;
     wanted_spec.channels = 2;
@@ -279,12 +230,12 @@ GroovePlayer * groove_create_player() {
     wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
     wanted_spec.callback = sdl_audio_callback;
     wanted_spec.userdata = player;
-    if (SDL_OpenAudio(&wanted_spec, &p->spec) < 0) {
+    if (SDL_OpenAudio(&wanted_spec, &spec) < 0) {
         groove_destroy_player(player);
         av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
         return NULL;
     }
-    p->decode_ctx.dest_sample_fmt = sdl_format_to_av_format(p->spec.format);
+    p->decode_ctx.dest_sample_fmt = sdl_format_to_av_format(spec.format);
     if (p->decode_ctx.dest_sample_fmt == AV_SAMPLE_FMT_NONE) {
         groove_destroy_player(player);
         av_log(NULL, AV_LOG_ERROR, "unsupported audio device format\n");
@@ -295,8 +246,8 @@ GroovePlayer * groove_create_player() {
     p->decode_ctx.flush = player_flush;
     p->decode_ctx.buffer = player_buffer;
 
-    p->decode_ctx.dest_sample_rate = p->spec.freq;
-    p->decode_ctx.dest_channel_layout = p->spec.channels == 2 ?
+    p->decode_ctx.dest_sample_rate = spec.freq;
+    p->decode_ctx.dest_channel_layout = spec.channels == 2 ?
         AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
 
     if (groove_init_decode_ctx(&p->decode_ctx) < 0) {
@@ -315,7 +266,6 @@ GroovePlayer * groove_create_player() {
         return NULL;
     }
 
-    buffer_queue_init(&p->audioq);
 
 
     SDL_PauseAudio(0);
@@ -323,43 +273,29 @@ GroovePlayer * groove_create_player() {
     return player;
 }
 
-static void buffer_queue_abort(GrooveBufferQueue *q) {
-    SDL_LockMutex(q->mutex);
-
-    q->abort_request = 1;
-
-    SDL_CondSignal(q->cond);
-    SDL_UnlockMutex(q->mutex);
-}
-
-static void buffer_queue_end(GrooveBufferQueue *q)
-{
-    buffer_queue_flush(q);
-    SDL_DestroyMutex(q->mutex);
-    SDL_DestroyCond(q->cond);
-}
-
 void groove_destroy_player(GroovePlayer *player) {
     groove_player_clear(player);
 
     GroovePlayerPrivate * p = player->internals;
 
-
-    buffer_queue_abort(&p->audioq);
-    SDL_CloseAudio();
-    buffer_queue_end(&p->audioq);
-
+    // wait for decode thread to finish
     p->abort_request = 1;
     if (p->eventq)
         groove_queue_abort(p->eventq);
     SDL_WaitThread(p->thread_id, NULL);
-
     if (p->eventq)
         groove_queue_destroy(p->eventq);
 
-    av_frame_free(&p->audio_buf);
+    // flush audio queue
+    if (p->audioq)
+        groove_queue_abort(p->audioq);
+    SDL_CloseAudio();
+    if (p->audioq)
+        groove_queue_destroy(p->audioq);
 
+    av_frame_free(&p->audio_buf);
     groove_cleanup_decode_ctx(&p->decode_ctx);
+
     av_free(p);
     av_free(player);
 }

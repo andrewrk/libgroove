@@ -353,7 +353,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan) {
     s->decode_ctx.replaygain_mode = GROOVE_REPLAYGAINMODE_OFF;
 
     s->progress_event.type = GROOVE_RG_EVENT_PROGRESS;
-    s->eventq = groove_queue_create(groove_queue_cleanup_free);
+    s->eventq = groove_queue_create();
     if (!s->eventq) {
         av_log(NULL, AV_LOG_WARNING, "unable to create event queue: out of memory\n");
         return -1;

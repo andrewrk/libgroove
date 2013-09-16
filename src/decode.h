@@ -6,11 +6,6 @@
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 
-typedef struct GrooveBufferList {
-    AVFrame *frame;
-    struct GrooveBufferList *next;
-} GrooveBufferList;
-
 typedef struct GrooveDecodeContext {
     AVPacket audio_pkt_temp;
     AVFrame *frame;
