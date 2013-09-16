@@ -21,17 +21,17 @@ EX_LDFLAGS := $(LDFLAGS)
 
 all: examples
 
-src/groove.a: src/groove.o src/scan.o src/decode.o
-	ar rcs src/groove.a src/groove.o src/scan.o src/decode.o
+src/groove.a: src/scan.o src/decode.o src/player.o
+	ar rcs src/groove.a src/scan.o src/decode.o src/player.o
 
 src/decode.o: src/decode.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
 
-src/groove.o: src/groove.c $(LIBAV_DEP)
-	$(CC) $(CFLAGS) -o src/groove.o -c src/groove.c
-
 src/scan.o: src/scan.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/scan.o -c src/scan.c
+
+src/player.o: src/player.c $(LIBAV_DEP)
+	$(CC) $(CFLAGS) -o src/player.o -c src/player.c
 
 examples: example/playlist example/metadata example/replaygain
 
