@@ -422,7 +422,6 @@ GrooveFile * groove_open(char* filename) {
         return NULL;
     }
 
-    // prepare audio output
     if (!avctx->channel_layout)
         avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
     if (!avctx->channel_layout) {
@@ -663,13 +662,9 @@ int groove_player_count(GroovePlayer *player) {
     return count;
 }
 
-void groove_set_logging(int enabled) {
+void groove_set_logging(int level) {
     groove_maybe_init();
-    if (enabled) {
-        av_log_set_level(AV_LOG_WARNING);
-    } else {
-        av_log_set_level(AV_LOG_QUIET);
-    }
+    av_log_set_level(level);
 }
 
 void groove_player_set_replaygain_mode(GroovePlayer *player, GrooveQueueItem *item,

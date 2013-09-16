@@ -18,7 +18,7 @@ int main(int argc, char * argv[]) {
         return usage(exe);
 
     char * filename = argv[1];
-    groove_set_logging(1);
+    groove_set_logging(GROOVE_LOG_INFO);
     GrooveFile * file = groove_open(filename);
     if (!file) {
         fprintf(stderr, "error opening file\n");

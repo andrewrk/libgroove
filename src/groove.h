@@ -93,7 +93,11 @@ const char * groove_tag_value(GrooveTag *tag);
 
 /* misc methods */
 // enable/disable logging of errors
-void groove_set_logging(int enabled);
+#define GROOVE_LOG_QUIET    -8
+#define GROOVE_LOG_ERROR    16
+#define GROOVE_LOG_WARNING  24
+#define GROOVE_LOG_INFO     32
+void groove_set_logging(int level);
 
 
 

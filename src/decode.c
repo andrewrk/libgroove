@@ -175,6 +175,7 @@ static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) 
             time_base.num, time_base.den, avctx->sample_rate,
             av_get_sample_fmt_name(avctx->sample_fmt),
             avctx->channel_layout);
+    av_log(NULL, AV_LOG_INFO, "abuffer: %s\n", decode_ctx->strbuf);
     // save these values so we can compare later and check
     // whether we have to reconstruct the graph
     decode_ctx->in_sample_rate = avctx->sample_rate;
@@ -204,6 +205,7 @@ static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) 
     if (vol > 1.0) vol = 1.0;
     if (vol < 0.0) vol = 0.0;
     snprintf(decode_ctx->strbuf, sizeof(decode_ctx->strbuf), "volume=%f", vol);
+    av_log(NULL, AV_LOG_INFO, "volume: %s\n", decode_ctx->strbuf);
     // save these values so we can compare later and check
     // whether we have to reconstruct the graph
     decode_ctx->filter_replaygain_mode = decode_ctx->replaygain_mode;
@@ -218,10 +220,11 @@ static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) 
     }
     // create aformat filter
     snprintf(decode_ctx->strbuf, sizeof(decode_ctx->strbuf),
-            "sample_fmts=%s:channel_layouts=0x%"PRIx64":sample_rates=%d", 
+            "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%"PRIx64,
             av_get_sample_fmt_name(decode_ctx->dest_sample_fmt),
-            decode_ctx->dest_channel_layout,
-            decode_ctx->dest_sample_rate);
+            decode_ctx->dest_sample_rate,
+            decode_ctx->dest_channel_layout);
+    av_log(NULL, AV_LOG_INFO, "aformat: %s\n", decode_ctx->strbuf);
     err = avfilter_graph_create_filter(&decode_ctx->aformat_ctx, aformat,
             NULL, decode_ctx->strbuf, NULL, decode_ctx->filter_graph);
     if (err < 0) {

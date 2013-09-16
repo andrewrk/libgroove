@@ -10,7 +10,7 @@ int main(int argc, char * argv[]) {
         fprintf(stderr, "Usage: %s file1 file2 ...\n", argv[0]);
         return 1;
     }
-    groove_set_logging(1);
+    groove_set_logging(GROOVE_LOG_INFO);
     GroovePlayer *player = groove_create_player();
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
