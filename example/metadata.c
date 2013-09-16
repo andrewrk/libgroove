@@ -18,10 +18,7 @@ int main(int argc, char * argv[]) {
         return usage(exe);
 
     char * filename = argv[1];
-    if (groove_init() < 0) {
-        fprintf(stderr, "error initializing libgroove\n");
-        return 1;
-    }
+    groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
     GrooveFile * file = groove_open(filename);
     if (!file) {

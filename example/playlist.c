@@ -23,10 +23,7 @@ int main(int argc, char * argv[]) {
         fprintf(stderr, "Usage: %s file1 file2 ...\n", argv[0]);
         return 1;
     }
-    if (groove_init() < 0) {
-        fprintf(stderr, "error initializing libgroove\n");
-        return 1;
-    }
+    groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
     GroovePlayer *player = groove_create_player();
     for (int i = 1; i < argc; i += 1) {

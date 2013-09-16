@@ -41,10 +41,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    if (groove_init() < 0) {
-        fprintf(stderr, "error initializing libgroove\n");
-        return 1;
-    }
+    groove_init();
     //groove_set_logging(GROOVE_LOG_INFO);
     scan = groove_create_replaygainscan();
     if (!scan) {
