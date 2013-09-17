@@ -59,6 +59,9 @@ const char * groove_file_short_names(GrooveFile *file);
 // return < 0 on error
 int groove_file_save(GrooveFile *file);
 
+// song duration in seconds
+double groove_file_duration(GrooveFile *file);
+
 
 /************* GroovePlayer *************/
 enum GrooveReplayGainMode {

@@ -503,6 +503,12 @@ const char * groove_file_short_names(GrooveFile *file) {
     return f->ic->iformat->name;
 }
 
+double groove_file_duration(GrooveFile *file) {
+    GrooveFilePrivate * f = file->internals;
+    double time_base = av_q2d(f->audio_st->time_base);
+    return time_base * f->audio_st->duration;
+}
+
 GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags)
 {
