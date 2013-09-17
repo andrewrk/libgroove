@@ -72,7 +72,7 @@ enum GrooveReplayGainMode {
 
 typedef struct GrooveQueueItem {
     struct GrooveQueueItem * prev;
-    struct GrooveFile * file;
+    GrooveFile * file;
     enum GrooveReplayGainMode replaygain_mode;
     struct GrooveQueueItem * next;
 } GrooveQueueItem;

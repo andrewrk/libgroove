@@ -20,7 +20,7 @@ Music player backend library.
 
 ## Dependencies
 
-You will need these to compile libgrove. These are most likely in your
+You will need these to compile libgroove. These are most likely in your
 distribution's package manager.
 
  * [libsdl1.2-dev](http://www.libsdl.org/)
