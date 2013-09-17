@@ -14,15 +14,14 @@ LDFLAGS := -lSDL -lbz2 -lz -lm -pthread
 
 # for compiling examples
 EX_CFLAGS := -Isrc -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
-EX_STATIC_LIBS := src/libgroove.a $(STATIC_LIBS)
-EX_LDFLAGS := $(LDFLAGS)
+EX_LDFLAGS := -Lsrc -lgroove
 
 .PHONY: examples clean all distclean
 
 all: examples
 
-src/libgroove.a: src/scan.o src/decode.o src/player.o src/queue.o
-	ar rcs src/libgroove.a src/scan.o src/decode.o src/player.o src/queue.o
+src/libgroove.so: src/scan.o src/decode.o src/player.o src/queue.o
+	$(CC) -shared -o src/libgroove.so src/scan.o src/decode.o src/player.o src/queue.o $(STATIC_LIBS) $(LDFLAGS)
 
 src/decode.o: src/decode.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
@@ -38,20 +37,20 @@ src/player.o: src/player.c $(LIBAV_DEP)
 
 examples: example/playlist example/metadata example/replaygain
 
-example/metadata: example/metadata.o src/libgroove.a $(LIBAV_DEP) $(EBUR128_DEP)
-	$(CC) -o example/metadata example/metadata.o src/libgroove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
+example/metadata: example/metadata.o src/libgroove.so
+	$(CC) -o example/metadata example/metadata.o $(EX_LDFLAGS)
 
 example/metadata.o: example/metadata.c
 	$(CC) $(EX_CFLAGS) -o example/metadata.o -c example/metadata.c
 
-example/playlist: example/playlist.o src/libgroove.a $(LIBAV_DEP) $(EBUR128_DEP)
-	$(CC) -o example/playlist example/playlist.o src/libgroove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
+example/playlist: example/playlist.o src/libgroove.so
+	$(CC) -o example/playlist example/playlist.o $(EX_LDFLAGS)
 
 example/playlist.o: example/playlist.c
 	$(CC) $(EX_CFLAGS) -o example/playlist.o -c example/playlist.c
 
-example/replaygain: example/replaygain.o src/libgroove.a $(LIBAV_DEP) $(EBUR128_DEP)
-	$(CC) -o example/replaygain example/replaygain.o src/libgroove.a $(EX_STATIC_LIBS) $(EX_LDFLAGS)
+example/replaygain: example/replaygain.o src/libgroove.so
+	$(CC) -o example/replaygain example/replaygain.o $(EX_LDFLAGS)
 
 example/replaygain.o: example/replaygain.c
 	$(CC) $(EX_CFLAGS) -o example/replaygain.o -c example/replaygain.c
