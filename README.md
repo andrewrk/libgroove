@@ -4,10 +4,11 @@ Music player backend library.
 
 ## Features
 
- * Robust. Decodes everything.
+ * Robust. Uses [libav](http://www.libav.org/) for decoding and encoding.
+   - [list of supported formats](https://github.com/superjoe30/libgroove/wiki/Supported-File-Formats)
  * Add and remove entries on a playlist for gapless playback.
- * Supports pause, play, stop, and seek during playback.
- * Read and write metadata tags for every supported format.
+ * Supports pause, play, stop, and seek.
+ * Read and write metadata tags for every format.
  * [EBU R 128](http://tech.ebu.ch/loudness) loudness scanning for every format.
    - add files to a batch job and monitor progress
  * Loudness compensation using ReplayGain tags during playback.
@@ -46,3 +47,16 @@ appreciate them.
     is `/usr/local`.
  3. With libgroove installed in your system, you can compile the examples with
     `make examples`.
+ 4. Optionally you can install the examples to your system with
+   `make install-examples`. These examples are:
+    * `playlist` - play a series of songs with gapless playback
+    * `metadata` - read or update song metadata
+    * `replaygain` - recursively scan a set of directories, sort into albums,
+      and then perform replaygain scanning using the EBU R 128 standard.
+
+## Projects Using libgroove
+
+Feel free to make a pull request adding yours to this list.
+
+ * [TrenchBowl](https://github.com/superjoe30/TrenchBowl) - a simple Qt GUI
+   on top of libgroove.

@@ -25,9 +25,9 @@ LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 # for compiling examples
 EX_CFLAGS = -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
 EX_LDLIBS = -lgroove
-EX_LDFLAGS = ""
+EX_LDFLAGS =
 
-.PHONY: examples clean distclean install uninstall
+.PHONY: examples clean distclean install uninstall install-examples uninstall-examples
 
 $(GROOVE_SO_SRC): src/scan.o src/decode.o src/player.o src/queue.o $(EBUR128_DEP)
 	$(CC) $(LDFLAGS) -o $(GROOVE_SO_SRC) src/scan.o src/decode.o src/player.o src/queue.o $(STATIC_LIBS) $(LDLIBS)
@@ -91,3 +91,13 @@ install: $(GROOVE_SO_SRC) src/groove.h
 uninstall:
 	rm -f $(PREFIX)/lib/libgroove.so*
 	rm -f $(PREFIX)/include/groove.h
+
+install-examples: examples
+	install -m 0755 example/replaygain $(PREFIX)/bin
+	install -m 0755 example/playlist $(PREFIX)/bin
+	install -m 0755 example/metadata $(PREFIX)/bin
+
+uninstall-examples:
+	rm -f $(PREFIX)/bin/replaygain
+	rm -f $(PREFIX)/bin/metadata
+	rm -f $(PREFIX)/bin/playlist
