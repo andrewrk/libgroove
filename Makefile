@@ -20,7 +20,7 @@ EX_LDFLAGS := -Lsrc -lgroove
 
 all: examples
 
-src/libgroove.so: src/scan.o src/decode.o src/player.o src/queue.o
+src/libgroove.so: src/scan.o src/decode.o src/player.o src/queue.o $(EBUR128_DEP)
 	$(CC) -shared -o src/libgroove.so src/scan.o src/decode.o src/player.o src/queue.o $(STATIC_LIBS) $(LDFLAGS)
 
 src/decode.o: src/decode.c $(LIBAV_DEP)
