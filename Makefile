@@ -5,6 +5,13 @@ LIBAV_DEP = $(LIBAV_PREFIX)/lib/libavformat.a
 EBUR128_SRC = $(abspath deps/ebur128)
 EBUR128_PREFIX = $(abspath deps/ebur128)/build
 EBUR128_DEP = $(abspath deps/ebur128)/build/libebur128.a
+PREFIX = /usr/local
+VERSION_MAJOR = 1
+VERSION_MINOR = 0
+VERSION_PATCH = 0
+GROOVE_SO_NAME = libgroove.so.$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
+GROOVE_SO_SRC = src/groove.so
+GROOVE_SO_DEST = $(PREFIX)/lib/$(GROOVE_SO_NAME)
 
 # for compiling groove
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
@@ -13,15 +20,13 @@ STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
 LDFLAGS := -lSDL -lbz2 -lz -lm -pthread
 
 # for compiling examples
-EX_CFLAGS := -Isrc -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
-EX_LDFLAGS := -Lsrc -lgroove
+EX_CFLAGS := -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
+EX_LDFLAGS := -lgroove
 
-.PHONY: examples clean all distclean
+.PHONY: examples clean distclean install uninstall
 
-all: examples
-
-src/libgroove.so: src/scan.o src/decode.o src/player.o src/queue.o $(EBUR128_DEP)
-	$(CC) -shared -o src/libgroove.so src/scan.o src/decode.o src/player.o src/queue.o $(STATIC_LIBS) $(LDFLAGS)
+$(GROOVE_SO_SRC): src/scan.o src/decode.o src/player.o src/queue.o $(EBUR128_DEP)
+	$(CC) -fPIC -shared -o $(GROOVE_SO_SRC) -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic src/scan.o src/decode.o src/player.o src/queue.o $(STATIC_LIBS) $(LDFLAGS)
 
 src/decode.o: src/decode.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
@@ -37,19 +42,19 @@ src/player.o: src/player.c $(LIBAV_DEP)
 
 examples: example/playlist example/metadata example/replaygain
 
-example/metadata: example/metadata.o src/libgroove.so
+example/metadata: example/metadata.o
 	$(CC) -o example/metadata example/metadata.o $(EX_LDFLAGS)
 
 example/metadata.o: example/metadata.c
 	$(CC) $(EX_CFLAGS) -o example/metadata.o -c example/metadata.c
 
-example/playlist: example/playlist.o src/libgroove.so
+example/playlist: example/playlist.o
 	$(CC) -o example/playlist example/playlist.o $(EX_LDFLAGS)
 
 example/playlist.o: example/playlist.c
 	$(CC) $(EX_CFLAGS) -o example/playlist.o -c example/playlist.c
 
-example/replaygain: example/replaygain.o src/libgroove.so
+example/replaygain: example/replaygain.o
 	$(CC) -o example/replaygain example/replaygain.o $(EX_LDFLAGS)
 
 example/replaygain.o: example/replaygain.c
@@ -71,3 +76,14 @@ clean:
 distclean: clean
 	rm -rf $(LIBAV_PREFIX) $(EBUR128_PREFIX)
 	cd $(LIBAV_SRC) && $(MAKE) distclean
+
+install: $(GROOVE_SO_SRC) src/groove.h
+	install -m 0755 $(GROOVE_SO_SRC) $(GROOVE_SO_DEST)
+	install -m 0644 src/groove.h $(PREFIX)/include
+	rm -f $(PREFIX)/lib/libgroove.so
+	ln -s $(GROOVE_SO_DEST) $(PREFIX)/lib/libgroove.so
+	ldconfig -n $(PREFIX)/lib
+
+uninstall:
+	rm -f $(PREFIX)/lib/libgroove.so*
+	rm -f $(PREFIX)/include/groove.h
