@@ -35,3 +35,14 @@ appreciate them.
 
  * [libav](http://libav.org)
  * [libebur128](https://github.com/jiixyj/libebur128)
+
+## Installation
+
+ 1. Once you have the dependencies installed, you can use `make` to build
+    libgroove.so. Using the `-jx` option where x is how many cores you have
+    is recommended.
+ 2. Next install libgroove to your system with `make install`. You will need
+    root privileges if you leave the `PREFIX` variable to its default, which
+    is `/usr/local`.
+ 3. With libgroove installed in your system, you can compile the examples with
+    `make examples`.
