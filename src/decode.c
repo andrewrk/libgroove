@@ -50,12 +50,11 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
     *pkt_temp = *pkt;
 
     // update the audio clock with the pts if we can
-    if (pkt->pts != AV_NOPTS_VALUE) {
+    if (pkt->pts != AV_NOPTS_VALUE)
         f->audio_clock = av_q2d(f->audio_st->time_base)*pkt->pts;
-    }
 
     int data_size = 0;
-    int n, len1, got_frame;
+    int len1, got_frame;
     int new_packet = 1;
     AVFrame *frame = decode_ctx->frame;
 
@@ -106,11 +105,10 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
                 return err;
         }
 
-        // if no pts, then compute it
-        if (pkt->pts == AV_NOPTS_VALUE) {
-            n = decode_ctx->dest_channel_count * av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
-            f->audio_clock += (double)data_size / (double)(n * decode_ctx->dest_sample_rate);
-        }
+        // if no pts, then estimate it
+        if (pkt->pts == AV_NOPTS_VALUE)
+            f->audio_clock += data_size / (double)decode_ctx->dest_bytes_per_sec;
+
         return data_size;
     }
     return data_size;
@@ -358,6 +356,8 @@ int groove_init_decode_ctx(GrooveDecodeContext *decode_ctx) {
     }
     decode_ctx->dest_channel_count =
         av_get_channel_layout_nb_channels(decode_ctx->dest_channel_layout);
+    decode_ctx->dest_bytes_per_sec = decode_ctx->dest_sample_rate *
+        decode_ctx->dest_channel_count * av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
 
     decode_ctx->volume = 1.0;
     decode_ctx->replaygain_preamp = 0.75;

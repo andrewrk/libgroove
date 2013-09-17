@@ -149,6 +149,9 @@ int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);
 // returns < 0 on error
 int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event);
 
+// get the position of the playhead in seconds
+double groove_player_position(GroovePlayer *player);
+
 
 /************* GrooveReplayGainScan *************/
 typedef struct GrooveReplayGainScan {

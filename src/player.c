@@ -331,23 +331,6 @@ static void stream_seek(GrooveFile *file, int64_t pos, int64_t rel, int seek_by_
     }
 }
 
-static double get_audio_clock(GroovePlayer *player, GrooveFile *file) {
-    GroovePlayerPrivate * p = player->internals;
-    GrooveFilePrivate * f = file->internals;
-    GrooveDecodeContext *decode_ctx = &p->decode_ctx;
-
-    double pts = f->audio_clock;
-    int hw_buf_size = p->audio_buf_size - p->audio_buf_index;
-    int bytes_per_sec = 0;
-    if (f->audio_st) {
-        bytes_per_sec = decode_ctx->dest_sample_rate * decode_ctx->dest_channel_count *
-                        av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
-    }
-    if (bytes_per_sec)
-        pts -= (double)hw_buf_size / bytes_per_sec;
-    return pts;
-}
-
 void groove_player_seek_rel(GroovePlayer *player, double seconds) {
     GrooveQueueItem * item = player->queue_head;
     if (!item) {
@@ -372,7 +355,7 @@ void groove_player_seek_rel(GroovePlayer *player, double seconds) {
         pos += incr;
         stream_seek(file, pos, incr, 1);
     } else {
-        pos = get_audio_clock(player, file);
+        pos = groove_player_position(player);
         pos += incr;
         stream_seek(file, (int64_t)(pos * AV_TIME_BASE), (int64_t)(incr * AV_TIME_BASE), 0);
     }
@@ -521,4 +504,27 @@ int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event) {
 
 int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event) {
     return get_event(player, event, 1);
+}
+
+double groove_player_position(GroovePlayer *player) {
+    if (!player->queue_head)
+        return 0.0;
+
+    GrooveFile *file = player->queue_head->file;
+    GrooveFilePrivate *f = file->internals;
+    GroovePlayerPrivate *p = player->internals;
+
+    // this is the position in seconds of how much we have decoded.
+    double pos = f->audio_clock;
+
+    // take into account buffered audio
+    // TODO some of these vars need a mutex
+    int buf_byte_count = SDL_AUDIO_BUFFER_SIZE + p->audioq_size +
+        (p->audio_buf_size - p->audio_buf_index);
+
+    pos -= buf_byte_count / (double)p->decode_ctx.dest_bytes_per_sec;
+
+    if (pos < 0.0) pos = 0.0;
+
+    return pos;
 }

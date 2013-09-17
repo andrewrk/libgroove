@@ -23,7 +23,8 @@ typedef struct GrooveDecodeContext {
     int dest_sample_rate;
     uint64_t dest_channel_layout;
     enum AVSampleFormat dest_sample_fmt;
-    int dest_channel_count;
+    int dest_channel_count; // computed
+    int dest_bytes_per_sec; // computed
 
     char strbuf[512];
     AVFilterGraph *filter_graph;
@@ -59,7 +60,7 @@ typedef struct GrooveFilePrivate {
     int64_t seek_pos;
     int64_t seek_rel;
     int eof;
-    double audio_clock;
+    double audio_clock; // position of the decode head
     AVPacket audio_pkt;
 
     // state while saving
