@@ -117,15 +117,15 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
 static double get_replaygain_adjustment(GrooveDecodeContext *decode_ctx,
         GrooveFile *file, const char *tag_name)
 {
-    GrooveTag *tag = groove_file_metadata_get(file, "REPLAYGAIN_TRACK_GAIN", NULL, 0);
+    GrooveTag *tag = groove_file_metadata_get(file, tag_name, NULL, 0);
     if (tag) {
         const char *tag_value = groove_tag_value(tag);
         double gain_value;
         if (sscanf(tag_value, "%lf", &gain_value) == 1)
             return dB_to_float(gain_value);
         GrooveFilePrivate *f = file->internals;
-        av_log(NULL, AV_LOG_WARNING, "track %s lacks replaygain metadata\n", f->ic->filename);
     }
+    av_log(NULL, AV_LOG_WARNING, "track %s lacks replaygain metadata\n", f->ic->filename);
     return decode_ctx->replaygain_default;
 }
 
