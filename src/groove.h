@@ -38,6 +38,7 @@ typedef void GrooveTag;
 const char * groove_tag_key(GrooveTag *tag);
 const char * groove_tag_value(GrooveTag *tag);
 
+// you are always responsible for calling groove_close on the returned GrooveFile.
 GrooveFile * groove_open(char* filename);
 void groove_close(GrooveFile * file);
 
@@ -70,6 +71,7 @@ enum GrooveReplayGainMode {
     GROOVE_REPLAYGAINMODE_ALBUM,
 };
 
+// TODO rename Queue to Playlist
 typedef struct GrooveQueueItem {
     struct GrooveQueueItem * prev;
     GrooveFile * file;
@@ -77,49 +79,57 @@ typedef struct GrooveQueueItem {
     struct GrooveQueueItem * next;
 } GrooveQueueItem;
 
-enum GrooveState {
-    GROOVE_STATE_STOPPED,
-    GROOVE_STATE_PLAYING,
-    GROOVE_STATE_PAUSED,
-};
-
 typedef struct GroovePlayer {
-    enum GrooveState state; // read-only
+    // read-only - doubly linked list which is the queue
     GrooveQueueItem * queue_head;
     GrooveQueueItem * queue_tail;
 
-    void * internals;
+    void * internals; // don't touch this
 } GroovePlayer;
 
 enum GroovePlayerEventType {
     GROOVE_PLAYER_EVENT_NOWPLAYING, // when the currently playing track changes.
 };
 
+typedef struct GroovePlayerEventNowPlaying {
+    enum GroovePlayerEventType type; // always GROOVE_PLAYER_EVENT_NOWPLAYING
+    GrooveQueueItem * old_item; // previous item that was playing. can be NULL
+    GrooveQueueItem * new_item; // the item which is now playing. can be NULL
+} GroovePlayerEventNowPlaying;
+
 typedef union GroovePlayerEvent {
     enum GroovePlayerEventType type;
+    GroovePlayerEventNowPlaying now_playing;
 } GroovePlayerEvent;
 
 // you may not create two simultaneous players on the same device
 GroovePlayer * groove_create_player();
+// this will not call groove_close on any files
 void groove_destroy_player(GroovePlayer *player);
 
 void groove_player_play(GroovePlayer *player);
-void groove_player_stop(GroovePlayer *player);
 void groove_player_pause(GroovePlayer *player);
-void groove_player_next(GroovePlayer *player);
 
-void groove_player_seek_rel(GroovePlayer *player, double seconds);
-void groove_player_seek_abs(GroovePlayer *player, double fraction);
+void groove_player_seek(GroovePlayer *player, GrooveQueueItem *item, double seconds);
 
-// ownership of file switches from user to groove
-// groove owns the returned queue item
+// once you add a file to the queue, you must not destroy it until you first
+// remove it from the queue.
 GrooveQueueItem * groove_player_queue(GroovePlayer *player, GrooveFile *file);
 
-// ownership of the returned file switches from groove to user
-// item is destroyed
-GrooveFile * groove_player_remove(GroovePlayer *player, GrooveQueueItem *item);
+// this will not call groove_close on item->file !
+// item is destroyed and the address it points to is no longer valid
+void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item);
 
-// stop playback then remove and destroy all queue items
+// get the position of the playhead
+// both the current queue item and the position in seconds in the queue
+// item are given.
+void groove_player_position(GroovePlayer *player, GrooveQueueItem **item, double *seconds);
+
+// return 1 if the player is playing; 0 if it is not.
+int groove_player_playing(GroovePlayer *player);
+
+
+// remove all queue items
 void groove_player_clear(GroovePlayer *player);
 
 // return the count of queue items
@@ -148,9 +158,6 @@ void groove_player_set_volume(GroovePlayer *player, double volume);
 int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);
 // returns < 0 on error
 int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event);
-
-// get the position of the playhead in seconds
-double groove_player_position(GroovePlayer *player);
 
 
 /************* GrooveReplayGainScan *************/

@@ -5,19 +5,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-static void print_now_playing(GroovePlayer *player) {
-    GrooveTag *artist_tag = groove_file_metadata_get(player->queue_head->file,
-            "artist", NULL, 0);
-    GrooveTag *title_tag = groove_file_metadata_get(player->queue_head->file,
-            "title", NULL, 0);
-    if (artist_tag && title_tag) {
-        printf("Now playing: %s - %s\n", groove_tag_value(artist_tag),
-                groove_tag_value(title_tag));
-    } else {
-        printf("Now playing: %s\n", groove_file_filename(player->queue_head->file));
-    }
-}
-
 int main(int argc, char * argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s file1 file2 ...\n", argv[0]);
@@ -38,15 +25,33 @@ int main(int argc, char * argv[]) {
     groove_player_play(player);
 
     GroovePlayerEvent event;
+    GrooveFile *file;
+    GrooveQueueItem *old_item;;
+    GrooveQueueItem *new_item;
     while (groove_player_event_wait(player, &event) >= 0) {
         switch (event.type) {
         case GROOVE_PLAYER_EVENT_NOWPLAYING:
-            if (groove_player_count(player) == 0) {
+            old_item = event.now_playing.old_item;
+            if (old_item) {
+                file = event.now_playing.old_item->file;
+                groove_player_remove(player, event.now_playing.old_item);
+                groove_close(file);
+            }
+            new_item = event.now_playing.new_item;
+            if (!new_item) {
+                // playlist complete
                 printf("done\n");
                 groove_destroy_player(player);
                 return 0;
             }
-            print_now_playing(player);
+            GrooveTag *artist_tag = groove_file_metadata_get(new_item->file, "artist", NULL, 0);
+            GrooveTag *title_tag = groove_file_metadata_get(new_item->file, "title", NULL, 0);
+            if (artist_tag && title_tag) {
+                printf("Now playing: %s - %s\n", groove_tag_value(artist_tag),
+                        groove_tag_value(title_tag));
+            } else {
+                printf("Now playing: %s\n", groove_file_filename(player->queue_head->file));
+            }
             break;
         }
     }

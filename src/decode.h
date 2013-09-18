@@ -5,6 +5,7 @@
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
+#include <SDL/SDL_thread.h>
 
 typedef struct GrooveDecodeContext {
     AVPacket audio_pkt_temp;
@@ -52,13 +53,14 @@ typedef struct GrooveFilePrivate {
     int audio_stream_index;
     int abort_request; // true when we're closing the file
     AVFormatContext *ic;
-    int seek_by_bytes;
     AVCodec *decoder;
     AVStream *audio_st;
-    int seek_req;
-    int seek_flags;
-    int64_t seek_pos;
-    int64_t seek_rel;
+
+    // this mutex protects seek_pos
+    SDL_mutex *seek_mutex;
+    int64_t seek_pos; // -1 if no seek request
+    int seek_flush; // whether the seek request wants us to flush the buffer
+
     int eof;
     double audio_clock; // position of the decode head
     AVPacket audio_pkt;
@@ -66,6 +68,7 @@ typedef struct GrooveFilePrivate {
     // state while saving
     AVFormatContext *oc;
     int tempfile_exists;
+
 } GrooveFilePrivate;
 
 // call this after you have set dest_sample_rate, dest_channel_layout,

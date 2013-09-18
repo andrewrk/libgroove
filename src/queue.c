@@ -145,3 +145,37 @@ int groove_queue_get(GrooveQueue *queue, void **obj_ptr, int block) {
     SDL_UnlockMutex(q->mutex);
     return ret;
 }
+
+void groove_queue_purge(GrooveQueue *queue) {
+    GrooveQueuePrivate *q = queue->internals;
+
+    SDL_LockMutex(q->mutex);
+    ItemList *node = q->first;
+    ItemList *prev = NULL;
+    while (node) {
+        if (queue->purge(queue, node->obj)) {
+            if (prev) {
+                prev->next = node->next;
+                if (queue->cleanup)
+                    queue->cleanup(node->obj);
+                av_free(node);
+                node = prev->next;
+                if (!node)
+                    q->last = prev;
+            } else {
+                ItemList *next = node->next;
+                if (queue->cleanup)
+                    queue->cleanup(node->obj);
+                av_free(node);
+                q->first = next;
+                node = next;
+                if (!node)
+                    q->last = NULL;
+            }
+        } else {
+            prev = node;
+            node = node->next;
+        }
+    }
+    SDL_UnlockMutex(q->mutex);
+}

@@ -123,8 +123,8 @@ static double get_replaygain_adjustment(GrooveDecodeContext *decode_ctx,
         double gain_value;
         if (sscanf(tag_value, "%lf", &gain_value) == 1)
             return dB_to_float(gain_value);
-        GrooveFilePrivate *f = file->internals;
     }
+    GrooveFilePrivate *f = file->internals;
     av_log(NULL, AV_LOG_WARNING, "track %s lacks replaygain metadata\n", f->ic->filename);
     return decode_ctx->replaygain_default;
 }
@@ -278,37 +278,41 @@ int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
     AVPacket *pkt = &f->audio_pkt;
 
+    // might need to rebuild the filter graph if certain things changed
     if (maybe_init_filter_graph(decode_ctx, file) < 0)
         return -1;
+
+    // abort_request is set if we are destroying the file
     if (f->abort_request)
         return -1;
-    if (decode_ctx->paused != decode_ctx->last_paused) {
-        decode_ctx->last_paused = decode_ctx->paused;
-        if (decode_ctx->paused) {
+
+    // handle pause requests
+    // only read decode_ctx->paused once so that we don't need a mutex
+    int paused = decode_ctx->paused;
+    if (paused != decode_ctx->last_paused) {
+        decode_ctx->last_paused = paused;
+        if (paused) {
             av_read_pause(f->ic);
         } else {
             av_read_play(f->ic);
         }
     }
-    if (f->seek_req) {
-        AVCodecContext *dec = f->audio_st->codec;
-        int64_t seek_target = f->seek_pos;
-        int64_t seek_min    = f->seek_rel > 0 ? seek_target - f->seek_rel + 2: INT64_MIN;
-        int64_t seek_max    = f->seek_rel < 0 ? seek_target - f->seek_rel - 2: INT64_MAX;
-        // FIXME the +-2 is due to rounding being not done in the correct
-        // direction in generation of the seek_pos/seek_rel variables
-        int err = avformat_seek_file(f->ic, -1, seek_min, seek_target, seek_max,
-                f->seek_flags);
-        if (err < 0) {
+
+    // handle seek requests
+    SDL_LockMutex(f->seek_mutex);
+    if (f->seek_pos >= 0) {
+        if (av_seek_frame(f->ic, f->audio_stream_index, f->seek_pos, 0) < 0) {
             av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->filename);
-        } else {
+        } else if (f->seek_flush) {
             if (decode_ctx->flush)
                 decode_ctx->flush(decode_ctx);
-            avcodec_flush_buffers(dec);
+            avcodec_flush_buffers(f->audio_st->codec);
         }
-        f->seek_req = 0;
+        f->seek_pos = -1;
         f->eof = 0;
     }
+    SDL_UnlockMutex(f->seek_mutex);
+
     if (f->eof) {
         if (f->audio_st->codec->codec->capabilities & CODEC_CAP_DELAY) {
             av_init_packet(pkt);
@@ -384,7 +388,16 @@ GrooveFile * groove_open(char* filename) {
         return NULL;
     }
     file->internals = f;
+
     f->audio_stream_index = -1;
+    f->seek_pos = -1;
+
+    f->seek_mutex = SDL_CreateMutex();
+    if (!f->seek_mutex) {
+        groove_close(file);
+        av_log(NULL, AV_LOG_ERROR, "error creating seek mutex: out of memory\n");
+        return NULL;
+    }
 
     f->ic = avformat_alloc_context();
     if (!f->ic) {
@@ -407,8 +420,6 @@ GrooveFile * groove_open(char* filename) {
         av_log(NULL, AV_LOG_ERROR, "%s: could not find codec parameters\n", filename);
         return NULL;
     }
-
-    f->seek_by_bytes = !!(f->ic->iformat->flags & AVFMT_TS_DISCONT);
 
     // set all streams to discard. in a few lines here we will find the audio
     // stream and cancel discarding it
@@ -483,6 +494,9 @@ void groove_close(GrooveFile * file) {
 
         if (f->ic)
             avformat_close_input(&f->ic);
+
+        if (f->seek_mutex)
+            SDL_DestroyMutex(f->seek_mutex);
 
         av_free(f);
     }
