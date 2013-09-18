@@ -121,6 +121,7 @@ void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item);
 // get the position of the playhead
 // both the current queue item and the position in seconds in the queue
 // item are given. item will be set to NULL if the queue is empty
+// you may pass NULL for item or seconds
 void groove_player_position(GroovePlayer *player, GrooveQueueItem **item, double *seconds);
 
 // return 1 if the player is playing; 0 if it is not.

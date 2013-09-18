@@ -549,8 +549,10 @@ void groove_player_position(GroovePlayer *player, GrooveQueueItem **item, double
     GroovePlayerPrivate *p = player->internals;
 
     SDL_LockMutex(p->play_head_mutex);
-    *item = p->play_head;
-    *seconds = p->play_pos;
+    if (item)
+        *item = p->play_head;
+    if (seconds)
+        *seconds = p->play_pos;
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
