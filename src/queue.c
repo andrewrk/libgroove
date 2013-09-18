@@ -38,7 +38,7 @@ GrooveQueue * groove_queue_create() {
         SDL_DestroyMutex(q->mutex);
         return NULL;
     }
-    queue->cleanup = av_free;
+    queue->cleanup = groove_queue_cleanup_default;
     return queue;
 }
 
@@ -52,7 +52,7 @@ void groove_queue_flush(GrooveQueue *queue) {
     for (el = q->first; el != NULL; el = el1) {
         el1 = el->next;
         if (queue->cleanup)
-            queue->cleanup(el->obj);
+            queue->cleanup(queue, el->obj);
         av_free(el);
     }
     q->first = NULL;
@@ -157,7 +157,7 @@ void groove_queue_purge(GrooveQueue *queue) {
             if (prev) {
                 prev->next = node->next;
                 if (queue->cleanup)
-                    queue->cleanup(node->obj);
+                    queue->cleanup(queue, node->obj);
                 av_free(node);
                 node = prev->next;
                 if (!node)
@@ -165,7 +165,7 @@ void groove_queue_purge(GrooveQueue *queue) {
             } else {
                 ItemList *next = node->next;
                 if (queue->cleanup)
-                    queue->cleanup(node->obj);
+                    queue->cleanup(queue, node->obj);
                 av_free(node);
                 q->first = next;
                 node = next;
@@ -179,3 +179,8 @@ void groove_queue_purge(GrooveQueue *queue) {
     }
     SDL_UnlockMutex(q->mutex);
 }
+
+void groove_queue_cleanup_default(GrooveQueue *queue, void *obj) {
+    av_free(obj);
+}
+

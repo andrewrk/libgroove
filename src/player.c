@@ -44,6 +44,14 @@ typedef struct GroovePlayerPrivate {
     int audioq_buf_count;
     int audioq_size;
     GrooveQueueItem *purge_item; // set temporarily
+    // this is used to tell sdl_audio_callback the difference between a buffer underrun
+    // and the end of the playlist.
+    TaggedFrame end_of_q_sentinel;
+    // only touched by sdl_audio_callback, tells whether we have reached end
+    // of audio queue naturally rather than a buffer underrun
+    int end_of_q;
+    // only touched by decode_thread, tells whether we have sent the end_of_q_sentinel
+    int sent_end_of_q;
 
     GrooveQueue *eventq;
 
@@ -65,6 +73,8 @@ static void audioq_put(GrooveQueue *queue, void *obj) {
     TaggedFrame *tf = obj;
     GroovePlayer *player = queue->context;
     GroovePlayerPrivate *p = player->internals;
+    if (tf == &p->end_of_q_sentinel)
+        return;
     p->audioq_buf_count += 1;
     p->audioq_size += tf->frame->linesize[0];
 }
@@ -73,12 +83,18 @@ static void audioq_get(GrooveQueue *queue, void *obj) {
     TaggedFrame *tf = obj;
     GroovePlayer *player = queue->context;
     GroovePlayerPrivate *p = player->internals;
+    if (tf == &p->end_of_q_sentinel)
+        return;
     p->audioq_buf_count -= 1;
     p->audioq_size -= tf->frame->linesize[0];
 }
 
-static void audioq_cleanup(void *obj) {
+static void audioq_cleanup(GrooveQueue *queue, void *obj) {
     TaggedFrame *tf = obj;
+    GroovePlayer *player = queue->context;
+    GroovePlayerPrivate *p = player->internals;
+    if (tf == &p->end_of_q_sentinel)
+        return;
     av_frame_free(&tf->frame);
     av_free(tf);
 }
@@ -97,18 +113,14 @@ static int audioq_purge(GrooveQueue *queue, void *obj) {
     return tf->item == p->purge_item;
 }
 
-static void emit_nowplaying(GrooveQueue *queue, GrooveQueueItem *old_item,
-        GrooveQueueItem *new_item)
-{
+static void emit_event(GrooveQueue *queue, enum GroovePlayerEventType type) {
     // put an event on the queue
-    GroovePlayerEventNowPlaying *evt = av_malloc(sizeof(GroovePlayerEventNowPlaying));
+    GroovePlayerEvent *evt = av_malloc(sizeof(GroovePlayerEvent));
     if (!evt) {
         av_log(NULL, AV_LOG_WARNING, "unable to create event: out of memory\n");
         return;
     }
-    evt->type = GROOVE_PLAYER_EVENT_NOWPLAYING;
-    evt->old_item = old_item;
-    evt->new_item = new_item;
+    evt->type = type;
     if (groove_queue_put(queue, evt) < 0)
         av_log(NULL, AV_LOG_WARNING, "unable to put event on queue: out of memory\n");
 }
@@ -132,16 +144,20 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
 
             if (groove_queue_get(p->audioq, (void**)&tf, 0) > 0) {
                 if (tf->item != p->play_head)
-                    emit_nowplaying(p->eventq, p->play_head, tf->item);
-                p->audio_buf = tf->frame;
-                p->play_head = tf->item;
-                p->play_pos = tf->pos;
-                p->audio_buf_size = p->audio_buf->linesize[0];
-            } else if (p->play_head) {
-                // either a buffer underrun or the end of the playlist.
-                emit_nowplaying(p->eventq, p->play_head, NULL);
-                p->play_head = NULL;
-                p->play_pos = -1.0;
+                    emit_event(p->eventq, GROOVE_PLAYER_EVENT_NOWPLAYING);
+                if (tf == &p->end_of_q_sentinel) {
+                    p->end_of_q = 1;
+                    p->play_head = NULL;
+                    p->play_pos = -1.0;
+                } else {
+                    p->end_of_q = 0;
+                    p->play_head = tf->item;
+                    p->audio_buf = tf->frame;
+                    p->play_pos = tf->pos;
+                    p->audio_buf_size = p->audio_buf->linesize[0];
+                }
+            } else if (!p->end_of_q) {
+                emit_event(p->eventq, GROOVE_PLAYER_EVENT_BUFFERUNDERRUN);
             }
         }
         if (paused || !p->audio_buf) {
@@ -188,6 +204,9 @@ static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     }
     tf->frame = frame;
     tf->item = p->decode_head;
+    GrooveFile *file = p->decode_head->file;
+    GrooveFilePrivate *f = file->internals;
+    tf->pos = f->audio_clock;
     if (groove_queue_put(p->audioq, tf) < 0) {
         av_free(tf);
         av_log(NULL, AV_LOG_ERROR, "error allocating buffer queue item: out of memory\n");
@@ -206,10 +225,15 @@ static int decode_thread(void *arg) {
 
         // if we don't have anything to decode, wait until we do
         if (!p->decode_head) {
+            if (!p->sent_end_of_q) {
+                groove_queue_put(p->audioq, &p->end_of_q_sentinel);
+                p->sent_end_of_q = 1;
+            }
             SDL_UnlockMutex(p->decode_head_mutex);
             SDL_Delay(EMPTY_PLAYLIST_DELAY);
             continue;
         }
+        p->sent_end_of_q = 0;
 
         // if the queue is full, no need to read more
         if (p->audioq_size > MIN_AUDIOQ_SIZE) {
@@ -448,6 +472,7 @@ void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item) {
 
     if (p->play_head == item) {
         p->play_head = NULL;
+        p->play_pos = -1.0;
         av_frame_free(&p->audio_buf);
         p->audio_buf_index = 0;
         p->audio_buf_size = 0;

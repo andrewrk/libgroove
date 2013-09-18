@@ -88,18 +88,15 @@ typedef struct GroovePlayer {
 } GroovePlayer;
 
 enum GroovePlayerEventType {
-    GROOVE_PLAYER_EVENT_NOWPLAYING, // when the currently playing track changes.
-};
+    // when the currently playing track changes.
+    GROOVE_PLAYER_EVENT_NOWPLAYING,
 
-typedef struct GroovePlayerEventNowPlaying {
-    enum GroovePlayerEventType type; // always GROOVE_PLAYER_EVENT_NOWPLAYING
-    GrooveQueueItem * old_item; // previous item that was playing. can be NULL
-    GrooveQueueItem * new_item; // the item which is now playing. can be NULL
-} GroovePlayerEventNowPlaying;
+    // when the audio device tries to read from an empty buffer
+    GROOVE_PLAYER_EVENT_BUFFERUNDERRUN,
+};
 
 typedef union GroovePlayerEvent {
     enum GroovePlayerEventType type;
-    GroovePlayerEventNowPlaying now_playing;
 } GroovePlayerEvent;
 
 // you may not create two simultaneous players on the same device
@@ -122,7 +119,7 @@ void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item);
 
 // get the position of the playhead
 // both the current queue item and the position in seconds in the queue
-// item are given.
+// item are given. item will be set to NULL if the queue is empty
 void groove_player_position(GroovePlayer *player, GrooveQueueItem **item, double *seconds);
 
 // return 1 if the player is playing; 0 if it is not.
