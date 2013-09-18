@@ -6,8 +6,6 @@ extern "C"
 {
 #endif /* __cplusplus */
 
-#include <stdint.h>
-
 /************* global *************/
 // call once at the beginning of your program
 int groove_init();
@@ -22,7 +20,9 @@ void groove_set_logging(int level);
 /************* GrooveFile *************/
 typedef struct GrooveFile {
     int dirty; // read-only
-    void * internals;
+    char *filename; // read-only
+
+    void *internals; // hands off
 } GrooveFile;
 
 // flags to groove_file_metadata_*
@@ -41,8 +41,6 @@ const char * groove_tag_value(GrooveTag *tag);
 // you are always responsible for calling groove_close on the returned GrooveFile.
 GrooveFile * groove_open(char* filename);
 void groove_close(GrooveFile * file);
-
-char * groove_file_filename(GrooveFile *file);
 
 GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags);

@@ -1,4 +1,0 @@
-* make it obey replaygain tags
-* live encoding
-* poll/wait events for player
-* make sure no symbols are leaking out

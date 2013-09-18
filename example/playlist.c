@@ -53,7 +53,7 @@ int main(int argc, char * argv[]) {
                 printf("Now playing: %s - %s\n", groove_tag_value(artist_tag),
                         groove_tag_value(title_tag));
             } else {
-                printf("Now playing: %s\n", groove_file_filename(item->file));
+                printf("Now playing: %s\n", item->file->filename);
             }
             break;
         }

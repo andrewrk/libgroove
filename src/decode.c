@@ -405,6 +405,7 @@ GrooveFile * groove_open(char* filename) {
         av_log(NULL, AV_LOG_ERROR, "error creating format context: out of memory\n");
         return NULL;
     }
+    file->filename = f->ic->filename;
     f->ic->interrupt_callback.callback = decode_interrupt_cb;
     f->ic->interrupt_callback.opaque = file;
     int err = avformat_open_input(&f->ic, filename, NULL, NULL);
@@ -505,11 +506,6 @@ void groove_close(GrooveFile * file) {
 
 void groove_set_logging(int level) {
     av_log_set_level(level);
-}
-
-char * groove_file_filename(GrooveFile *file) {
-    GrooveFilePrivate * f = file->internals;
-    return f->ic->filename;
 }
 
 const char * groove_file_short_names(GrooveFile *file) {
