@@ -70,10 +70,10 @@ enum GrooveReplayGainMode {
 };
 
 typedef struct GroovePlaylistItem {
-    struct GroovePlaylistItem * prev;
-    GrooveFile * file;
-    enum GrooveReplayGainMode replaygain_mode;
-    struct GroovePlaylistItem * next;
+    struct GroovePlaylistItem * prev; // read-only
+    GrooveFile * file; // read-only
+    enum GrooveReplayGainMode replaygain_mode; // read-only
+    struct GroovePlaylistItem * next; // read-only
 } GroovePlaylistItem;
 
 typedef struct GroovePlayer {
@@ -144,13 +144,16 @@ void groove_player_set_replaygain_mode(GroovePlayer *player, GroovePlaylistItem 
 // this value is applied when replaygain is on to make headroom for replaygain
 // adjustments.
 void groove_player_set_replaygain_preamp(GroovePlayer *player, double preamp);
+double groove_player_get_replaygain_preamp(GroovePlayer *player);
 
 // value is in float format. defaults to 0.25
 // this is the replaygain value that is used if tags are missing.
 void groove_player_set_replaygain_default(GroovePlayer *player, double value);
+double groove_player_get_replaygain_default(GroovePlayer *player);
 
 // value is in float format. defaults to 1.0
 void groove_player_set_volume(GroovePlayer *player, double volume);
+double groove_player_get_volume(GroovePlayer *player);
 
 // returns < 0 on error
 int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);

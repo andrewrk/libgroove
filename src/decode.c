@@ -366,7 +366,6 @@ int groove_init_decode_ctx(GrooveDecodeContext *decode_ctx) {
     decode_ctx->volume = 1.0;
     decode_ctx->replaygain_preamp = 0.75;
     decode_ctx->replaygain_default = 0.25;
-    decode_ctx->replaygain_mode = GROOVE_REPLAYGAINMODE_ALBUM;
     return 0;
 }
 

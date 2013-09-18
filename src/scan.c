@@ -127,6 +127,9 @@ static int replaygain_scan(GrooveReplayGainScan *scan, FileListItem *item) {
         return -1;
     }
 
+    GrooveFilePrivate *f = file->internals;
+    f->seek_pos = 0;
+    f->seek_flush = 1;
     GrooveDecodeContext *decode_ctx = &s->decode_ctx;
     while (groove_decode(decode_ctx, file) >= 0) {}
     groove_close(file);
