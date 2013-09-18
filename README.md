@@ -5,7 +5,7 @@ Music player backend library.
 ## Features
 
  * Robust. Uses [libav](http://www.libav.org/) for decoding and encoding.
-   - [list of supported formats](https://github.com/superjoe30/libgroove/wiki/Supported-File-Formats)
+   - [list of supported formats](http://www.libav.org/general.html#toc-Supported-File-Formats-and-Codecs)
  * Add and remove entries on a playlist for gapless playback.
  * Supports pause, play, stop, and seek.
  * Read and write metadata tags for every format.
@@ -15,7 +15,6 @@ Music player backend library.
 
 ## Roadmap
 
- * Fix race conditions / flesh out playlist management API
  * Ability to keep a buffer filled with encoded audio.
    - This could be used for example for an HTTP streaming server.
 
