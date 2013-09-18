@@ -11,15 +11,9 @@
 // to clear the buffer.
 #define SDL_AUDIO_BUFFER_SIZE 1024
 
-// How many bytes to decode before telling the decode thread to sleep rather
-// than decode more. Since we usually output 16-bit 44100hz stereo to the
-// audio device, 44100 * 2 * 2 would be one second.
-// Note that when the queue is full, we call SDL_Delay(QUEUE_FULL_DELAY)
-// so make sure that the delay finishes well before the queue runs out.
-// QUEUE_FULL_DELAY is in milliseconds.
-// TODO this should be dynamically computed at run time based on the specs
-// we get from the audio device
-#define MIN_AUDIOQ_SIZE (44100 * 2 * 2 / 4)
+// If there is at least this many milliseconds of buffered audio in the queue,
+// the decode thread will sleep for QUEUE_FULL_DELAY rather than decoding more.
+#define AUDIOQ_BUF_SIZE 200
 #define QUEUE_FULL_DELAY 10
 // How many ms to wait to check whether anything is added to the playlist yet.
 #define EMPTY_PLAYLIST_DELAY 1
@@ -43,6 +37,7 @@ typedef struct GroovePlayerPrivate {
     GrooveQueue *audioq;
     int audioq_buf_count;
     int audioq_size;
+    int min_audioq_size;
     GroovePlaylistItem *purge_item; // set temporarily
     // this is used to tell sdl_audio_callback the difference between a buffer underrun
     // and the end of the playlist.
@@ -236,7 +231,7 @@ static int decode_thread(void *arg) {
         p->sent_end_of_q = 0;
 
         // if the queue is full, no need to read more
-        if (p->audioq_size > MIN_AUDIOQ_SIZE) {
+        if (p->audioq_size > p->min_audioq_size) {
             SDL_UnlockMutex(p->decode_head_mutex);
             SDL_Delay(QUEUE_FULL_DELAY);
             continue;
@@ -330,6 +325,9 @@ GroovePlayer * groove_create_player() {
         groove_destroy_player(player);
         return NULL;
     };
+    p->min_audioq_size = AUDIOQ_BUF_SIZE * p->decode_ctx.dest_bytes_per_sec / 1000;
+    av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", p->min_audioq_size);
+
 
     p->audio_buf_size  = 0;
     p->audio_buf_index = 0;
