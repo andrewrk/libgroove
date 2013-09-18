@@ -69,18 +69,17 @@ enum GrooveReplayGainMode {
     GROOVE_REPLAYGAINMODE_ALBUM,
 };
 
-// TODO rename Queue to Playlist
-typedef struct GrooveQueueItem {
-    struct GrooveQueueItem * prev;
+typedef struct GroovePlaylistItem {
+    struct GroovePlaylistItem * prev;
     GrooveFile * file;
     enum GrooveReplayGainMode replaygain_mode;
-    struct GrooveQueueItem * next;
-} GrooveQueueItem;
+    struct GroovePlaylistItem * next;
+} GroovePlaylistItem;
 
 typedef struct GroovePlayer {
-    // read-only - doubly linked list which is the queue
-    GrooveQueueItem * queue_head;
-    GrooveQueueItem * queue_tail;
+    // read-only - doubly linked list which is the playlist
+    GroovePlaylistItem * playlist_head;
+    GroovePlaylistItem * playlist_tail;
 
     void * internals; // don't touch this
 } GroovePlayer;
@@ -105,40 +104,40 @@ void groove_destroy_player(GroovePlayer *player);
 void groove_player_play(GroovePlayer *player);
 void groove_player_pause(GroovePlayer *player);
 
-void groove_player_seek(GroovePlayer *player, GrooveQueueItem *item, double seconds);
+void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double seconds);
 
-// once you add a file to the queue, you must not destroy it until you first
-// remove it from the queue.
-// next: the item you will insert before. if it is NULL, you will append to the queue.
-// returns the newly created queue item.
-GrooveQueueItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
-        GrooveQueueItem *next);
+// once you add a file to the playlist, you must not destroy it until you first
+// remove it from the playlist.
+// next: the item you will insert before. if it is NULL, you will append to the playlist.
+// returns the newly created playlist item.
+GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
+        GroovePlaylistItem *next);
 
 // this will not call groove_close on item->file !
 // item is destroyed and the address it points to is no longer valid
-void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item);
+void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item);
 
 // get the position of the playhead
-// both the current queue item and the position in seconds in the queue
-// item are given. item will be set to NULL if the queue is empty
+// both the current playlist item and the position in seconds in the playlist
+// item are given. item will be set to NULL if the playlist is empty
 // you may pass NULL for item or seconds
-void groove_player_position(GroovePlayer *player, GrooveQueueItem **item, double *seconds);
+void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item, double *seconds);
 
 // return 1 if the player is playing; 0 if it is not.
 int groove_player_playing(GroovePlayer *player);
 
 
-// remove all queue items
+// remove all playlist items
 void groove_player_clear(GroovePlayer *player);
 
-// return the count of queue items
+// return the count of playlist items
 int groove_player_count(GroovePlayer *player);
 
 // default value: GROOVE_REPLAYGAINMODE_ALBUM
-// this method sets the replaygain mode on a queue item so that the volume is
+// this method sets the replaygain mode on a playlist item so that the volume is
 // seamlessly updated at exactly the right time when the player progresses to
-// the item on the queue.
-void groove_player_set_replaygain_mode(GroovePlayer *player, GrooveQueueItem *item,
+// the item on the playlist.
+void groove_player_set_replaygain_mode(GroovePlayer *player, GroovePlaylistItem *item,
         enum GrooveReplayGainMode mode);
 
 // value is in float format. defaults to 0.75

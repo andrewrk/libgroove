@@ -25,7 +25,7 @@ int main(int argc, char * argv[]) {
     groove_player_play(player);
 
     GroovePlayerEvent event;
-    GrooveQueueItem *item;
+    GroovePlaylistItem *item;
     double pos;
     while (groove_player_event_wait(player, &event) >= 0) {
         switch (event.type) {
@@ -36,10 +36,10 @@ int main(int argc, char * argv[]) {
             groove_player_position(player, &item, &pos);
             if (!item) {
                 printf("done\n");
-                item = player->queue_head;
+                item = player->playlist_head;
                 while (item) {
                     GrooveFile *file = item->file;
-                    GrooveQueueItem *next = item->next;
+                    GroovePlaylistItem *next = item->next;
                     groove_player_remove(player, item);
                     groove_close(file);
                     item = next;

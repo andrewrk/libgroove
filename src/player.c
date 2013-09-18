@@ -26,7 +26,7 @@
 
 typedef struct TaggedFrame {
     AVFrame *frame;
-    GrooveQueueItem *item;
+    GroovePlaylistItem *item;
     double pos;
 } TaggedFrame;
 
@@ -43,7 +43,7 @@ typedef struct GroovePlayerPrivate {
     GrooveQueue *audioq;
     int audioq_buf_count;
     int audioq_size;
-    GrooveQueueItem *purge_item; // set temporarily
+    GroovePlaylistItem *purge_item; // set temporarily
     // this is used to tell sdl_audio_callback the difference between a buffer underrun
     // and the end of the playlist.
     TaggedFrame end_of_q_sentinel;
@@ -58,12 +58,12 @@ typedef struct GroovePlayerPrivate {
     // this mutex applies to the variables in this block
     SDL_mutex *decode_head_mutex;
     // pointer to current playlist item being decoded
-    GrooveQueueItem *decode_head;
+    GroovePlaylistItem *decode_head;
 
     // this mutex applies to the variables in this block
     SDL_mutex *play_head_mutex;
     // pointer to current item where the buffered audio is reaching the device
-    GrooveQueueItem *play_head;
+    GroovePlaylistItem *play_head;
     // number of seconds into the play_head song where the buffered audio
     // is reaching the device
     double play_pos;
@@ -394,7 +394,7 @@ void groove_player_pause(GroovePlayer *player) {
     p->decode_ctx.paused = 1;
 }
 
-void groove_player_seek(GroovePlayer *player, GrooveQueueItem *item, double seconds) {
+void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double seconds) {
     GrooveFile * file = item->file;
     GrooveFilePrivate * f = file->internals;
 
@@ -415,10 +415,10 @@ void groove_player_seek(GroovePlayer *player, GrooveQueueItem *item, double seco
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-GrooveQueueItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
-        GrooveQueueItem *next)
+GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
+        GroovePlaylistItem *next)
 {
-    GrooveQueueItem * item = av_mallocz(sizeof(GrooveQueueItem));
+    GroovePlaylistItem * item = av_mallocz(sizeof(GroovePlaylistItem));
     if (!item)
         return NULL;
 
@@ -437,24 +437,24 @@ GrooveQueueItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
             item->prev->next = item;
             next->prev = item;
         } else {
-            player->queue_head = item;
+            player->playlist_head = item;
         }
-    } else if (!player->queue_head) {
-        player->queue_head = item;
-        player->queue_tail = item;
+    } else if (!player->playlist_head) {
+        player->playlist_head = item;
+        player->playlist_tail = item;
 
-        p->decode_head = player->queue_head;
+        p->decode_head = player->playlist_head;
     } else {
-        item->prev = player->queue_tail;
-        player->queue_tail->next = item;
-        player->queue_tail = item;
+        item->prev = player->playlist_tail;
+        player->playlist_tail->next = item;
+        player->playlist_tail = item;
     }
 
     SDL_UnlockMutex(p->decode_head_mutex);
     return item;
 }
 
-void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item) {
+void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item) {
     GroovePlayerPrivate *p = player->internals;
     GrooveFile *file = item->file;
     GrooveFilePrivate *f = file->internals;
@@ -472,12 +472,12 @@ void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item) {
     if (item->prev) {
         item->prev->next = item->next;
     } else {
-        player->queue_head = item->next;
+        player->playlist_head = item->next;
     }
     if (item->next) {
         item->next->prev = item->prev;
     } else {
-        player->queue_tail = item->prev;
+        player->playlist_tail = item->prev;
     }
 
     // we must be absolutely sure to purge the audio buffer queue
@@ -501,7 +501,7 @@ void groove_player_remove(GroovePlayer *player, GrooveQueueItem *item) {
 }
 
 void groove_player_clear(GroovePlayer *player) {
-    GrooveQueueItem * node = player->queue_head;
+    GroovePlaylistItem * node = player->playlist_head;
     if (!node) return;
     while (node) {
         groove_player_remove(player, node);
@@ -510,7 +510,7 @@ void groove_player_clear(GroovePlayer *player) {
 }
 
 int groove_player_count(GroovePlayer *player) {
-    GrooveQueueItem * node = player->queue_head;
+    GroovePlaylistItem * node = player->playlist_head;
     int count = 0;
     while (node) {
         count += 1;
@@ -519,7 +519,7 @@ int groove_player_count(GroovePlayer *player) {
     return count;
 }
 
-void groove_player_set_replaygain_mode(GroovePlayer *player, GrooveQueueItem *item,
+void groove_player_set_replaygain_mode(GroovePlayer *player, GroovePlaylistItem *item,
         enum GrooveReplayGainMode mode)
 {
 
@@ -545,7 +545,7 @@ int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event) {
     return get_event(player, event, 1);
 }
 
-void groove_player_position(GroovePlayer *player, GrooveQueueItem **item, double *seconds) {
+void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item, double *seconds) {
     GroovePlayerPrivate *p = player->internals;
 
     SDL_LockMutex(p->play_head_mutex);
