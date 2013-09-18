@@ -398,7 +398,7 @@ void groove_player_seek(GroovePlayer *player, GrooveQueueItem *item, double seco
     GrooveFile * file = item->file;
     GrooveFilePrivate * f = file->internals;
 
-    int64_t ts = seconds * av_q2d(f->audio_st->time_base);
+    int64_t ts = seconds * f->audio_st->time_base.den / f->audio_st->time_base.num;
     if (f->ic->start_time != AV_NOPTS_VALUE)
         ts += f->ic->start_time;
 
