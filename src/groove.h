@@ -109,7 +109,10 @@ void groove_player_seek(GroovePlayer *player, GrooveQueueItem *item, double seco
 
 // once you add a file to the queue, you must not destroy it until you first
 // remove it from the queue.
-GrooveQueueItem * groove_player_queue(GroovePlayer *player, GrooveFile *file);
+// next: the item you will insert before. if it is NULL, you will append to the queue.
+// returns the newly created queue item.
+GrooveQueueItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
+        GrooveQueueItem *next);
 
 // this will not call groove_close on item->file !
 // item is destroyed and the address it points to is no longer valid

@@ -415,21 +415,37 @@ void groove_player_seek(GroovePlayer *player, GrooveQueueItem *item, double seco
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-GrooveQueueItem * groove_player_queue(GroovePlayer *player, GrooveFile *file) {
-    GroovePlayerPrivate *p = player->internals;
+GrooveQueueItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
+        GrooveQueueItem *next)
+{
     GrooveQueueItem * item = av_mallocz(sizeof(GrooveQueueItem));
+    if (!item)
+        return NULL;
+
     item->file = file;
+    item->next = next;
+
+    GroovePlayerPrivate *p = player->internals;
 
     // lock decode_head_mutex so that decode_head cannot point to a new item
     // while we're screwing around with the queue
     SDL_LockMutex(p->decode_head_mutex);
 
-    if (!player->queue_head) {
+    if (next) {
+        if (next->prev) {
+            item->prev = next->prev;
+            item->prev->next = item;
+            next->prev = item;
+        } else {
+            player->queue_head = item;
+        }
+    } else if (!player->queue_head) {
         player->queue_head = item;
         player->queue_tail = item;
 
         p->decode_head = player->queue_head;
     } else {
+        item->prev = player->queue_tail;
         player->queue_tail->next = item;
         player->queue_tail = item;
     }

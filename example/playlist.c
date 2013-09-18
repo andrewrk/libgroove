@@ -20,7 +20,7 @@ int main(int argc, char * argv[]) {
             fprintf(stderr, "Not queuing %s\n", filename);
             continue;
         }
-        groove_player_queue(player, file);
+        groove_player_insert(player, file, NULL);
     }
     groove_player_play(player);
 
