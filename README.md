@@ -59,3 +59,5 @@ Feel free to make a pull request adding yours to this list.
 
  * [TrenchBowl](https://github.com/superjoe30/TrenchBowl) - a simple Qt GUI
    on top of libgroove.
+ * [node-groove](https://github.com/superjoe30/node-groove) -
+   [Node.js](http://nodejs.org/) bindings to libgroove.
