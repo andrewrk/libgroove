@@ -14,6 +14,8 @@ VERSION_PATCH = 0
 GROOVE_SO_NAME = libgroove.so.$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
 GROOVE_SO_SRC = src/groove.so
 GROOVE_SO_DEST = $(PREFIX)/lib/$(GROOVE_SO_NAME)
+GROOVE_A_SRC = src/libgroove.a
+GROOVE_A_DEST = $(PREFIX)/lib/libgroove.a
 
 # for compiling groove
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
@@ -22,15 +24,23 @@ STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
 LDLIBS = -lSDL -lbz2 -lz -lm -pthread
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
+O_FILES = src/scan.o src/decode.o src/player.o src/queue.o
+
 # for compiling examples
 EX_CFLAGS = -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
 EX_LDLIBS = -lgroove
 EX_LDFLAGS =
 
-.PHONY: examples clean distclean install uninstall install-examples uninstall-examples
+.PHONY: examples libs clean distclean install uninstall install-examples uninstall-examples
 
-$(GROOVE_SO_SRC): src/scan.o src/decode.o src/player.o src/queue.o $(EBUR128_DEP)
-	$(CC) $(LDFLAGS) -o $(GROOVE_SO_SRC) src/scan.o src/decode.o src/player.o src/queue.o $(STATIC_LIBS) $(LDLIBS)
+libs: $(GROOVE_SO_SRC) $(GROOVE_A_SRC)
+
+
+$(GROOVE_A_SRC): $(O_FILES)
+	ar rcs $(GROOVE_A_SRC) $(O_FILES)
+
+$(GROOVE_SO_SRC): $(O_FILES) $(EBUR128_DEP)
+	$(CC) $(LDFLAGS) -o $(GROOVE_SO_SRC) $(O_FILES) $(STATIC_LIBS) $(LDLIBS)
 
 src/decode.o: src/decode.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
@@ -81,8 +91,9 @@ distclean: clean
 	rm -rf $(LIBAV_PREFIX) $(EBUR128_PREFIX)
 	cd $(LIBAV_SRC) && $(MAKE) distclean
 
-install: $(GROOVE_SO_SRC) src/groove.h
+install: $(GROOVE_SO_SRC) $(GROOVE_A_SRC) src/groove.h
 	install -m 0755 $(GROOVE_SO_SRC) $(GROOVE_SO_DEST)
+	install -m 0755 $(GROOVE_A_SRC) $(GROOVE_A_DEST)
 	install -m 0644 src/groove.h $(PREFIX)/include
 	rm -f $(PREFIX)/lib/libgroove.so
 	ln -s $(GROOVE_SO_DEST) $(PREFIX)/lib/libgroove.so
@@ -90,6 +101,7 @@ install: $(GROOVE_SO_SRC) src/groove.h
 
 uninstall:
 	rm -f $(PREFIX)/lib/libgroove.so*
+	rm -f $(PREFIX)/lib/libgroove.a*
 	rm -f $(PREFIX)/include/groove.h
 
 install-examples: examples
