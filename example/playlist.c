@@ -1,4 +1,4 @@
-/* use groove to play several files in a row and then exit */
+/* play several files in a row and then exit */
 
 #include "groove.h"
 #include <stdio.h>

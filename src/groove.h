@@ -190,7 +190,8 @@ GrooveReplayGainScan * groove_create_replaygainscan();
 // filename is strdup'd. you may not call add after you call exec
 int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename);
 int groove_replaygainscan_exec(GrooveReplayGainScan *scan);
-// call this to abort a scan or if you never call exec
+// must be called to cleanup. If you call it during a scan it will cleanly abort
+// the scan.
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
 // returns < 0 on error
 int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event);

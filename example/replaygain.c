@@ -42,7 +42,7 @@ int main(int argc, char * argv[]) {
     }
 
     groove_init();
-    //groove_set_logging(GROOVE_LOG_INFO);
+    //groove_set_logging(GROOVE_LOG_WARNING);
     scan = groove_create_replaygainscan();
     if (!scan) {
         fprintf(stderr, "Unable to create replaygain scan\n");
