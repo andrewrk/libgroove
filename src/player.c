@@ -531,7 +531,7 @@ static int get_event(GroovePlayer *player, GroovePlayerEvent *event, int block) 
     GroovePlayerPrivate *p = player->internals;
     GroovePlayerEvent *tmp;
     int err = groove_queue_get(p->eventq, (void **)&tmp, block);
-    if (err >= 0) {
+    if (err > 0) {
         *event = *tmp;
         av_free(tmp);
     }
