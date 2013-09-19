@@ -409,11 +409,11 @@ static int get_event(GrooveReplayGainScan *scan, GrooveRgEvent *event, int block
     GrooveReplayGainScanPrivate *s = scan->internals;
     GrooveRgEvent *tmp;
     int err = groove_queue_get(s->eventq, (void **)&tmp, block);
-    if (err < 0)
-        return err;
-    *event = *tmp;
-    av_free(tmp);
-    return 0;
+    if (err >= 0) {
+        *event = *tmp;
+        av_free(tmp);
+    }
+    return err;
 }
 
 int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event) {

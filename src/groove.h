@@ -155,7 +155,7 @@ double groove_player_get_replaygain_default(GroovePlayer *player);
 void groove_player_set_volume(GroovePlayer *player, double volume);
 double groove_player_get_volume(GroovePlayer *player);
 
-// returns < 0 on error
+// returns < 0 on error, 0 on no event ready, 1 on got event
 int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);
 // returns < 0 on error
 int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event);
@@ -193,7 +193,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan);
 // must be called to cleanup. If you call it during a scan it will cleanly abort
 // the scan.
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
-// returns < 0 on error
+// returns < 0 on error, 0 on no event ready, 1 on got event
 int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event);
 // returns < 0 on error
 int groove_replaygainscan_event_wait(GrooveReplayGainScan *scan, GrooveRgEvent *event);
