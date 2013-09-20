@@ -5,6 +5,7 @@
 #include <libavutil/channel_layout.h>
 
 #include <SDL/SDL.h>
+#include <SDL/SDL_thread.h>
 
 static double dB_scale;
 
@@ -16,8 +17,30 @@ static void deinit_network() {
     avformat_network_deinit();
 }
 
+static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
+    if (mutex == NULL)
+        return -1;
+    switch (op) {
+        case AV_LOCK_CREATE:
+            *mutex = SDL_CreateMutex();
+            break;
+        case AV_LOCK_OBTAIN:
+            SDL_LockMutex(*mutex);
+            break;
+        case AV_LOCK_RELEASE:
+            SDL_UnlockMutex(*mutex);
+            break;
+        case AV_LOCK_DESTROY:
+            SDL_DestroyMutex(*mutex);
+            break;
+    }
+    return 0;
+}
+
 int groove_init() {
     dB_scale = log(10.0) * 0.05;
+
+    av_lockmgr_register(&my_lockmgr_cb);
 
     srand(time(NULL));
 
