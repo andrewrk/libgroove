@@ -90,15 +90,10 @@ static void audioq_cleanup(GrooveQueue *queue, void *obj) {
     GroovePlayerPrivate *p = player->internals;
     if (tf == &p->end_of_q_sentinel)
         return;
+    p->audioq_buf_count -= 1;
+    p->audioq_size -= tf->frame->linesize[0];
     av_frame_free(&tf->frame);
     av_free(tf);
-}
-
-static void audioq_flush(GrooveQueue *queue) {
-    GroovePlayer *player = queue->context;
-    GroovePlayerPrivate *p = player->internals;
-    p->audioq_buf_count = 0;
-    p->audioq_size = 0;
 }
 
 static int audioq_purge(GrooveQueue *queue, void *obj) {
@@ -242,6 +237,7 @@ static int decode_thread(void *arg) {
 
         p->decode_ctx.replaygain_mode = p->decode_head->replaygain_mode;
 
+
         SDL_LockMutex(f->seek_mutex);
         if (groove_decode(&p->decode_ctx, file) < 0) {
             p->decode_head = p->decode_head->next;
@@ -299,7 +295,6 @@ GroovePlayer * groove_create_player() {
     p->audioq->cleanup = audioq_cleanup;
     p->audioq->put = audioq_put;
     p->audioq->get = audioq_get;
-    p->audioq->flush = audioq_flush;
     p->audioq->purge = audioq_purge;
 
     SDL_AudioSpec wanted_spec, spec;

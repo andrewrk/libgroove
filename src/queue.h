@@ -4,7 +4,6 @@ typedef struct GrooveQueue {
     void (*cleanup)(struct GrooveQueue*, void *obj);
     void (*put)(struct GrooveQueue*, void *obj);
     void (*get)(struct GrooveQueue*, void *obj);
-    void (*flush)(struct GrooveQueue*);
     int (*purge)(struct GrooveQueue*, void *obj);
     void *internals;
 } GrooveQueue;

@@ -57,8 +57,6 @@ void groove_queue_flush(GrooveQueue *queue) {
     }
     q->first = NULL;
     q->last = NULL;
-    if (queue->flush)
-        queue->flush(queue);
     SDL_UnlockMutex(q->mutex);
 }
 
