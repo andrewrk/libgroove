@@ -4,19 +4,14 @@ Music player backend library.
 
 ## Features
 
- * Robust. Uses [libav](http://www.libav.org/) for decoding and encoding.
+ * Uses [libav](http://www.libav.org/) for robust decoding and encoding.
    - [list of supported formats](http://www.libav.org/general.html#toc-Supported-File-Formats-and-Codecs)
  * Add and remove entries on a playlist for gapless playback.
- * Supports pause, play, stop, and seek.
+ * Supports idempotent pause, play, and seek.
  * Read and write metadata tags for every format.
  * [EBU R 128](http://tech.ebu.ch/loudness) loudness scanning for every format.
    - add files to a batch job and monitor progress
  * Loudness compensation using ReplayGain tags during playback.
-
-## Roadmap
-
- * Ability to keep a buffer filled with encoded audio.
-   - This could be used for example for an HTTP streaming server.
 
 ## Dependencies
 
@@ -24,7 +19,7 @@ You will need these to compile libgroove. These are most likely in your
 distribution's package manager.
 
  * [libsdl1.2-dev](http://www.libsdl.org/)
- * [libbz2-dev](http://www.bzip.org/)
+ * [libbz2](http://www.bzip.org/)
  * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
 
