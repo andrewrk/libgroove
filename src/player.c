@@ -243,8 +243,18 @@ static int decode_thread(void *arg) {
         p->decode_ctx.replaygain_mode = p->decode_head->replaygain_mode;
 
         SDL_LockMutex(f->seek_mutex);
-        if (groove_decode(&p->decode_ctx, file) < 0)
+        if (groove_decode(&p->decode_ctx, file) < 0) {
             p->decode_head = p->decode_head->next;
+            // seek to beginning of next song
+            if (p->decode_head) {
+                GrooveFile *next_file = p->decode_head->file;
+                GrooveFilePrivate *next_f = next_file->internals;
+                SDL_LockMutex(next_f->seek_mutex);
+                next_f->seek_pos = 0;
+                next_f->seek_flush = 0;
+                SDL_UnlockMutex(next_f->seek_mutex);
+            }
+        }
         SDL_UnlockMutex(f->seek_mutex);
 
         SDL_UnlockMutex(p->decode_head_mutex);
@@ -464,7 +474,7 @@ void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item) {
     if (item == p->decode_head) {
         f->seek_pos = 0;
         f->seek_flush = 0;
-        p->decode_head = item->next ? item->next : item->prev;
+        p->decode_head = item->next;
     }
 
     if (item->prev) {
@@ -490,6 +500,7 @@ void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item) {
         av_frame_free(&p->audio_buf);
         p->audio_buf_index = 0;
         p->audio_buf_size = 0;
+        emit_event(p->eventq, GROOVE_PLAYER_EVENT_NOWPLAYING);
     }
 
     SDL_UnlockMutex(p->play_head_mutex);
