@@ -5,7 +5,7 @@ Music player backend library.
 ## Features
 
  * Uses [libav](http://www.libav.org/) for robust decoding and encoding.
-   - [list of supported formats](http://www.libav.org/general.html#toc-Supported-File-Formats-and-Codecs)
+   - [list of supported formats](http://www.libav.org/general.html#Supported-File-Formats-and-Codecs)
  * Add and remove entries on a playlist for gapless playback.
  * Supports idempotent pause, play, and seek.
  * Read and write metadata tags for every format.

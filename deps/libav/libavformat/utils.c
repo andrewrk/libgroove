@@ -266,7 +266,8 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
         }
 
         /* read probe data */
-        buf = av_realloc(buf, probe_size + AVPROBE_PADDING_SIZE);
+        if ((ret = av_reallocp(&buf, probe_size + AVPROBE_PADDING_SIZE)) < 0)
+            return ret;
         if ((ret = avio_read(pb, buf + buf_offset, probe_size - buf_offset)) < 0) {
             /* fail if error was not end of file, otherwise, lower score */
             if (ret != AVERROR_EOF) {
@@ -2372,7 +2373,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 double best_error = 0.01;
 
                 if (delta_dts     >= INT64_MAX / st->time_base.num ||
-                    delta_packets >= INT64_MAX / st->time_base.den)
+                    delta_packets >= INT64_MAX / st->time_base.den ||
+                    delta_dts < 0)
                     continue;
                 av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
                           delta_packets*(int64_t)st->time_base.den,

@@ -5143,6 +5143,9 @@ static void vc1_decode_skip_blocks(VC1Context *v)
 {
     MpegEncContext *s = &v->s;
 
+    if (!v->s.last_picture.f.data[0])
+        return;
+
     ff_er_add_slice(&s->er, 0, s->start_mb_y, s->mb_width - 1, s->end_mb_y - 1, ER_MB_END);
     s->first_slice_line = 1;
     for (s->mb_y = s->start_mb_y; s->mb_y < s->end_mb_y; s->mb_y++) {
@@ -5525,8 +5528,19 @@ av_cold int ff_vc1_decode_init_alloc_tables(VC1Context *v)
 
     if (!v->mv_type_mb_plane || !v->direct_mb_plane || !v->acpred_plane || !v->over_flags_plane ||
         !v->block || !v->cbp_base || !v->ttblk_base || !v->is_intra_base || !v->luma_mv_base ||
-        !v->mb_type_base)
-            return -1;
+        !v->mb_type_base) {
+        av_freep(&v->mv_type_mb_plane);
+        av_freep(&v->direct_mb_plane);
+        av_freep(&v->acpred_plane);
+        av_freep(&v->over_flags_plane);
+        av_freep(&v->block);
+        av_freep(&v->cbp_base);
+        av_freep(&v->ttblk_base);
+        av_freep(&v->is_intra_base);
+        av_freep(&v->luma_mv_base);
+        av_freep(&v->mb_type_base);
+        return AVERROR(ENOMEM);
+    }
 
     return 0;
 }
@@ -5866,8 +5880,12 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     if (!s->context_initialized) {
-        if (ff_msmpeg4_decode_init(avctx) < 0 || ff_vc1_decode_init_alloc_tables(v) < 0)
+        if (ff_msmpeg4_decode_init(avctx) < 0)
             goto err;
+        if (ff_vc1_decode_init_alloc_tables(v) < 0) {
+            ff_MPV_common_end(s);
+            goto err;
+        }
 
         s->low_delay = !avctx->has_b_frames || v->res_sprite;
 
@@ -5954,6 +5972,8 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
         if (avctx->hwaccel->end_frame(avctx) < 0)
             goto err;
     } else {
+        int header_ret = 0;
+
         ff_mpeg_er_frame_start(s);
 
         v->bits = buf_size * 8;
@@ -5991,18 +6011,24 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
             if (i) {
                 v->pic_header_flag = 0;
                 if (v->field_mode && i == n_slices1 + 2) {
-                    if (ff_vc1_parse_frame_header_adv(v, &s->gb) < 0) {
+                    if ((header_ret = ff_vc1_parse_frame_header_adv(v, &s->gb)) < 0) {
                         av_log(v->s.avctx, AV_LOG_ERROR, "Field header damaged\n");
+                        if (avctx->err_recognition & AV_EF_EXPLODE)
+                            goto err;
                         continue;
                     }
                 } else if (get_bits1(&s->gb)) {
                     v->pic_header_flag = 1;
-                    if (ff_vc1_parse_frame_header_adv(v, &s->gb) < 0) {
+                    if ((header_ret = ff_vc1_parse_frame_header_adv(v, &s->gb)) < 0) {
                         av_log(v->s.avctx, AV_LOG_ERROR, "Slice header damaged\n");
+                        if (avctx->err_recognition & AV_EF_EXPLODE)
+                            goto err;
                         continue;
                     }
                 }
             }
+            if (header_ret < 0)
+                continue;
             s->start_mb_y = (i == 0) ? 0 : FFMAX(0, slices[i-1].mby_start % mb_height);
             if (!v->field_mode || v->second_field)
                 s->end_mb_y = (i == n_slices     ) ? mb_height : FFMIN(mb_height, slices[i].mby_start % mb_height);
