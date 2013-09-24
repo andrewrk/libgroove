@@ -26,14 +26,13 @@ int main(int argc, char * argv[]) {
 
     GroovePlayerEvent event;
     GroovePlaylistItem *item;
-    double pos;
     while (groove_player_event_wait(player, &event) >= 0) {
         switch (event.type) {
         case GROOVE_PLAYER_EVENT_BUFFERUNDERRUN:
             printf("buffer underrun\n");
             break;
         case GROOVE_PLAYER_EVENT_NOWPLAYING:
-            groove_player_position(player, &item, &pos);
+            groove_player_position(player, &item, NULL);
             if (!item) {
                 printf("done\n");
                 item = player->playlist_head;

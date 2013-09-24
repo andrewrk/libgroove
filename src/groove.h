@@ -117,11 +117,17 @@ GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file
 // item is destroyed and the address it points to is no longer valid
 void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item);
 
-// get the position of the playhead
+// get the position of the play head
 // both the current playlist item and the position in seconds in the playlist
 // item are given. item will be set to NULL if the playlist is empty
 // you may pass NULL for item or seconds
 void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item, double *seconds);
+
+// get the position of the decode head
+// this is typically 200ms ahead of the playhead due to buffering
+// same API as groove_player_position
+void groove_player_decode_position(GroovePlayer *player, GroovePlaylistItem **item,
+        double *seconds);
 
 // return 1 if the player is playing; 0 if it is not.
 int groove_player_playing(GroovePlayer *player);

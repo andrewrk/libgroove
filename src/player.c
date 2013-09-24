@@ -552,6 +552,23 @@ int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event) {
     return get_event(player, event, 1);
 }
 
+void groove_player_decode_position(GroovePlayer *player, GroovePlaylistItem **item,
+        double *seconds)
+{
+    GroovePlayerPrivate *p = player->internals;
+
+    SDL_LockMutex(p->decode_head_mutex);
+    if (item)
+        *item = p->decode_head;
+
+    if (seconds && p->decode_head) {
+        GrooveFile *file = p->decode_head->file;
+        GrooveFilePrivate * f = file->internals;
+        *seconds = f->audio_clock;
+    }
+    SDL_UnlockMutex(p->decode_head_mutex);
+}
+
 void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item, double *seconds) {
     GroovePlayerPrivate *p = player->internals;
 
