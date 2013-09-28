@@ -62,6 +62,12 @@ int groove_init() {
     return 0;
 }
 
+static int frame_size(const AVFrame *frame) {
+    return av_get_channel_layout_nb_channels(frame->channel_layout) *
+        av_get_bytes_per_sample(frame->format) *
+        frame->nb_samples;
+}
+
 // decode one audio packet and return its uncompressed size
 static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate * f = file->internals;
@@ -122,7 +128,7 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
                 av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
                 return -1;
             }
-            data_size += oframe->linesize[0];
+            data_size += frame_size(oframe);
             err = decode_ctx->buffer(decode_ctx, oframe);
             if (err < 0)
                 return err;

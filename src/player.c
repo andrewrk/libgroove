@@ -64,6 +64,12 @@ typedef struct GroovePlayerPrivate {
     double play_pos;
 } GroovePlayerPrivate;
 
+static int frame_size(const AVFrame *frame) {
+    return av_get_channel_layout_nb_channels(frame->channel_layout) *
+        av_get_bytes_per_sample(frame->format) *
+        frame->nb_samples;
+}
+
 static void audioq_put(GrooveQueue *queue, void *obj) {
     TaggedFrame *tf = obj;
     GroovePlayer *player = queue->context;
@@ -71,7 +77,7 @@ static void audioq_put(GrooveQueue *queue, void *obj) {
     if (tf == &p->end_of_q_sentinel)
         return;
     p->audioq_buf_count += 1;
-    p->audioq_size += tf->frame->linesize[0];
+    p->audioq_size += frame_size(tf->frame);
 }
 
 static void audioq_get(GrooveQueue *queue, void *obj) {
@@ -81,7 +87,7 @@ static void audioq_get(GrooveQueue *queue, void *obj) {
     if (tf == &p->end_of_q_sentinel)
         return;
     p->audioq_buf_count -= 1;
-    p->audioq_size -= tf->frame->linesize[0];
+    p->audioq_size -= frame_size(tf->frame);
 }
 
 static void audioq_cleanup(GrooveQueue *queue, void *obj) {
@@ -91,7 +97,7 @@ static void audioq_cleanup(GrooveQueue *queue, void *obj) {
     if (tf == &p->end_of_q_sentinel)
         return;
     p->audioq_buf_count -= 1;
-    p->audioq_size -= tf->frame->linesize[0];
+    p->audioq_size -= frame_size(tf->frame);
     av_frame_free(&tf->frame);
     av_free(tf);
 }
@@ -144,7 +150,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
                     p->play_head = tf->item;
                     p->audio_buf = tf->frame;
                     p->play_pos = tf->pos;
-                    p->audio_buf_size = p->audio_buf->linesize[0];
+                    p->audio_buf_size = frame_size(p->audio_buf);
                 }
             } else if (!p->end_of_q) {
                 emit_event(p->eventq, GROOVE_PLAYER_EVENT_BUFFERUNDERRUN);

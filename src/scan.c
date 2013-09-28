@@ -332,8 +332,7 @@ static int scan_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     GrooveReplayGainScanPrivate *s = scan->internals;
 
     ebur128_state *st = s->ebur_states[s->next_ebur_state_index];
-    size_t frame_count = frame->linesize[0] / sizeof(double) / 2;
-    ebur128_add_frames_double(st, (double*)frame->data[0], frame_count);
+    ebur128_add_frames_double(st, (double*)frame->data[0], frame->nb_samples);
 
     av_frame_free(&frame);
     return 0;
