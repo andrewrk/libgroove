@@ -106,6 +106,33 @@ int groove_queue_put(GrooveQueue *queue, void *obj) {
     return 0;
 }
 
+int groove_queue_peek(GrooveQueue *queue, int block) {
+    int ret;
+
+    GrooveQueuePrivate *q = queue->internals;
+    SDL_LockMutex(q->mutex);
+
+    for (;;) {
+        if (q->abort_request) {
+            ret = -1;
+            break;
+        }
+
+        if (q->first) {
+            ret = 1;
+            break;
+        } else if (!block) {
+            ret = 0;
+            break;
+        } else {
+            SDL_CondWait(q->cond, q->mutex);
+        }
+    }
+
+    SDL_UnlockMutex(q->mutex);
+    return ret;
+}
+
 int groove_queue_get(GrooveQueue *queue, void **obj_ptr, int block) {
     ItemList *ev1;
     int ret;

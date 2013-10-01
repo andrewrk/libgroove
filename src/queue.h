@@ -20,6 +20,8 @@ int groove_queue_put(GrooveQueue *queue, void *obj);
 
 int groove_queue_get(GrooveQueue *queue, void **obj_ptr, int block);
 
+int groove_queue_peek(GrooveQueue *queue, int block);
+
 void groove_queue_purge(GrooveQueue *queue);
 
 void groove_queue_cleanup_default(GrooveQueue *queue, void *obj);

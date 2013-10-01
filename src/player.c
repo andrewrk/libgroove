@@ -558,6 +558,11 @@ int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event) {
     return get_event(player, event, 1);
 }
 
+int groove_player_event_peek(GroovePlayer *player, int block) {
+    GroovePlayerPrivate *p = player->internals;
+    return groove_queue_peek(p->eventq, block);
+}
+
 void groove_player_decode_position(GroovePlayer *player, GroovePlaylistItem **item,
         double *seconds)
 {

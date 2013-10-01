@@ -165,6 +165,9 @@ double groove_player_get_volume(GroovePlayer *player);
 int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);
 // returns < 0 on error
 int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event);
+// returns < 0 on error, 0 on no event ready, 1 on event ready
+// if block is 1, block until event is ready
+int groove_player_event_peek(GroovePlayer *player, int block);
 
 
 /************* GrooveReplayGainScan *************/
