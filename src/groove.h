@@ -169,42 +169,36 @@ int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event);
 
 /************* GrooveReplayGainScan *************/
 typedef struct GrooveReplayGainScan {
-    void * internals;
+    // userdata: the same value you passed to groove_replaygainscan_add
+    // amount: value between 0 and 1 representing progress
+    // optional callback
+    void (*file_progress)(void *userdata, double amount);
+    // number of seconds which must pass before progress callback is called
+    double progress_interval;
+    // userdata: the same value you passed to groove_replaygainscan_add
+    // gain: recommended gain adjustment of this file, in dB
+    // peak: peak amplitude of this file, in float format
+    void (*file_complete)(void *userdata, double gain, double peak);
+    // set this to 1 during a callback if you want to abort the scan
+    int abort_request;
+    // hands off
+    void *internals;
 } GrooveReplayGainScan;
 
-enum GrooveRgEventType {
-    GROOVE_RG_EVENT_PROGRESS,
-    GROOVE_RG_EVENT_COMPLETE,
-};
-
-typedef struct GrooveRgEventProgress {
-    enum GrooveRgEventType type;
-    int metadata_current;
-    int metadata_total;
-    int scanning_current;
-    int scanning_total;
-    int update_current;
-    int update_total;
-} GrooveRgEventProgress;
-
-typedef union GrooveRgEvent {
-    enum GrooveRgEventType type;
-    GrooveRgEventProgress rg_progress;
-} GrooveRgEvent;
-
+// after you create a GrooveReplayGainScan you may set the callbacks and call
+// groove_replaygainscan_add
 GrooveReplayGainScan * groove_create_replaygainscan();
-// filename is strdup'd. you may not call add after you call exec
-int groove_replaygainscan_add(GrooveReplayGainScan *scan, char *filename);
-int groove_replaygainscan_exec(GrooveReplayGainScan *scan);
-// must be called to cleanup. If you call it during a scan it will cleanly abort
-// the scan.
+
+// userdata will be passed back in callbacks
+int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file, void *userdata);
+
+// starts replaygain scanning. blocks until scanning is complete.
+// gain: recommended gain adjustment of all files in scan, in dB
+// peak: peak amplitude of all files in scan, in float format
+int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *gain, double *peak);
+
+// must be called to cleanup. May not be called during a callback.
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
-// returns < 0 on error, 0 on no event ready, 1 on got event
-int groove_replaygainscan_event_poll(GrooveReplayGainScan *scan, GrooveRgEvent *event);
-// returns < 0 on error
-int groove_replaygainscan_event_wait(GrooveReplayGainScan *scan, GrooveRgEvent *event);
-
-
 
 
 #ifdef __cplusplus
