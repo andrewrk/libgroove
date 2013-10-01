@@ -241,8 +241,7 @@ static int decode_thread(void *arg) {
         GrooveFile *file = p->decode_head->file;
         GrooveFilePrivate *f = file->internals;
 
-        p->decode_ctx.replaygain_mode = p->decode_head->replaygain_mode;
-
+        p->decode_ctx.volume = p->decode_head->gain * player->volume;
 
         SDL_LockMutex(f->seek_mutex);
         if (groove_decode(&p->decode_ctx, file) < 0) {
@@ -285,8 +284,9 @@ GroovePlayer * groove_create_player() {
         av_log(NULL, AV_LOG_ERROR, "Could not create player - out of memory\n");
         return NULL;
     }
-
     player->internals = p;
+
+    player->volume = 1.0;
 
     p->eventq = groove_queue_create();
     p->audioq = groove_queue_create();
@@ -424,7 +424,7 @@ void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double s
 }
 
 GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
-        GroovePlaylistItem *next)
+        double gain, GroovePlaylistItem *next)
 {
     GroovePlaylistItem * item = av_mallocz(sizeof(GroovePlaylistItem));
     if (!item)
@@ -432,7 +432,7 @@ GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file
 
     item->file = file;
     item->next = next;
-    item->replaygain_mode = GROOVE_REPLAYGAINMODE_ALBUM;
+    item->gain = gain;
 
     GroovePlayerPrivate *p = player->internals;
 
@@ -529,13 +529,16 @@ int groove_player_count(GroovePlayer *player) {
     return count;
 }
 
-void groove_player_set_replaygain_mode(GroovePlayer *player, GroovePlaylistItem *item,
-        enum GrooveReplayGainMode mode)
+void groove_player_set_gain(GroovePlayer *player, GroovePlaylistItem *item,
+        double gain)
 {
     GroovePlayerPrivate *p = player->internals;
 
     SDL_LockMutex(p->decode_head_mutex);
-    item->replaygain_mode = mode;
+    item->gain = gain;
+    if (item == p->decode_head) {
+        p->decode_ctx.volume = player->volume * p->decode_head->gain;
+    }
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
@@ -591,31 +594,6 @@ void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item, dou
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
-void groove_player_set_replaygain_preamp(GroovePlayer *player, double preamp) {
-    GroovePlayerPrivate *p = player->internals;
-
-    SDL_LockMutex(p->decode_head_mutex);
-    p->decode_ctx.replaygain_preamp = preamp;
-    SDL_UnlockMutex(p->decode_head_mutex);
-}
-
-double groove_player_get_replaygain_preamp(GroovePlayer *player) {
-    GroovePlayerPrivate *p = player->internals;
-    return p->decode_ctx.replaygain_preamp;
-}
-
-void groove_player_set_replaygain_default(GroovePlayer *player, double value) {
-    GroovePlayerPrivate *p = player->internals;
-
-    SDL_LockMutex(p->decode_head_mutex);
-    p->decode_ctx.replaygain_default = value;
-    SDL_UnlockMutex(p->decode_head_mutex);
-}
-double groove_player_get_replaygain_default(GroovePlayer *player) {
-    GroovePlayerPrivate *p = player->internals;
-    return p->decode_ctx.replaygain_default;
-}
-
 double groove_player_get_volume(GroovePlayer *player) {
     GroovePlayerPrivate *p = player->internals;
     return p->decode_ctx.volume;
@@ -625,7 +603,8 @@ void groove_player_set_volume(GroovePlayer *player, double volume) {
     GroovePlayerPrivate *p = player->internals;
 
     SDL_LockMutex(p->decode_head_mutex);
-    p->decode_ctx.volume = volume;
+    player->volume = volume;
+    p->decode_ctx.volume = p->decode_head ? volume * p->decode_head->gain : volume;
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 

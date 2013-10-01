@@ -63,23 +63,25 @@ double groove_file_duration(GrooveFile *file);
 
 
 /************* GroovePlayer *************/
-enum GrooveReplayGainMode {
-    GROOVE_REPLAYGAINMODE_OFF,
-    GROOVE_REPLAYGAINMODE_TRACK,
-    GROOVE_REPLAYGAINMODE_ALBUM,
-};
-
 typedef struct GroovePlaylistItem {
-    struct GroovePlaylistItem * prev; // read-only
-    GrooveFile * file; // read-only
-    enum GrooveReplayGainMode replaygain_mode; // read-only
-    struct GroovePlaylistItem * next; // read-only
+    // all fields are read-only. modify with methods below.
+    struct GroovePlaylistItem * prev;
+    GrooveFile * file;
+    // a volume adjustment in float format to apply to the file when it plays.
+    // This is typically used for ReplayGain.
+    // To convert from dB to float, use exp(log(10) * 0.05 * dB_value)
+    double gain;
+    struct GroovePlaylistItem * next;
 } GroovePlaylistItem;
 
 typedef struct GroovePlayer {
-    // read-only - doubly linked list which is the playlist
+    // all fields are read-only. modify using methods below.
+    // doubly linked list which is the playlist
     GroovePlaylistItem * playlist_head;
     GroovePlaylistItem * playlist_tail;
+
+    // in float format, defaults to 1.0
+    double volume;
 
     void * internals; // don't touch this
 } GroovePlayer;
@@ -109,9 +111,10 @@ void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double s
 // once you add a file to the playlist, you must not destroy it until you first
 // remove it from the playlist.
 // next: the item you will insert before. if it is NULL, you will append to the playlist.
+// gain: see GroovePlaylistItem structure. use 0 for no adjustment.
 // returns the newly created playlist item.
 GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
-        GroovePlaylistItem *next);
+        double gain, GroovePlaylistItem *next);
 
 // this will not call groove_close on item->file !
 // item is destroyed and the address it points to is no longer valid
@@ -139,23 +142,8 @@ void groove_player_clear(GroovePlayer *player);
 // return the count of playlist items
 int groove_player_count(GroovePlayer *player);
 
-// default value: GROOVE_REPLAYGAINMODE_ALBUM
-// this method sets the replaygain mode on a playlist item so that the volume is
-// seamlessly updated at exactly the right time when the player progresses to
-// the item on the playlist.
-void groove_player_set_replaygain_mode(GroovePlayer *player, GroovePlaylistItem *item,
-        enum GrooveReplayGainMode mode);
-
-// value is in float format. defaults to 0.75
-// this value is applied when replaygain is on to make headroom for replaygain
-// adjustments.
-void groove_player_set_replaygain_preamp(GroovePlayer *player, double preamp);
-double groove_player_get_replaygain_preamp(GroovePlayer *player);
-
-// value is in float format. defaults to 0.25
-// this is the replaygain value that is used if tags are missing.
-void groove_player_set_replaygain_default(GroovePlayer *player, double value);
-double groove_player_get_replaygain_default(GroovePlayer *player);
+void groove_player_set_gain(GroovePlayer *player, GroovePlaylistItem *item,
+        double gain);
 
 // value is in float format. defaults to 1.0
 void groove_player_set_volume(GroovePlayer *player, double volume);
@@ -179,7 +167,7 @@ typedef struct GrooveReplayGainScan {
     // number of seconds which must pass before progress callback is called
     double progress_interval;
     // userdata: the same value you passed to groove_replaygainscan_add
-    // gain: recommended gain adjustment of this file, in dB
+    // gain: recommended gain adjustment of this file, in float format
     // peak: peak amplitude of this file, in float format
     void (*file_complete)(void *userdata, double gain, double peak);
     // set this to 1 during a callback if you want to abort the scan
@@ -196,7 +184,7 @@ GrooveReplayGainScan * groove_create_replaygainscan();
 int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file, void *userdata);
 
 // starts replaygain scanning. blocks until scanning is complete.
-// gain: recommended gain adjustment of all files in scan, in dB
+// gain: recommended gain adjustment of all files in scan, in float format
 // peak: peak amplitude of all files in scan, in float format
 int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *gain, double *peak);
 

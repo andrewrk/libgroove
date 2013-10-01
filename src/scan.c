@@ -105,7 +105,6 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain, do
 
     if (groove_init_decode_ctx(&s->decode_ctx) < 0)
         return -1;
-    s->decode_ctx.replaygain_mode = GROOVE_REPLAYGAINMODE_OFF;
 
     // init libebur128
     s->ebur_states = av_malloc(s->file_count * sizeof(ebur128_state*));

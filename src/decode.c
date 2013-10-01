@@ -7,12 +7,6 @@
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
 
-static double dB_scale;
-
-static double dB_to_float(double dB) {
-    return exp(dB * dB_scale);
-}
-
 static void deinit_network() {
     avformat_network_deinit();
 }
@@ -38,8 +32,6 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
 }
 
 int groove_init() {
-    dB_scale = log(10.0) * 0.05;
-
     av_lockmgr_register(&my_lockmgr_cb);
 
     srand(time(NULL));
@@ -143,21 +135,6 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
     return data_size;
 }
 
-static double get_replaygain_adjustment(GrooveDecodeContext *decode_ctx,
-        GrooveFile *file, const char *tag_name)
-{
-    GrooveTag *tag = groove_file_metadata_get(file, tag_name, NULL, 0);
-    if (tag) {
-        const char *tag_value = groove_tag_value(tag);
-        double gain_value;
-        if (sscanf(tag_value, "%lf", &gain_value) == 1)
-            return dB_to_float(gain_value);
-    }
-    GrooveFilePrivate *f = file->internals;
-    av_log(NULL, AV_LOG_WARNING, "track %s lacks replaygain metadata\n", f->ic->filename);
-    return decode_ctx->replaygain_default;
-}
-
 static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate *f = file->internals;
 
@@ -202,27 +179,12 @@ static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) 
     }
     // create volume filter
     double vol = decode_ctx->volume;
-    switch(decode_ctx->replaygain_mode) {
-    case GROOVE_REPLAYGAINMODE_TRACK:
-        vol *= get_replaygain_adjustment(decode_ctx, file, "REPLAYGAIN_TRACK_GAIN");
-        vol *= decode_ctx->replaygain_preamp;
-        break;
-    case GROOVE_REPLAYGAINMODE_ALBUM:
-        vol *= get_replaygain_adjustment(decode_ctx, file, "REPLAYGAIN_ALBUM_GAIN");
-        vol *= decode_ctx->replaygain_preamp;
-        break;
-    case GROOVE_REPLAYGAINMODE_OFF:
-        break;
-    }
     if (vol > 1.0) vol = 1.0;
     if (vol < 0.0) vol = 0.0;
     snprintf(decode_ctx->strbuf, sizeof(decode_ctx->strbuf), "volume=%f", vol);
     av_log(NULL, AV_LOG_INFO, "volume: %s\n", decode_ctx->strbuf);
     // save these values so we can compare later and check
     // whether we have to reconstruct the graph
-    decode_ctx->filter_replaygain_mode = decode_ctx->replaygain_mode;
-    decode_ctx->filter_replaygain_preamp = decode_ctx->replaygain_preamp;
-    decode_ctx->filter_replaygain_default = decode_ctx->replaygain_default;
     decode_ctx->filter_volume = decode_ctx->volume;
     err = avfilter_graph_create_filter(&decode_ctx->volume_ctx, volume, NULL,
             decode_ctx->strbuf, NULL, decode_ctx->filter_graph);
@@ -281,21 +243,10 @@ static int maybe_init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *
         decode_ctx->in_channel_layout != avctx->channel_layout ||
         decode_ctx->in_sample_fmt != avctx->sample_fmt ||
         decode_ctx->in_time_base.num != time_base.num ||
-        decode_ctx->in_time_base.den != time_base.den)
+        decode_ctx->in_time_base.den != time_base.den ||
+        decode_ctx->volume != decode_ctx->filter_volume ||
+        decode_ctx->last_decoded_file != file)
     {
-        return init_filter_graph(decode_ctx, file);
-    }
-
-    // if any of the volume settings have changed, we need to re-build the graph
-    if (decode_ctx->replaygain_mode != decode_ctx->filter_replaygain_mode ||
-        decode_ctx->replaygain_preamp != decode_ctx->filter_replaygain_preamp ||
-        decode_ctx->replaygain_default != decode_ctx->filter_replaygain_default ||
-        decode_ctx->volume != decode_ctx->filter_volume)
-    {
-        return init_filter_graph(decode_ctx, file);
-    }
-
-    if (decode_ctx->last_decoded_file != file) {
         return init_filter_graph(decode_ctx, file);
     }
 
@@ -393,8 +344,6 @@ int groove_init_decode_ctx(GrooveDecodeContext *decode_ctx) {
         decode_ctx->dest_channel_count * av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
 
     decode_ctx->volume = 1.0;
-    decode_ctx->replaygain_preamp = 0.75;
-    decode_ctx->replaygain_default = 0.25;
     return 0;
 }
 
