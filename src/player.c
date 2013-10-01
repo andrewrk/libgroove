@@ -594,11 +594,6 @@ void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item, dou
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
-double groove_player_get_volume(GroovePlayer *player) {
-    GroovePlayerPrivate *p = player->internals;
-    return p->decode_ctx.volume;
-}
-
 void groove_player_set_volume(GroovePlayer *player, double volume) {
     GroovePlayerPrivate *p = player->internals;
 

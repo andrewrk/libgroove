@@ -147,7 +147,6 @@ void groove_player_set_gain(GroovePlayer *player, GroovePlaylistItem *item,
 
 // value is in float format. defaults to 1.0
 void groove_player_set_volume(GroovePlayer *player, double volume);
-double groove_player_get_volume(GroovePlayer *player);
 
 // returns < 0 on error, 0 on no event ready, 1 on got event
 int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);
