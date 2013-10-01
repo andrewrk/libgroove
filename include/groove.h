@@ -163,7 +163,7 @@ typedef struct GrooveReplayGainScan {
     // amount: value between 0 and 1 representing progress
     // optional callback
     void (*file_progress)(void *userdata, double amount);
-    // number of seconds which must pass before progress callback is called
+    // number of seconds to decode before progress callback is called
     double progress_interval;
     // userdata: the same value you passed to groove_replaygainscan_add
     // gain: recommended gain adjustment of this file, in float format

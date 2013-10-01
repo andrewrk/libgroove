@@ -19,7 +19,7 @@ GROOVE_A_DEST = $(PREFIX)/lib/libgroove.a
 
 # for compiling groove
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
-CFLAGS := -I$(LIBAV_PREFIX)/include -I$(EBUR128_SRC) -pedantic -Werror -Wall -g -O0 -fPIC 
+CFLAGS := -I$(LIBAV_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -g -O0 -fPIC 
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
 LDLIBS = -lSDL -lbz2 -lz -lm -pthread
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
@@ -91,10 +91,10 @@ distclean: clean
 	rm -rf $(LIBAV_PREFIX) $(EBUR128_PREFIX)
 	cd $(LIBAV_SRC) && $(MAKE) distclean
 
-install: $(GROOVE_SO_SRC) $(GROOVE_A_SRC) src/groove.h
+install: $(GROOVE_SO_SRC) $(GROOVE_A_SRC) include/groove.h
 	install -m 0755 $(GROOVE_SO_SRC) $(GROOVE_SO_DEST)
 	install -m 0755 $(GROOVE_A_SRC) $(GROOVE_A_DEST)
-	install -m 0644 src/groove.h $(PREFIX)/include
+	install -m 0644 include/groove.h $(PREFIX)/include
 	rm -f $(PREFIX)/lib/libgroove.so
 	ln -s $(GROOVE_SO_DEST) $(PREFIX)/lib/libgroove.so
 	ldconfig -n $(PREFIX)/lib
