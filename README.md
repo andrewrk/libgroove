@@ -28,6 +28,9 @@ distribution's package manager.
 These are bundled with libgroove. You don't need to do anything except
 appreciate them.
 
+Once libav makes a debian upstream release, we will no longer bundle these
+dependencies and instead make our own debian upstream release.
+
  * [libav](http://libav.org)
  * [libebur128](https://github.com/jiixyj/libebur128)
 
