@@ -225,6 +225,9 @@ static int convert_pix_fmt(enum AVPixelFormat pix_fmt)
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUV444P9:
     case AV_PIX_FMT_YUV444P10: return X264_CSP_I444;
+    case AV_PIX_FMT_NV12:      return X264_CSP_NV12;
+    case AV_PIX_FMT_NV16:
+    case AV_PIX_FMT_NV20:      return X264_CSP_NV16;
     };
     return 0;
 }
@@ -480,6 +483,8 @@ static const enum AVPixelFormat pix_fmts_8bit[] = {
     AV_PIX_FMT_YUVJ420P,
     AV_PIX_FMT_YUV422P,
     AV_PIX_FMT_YUV444P,
+    AV_PIX_FMT_NV12,
+    AV_PIX_FMT_NV16,
     AV_PIX_FMT_NONE
 };
 static const enum AVPixelFormat pix_fmts_9bit[] = {
@@ -491,6 +496,7 @@ static const enum AVPixelFormat pix_fmts_10bit[] = {
     AV_PIX_FMT_YUV420P10,
     AV_PIX_FMT_YUV422P10,
     AV_PIX_FMT_YUV444P10,
+    AV_PIX_FMT_NV20,
     AV_PIX_FMT_NONE
 };
 
@@ -597,6 +603,7 @@ static const AVCodecDefault x264_defaults[] = {
 
 AVCodec ff_libx264_encoder = {
     .name             = "libx264",
+    .long_name        = NULL_IF_CONFIG_SMALL("libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
     .type             = AVMEDIA_TYPE_VIDEO,
     .id               = AV_CODEC_ID_H264,
     .priv_data_size   = sizeof(X264Context),
@@ -604,7 +611,6 @@ AVCodec ff_libx264_encoder = {
     .encode2          = X264_frame,
     .close            = X264_close,
     .capabilities     = CODEC_CAP_DELAY | CODEC_CAP_AUTO_THREADS,
-    .long_name        = NULL_IF_CONFIG_SMALL("libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
     .priv_class       = &class,
     .defaults         = x264_defaults,
     .init_static_data = X264_init_static,

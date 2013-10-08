@@ -156,8 +156,11 @@ static int add_tracked_method(RTMPContext *rt, const char *name, int id)
     if (rt->nb_tracked_methods + 1 > rt->tracked_methods_size) {
         rt->tracked_methods_size = (rt->nb_tracked_methods + 1) * 2;
         if ((err = av_reallocp(&rt->tracked_methods, rt->tracked_methods_size *
-                               sizeof(*rt->tracked_methods))) < 0)
+                               sizeof(*rt->tracked_methods))) < 0) {
+            rt->nb_tracked_methods = 0;
+            rt->tracked_methods_size = 0;
             return err;
+        }
     }
 
     rt->tracked_methods[rt->nb_tracked_methods].name = av_strdup(name);
@@ -703,7 +706,7 @@ static int gen_play(URLContext *s, RTMPContext *rt)
     ff_amf_write_number(&p, ++rt->nb_invokes);
     ff_amf_write_null(&p);
     ff_amf_write_string(&p, rt->playpath);
-    ff_amf_write_number(&p, rt->live);
+    ff_amf_write_number(&p, rt->live * 1000);
 
     return rtmp_send_packet(rt, &pkt, 1);
 }
@@ -2015,8 +2018,12 @@ static int handle_invoke_status(URLContext *s, RTMPPacket *pkt)
 
     t = ff_amf_get_field_value(ptr, data_end, "level", tmpstr, sizeof(tmpstr));
     if (!t && !strcmp(tmpstr, "error")) {
-        if (!ff_amf_get_field_value(ptr, data_end,
-                                    "description", tmpstr, sizeof(tmpstr)))
+        t = ff_amf_get_field_value(ptr, data_end,
+                                   "description", tmpstr, sizeof(tmpstr));
+        if (t || !tmpstr[0])
+            t = ff_amf_get_field_value(ptr, data_end, "code",
+                                       tmpstr, sizeof(tmpstr));
+        if (!t)
             av_log(s, AV_LOG_ERROR, "Server error: %s\n", tmpstr);
         return -1;
     }
@@ -2070,11 +2077,11 @@ static int update_offset(RTMPContext *rt, int size)
     if (rt->flv_off < rt->flv_size) {
         // There is old unread data in the buffer, thus append at the end
         old_flv_size  = rt->flv_size;
-        rt->flv_size += size + 15;
+        rt->flv_size += size;
     } else {
         // All data has been read, write the new data at the start of the buffer
         old_flv_size = 0;
-        rt->flv_size = size + 15;
+        rt->flv_size = size;
         rt->flv_off  = 0;
     }
 
@@ -2089,10 +2096,12 @@ static int append_flv_data(RTMPContext *rt, RTMPPacket *pkt, int skip)
     const int size      = pkt->size - skip;
     uint32_t ts         = pkt->timestamp;
 
-    old_flv_size = update_offset(rt, size);
+    old_flv_size = update_offset(rt, size + 15);
 
-    if ((ret = av_reallocp(&rt->flv_data, rt->flv_size)) < 0)
+    if ((ret = av_reallocp(&rt->flv_data, rt->flv_size)) < 0) {
+        rt->flv_size = rt->flv_off = 0;
         return ret;
+    }
     bytestream2_init_writer(&pbc, rt->flv_data, rt->flv_size);
     bytestream2_skip_p(&pbc, old_flv_size);
     bytestream2_put_byte(&pbc, pkt->type);
@@ -2192,8 +2201,10 @@ static int handle_metadata(RTMPContext *rt, RTMPPacket *pkt)
 
     old_flv_size = update_offset(rt, pkt->size);
 
-    if ((ret = av_reallocp(&rt->flv_data, rt->flv_size)) < 0)
+    if ((ret = av_reallocp(&rt->flv_data, rt->flv_size)) < 0) {
+        rt->flv_size = rt->flv_off = 0;
         return ret;
+    }
 
     next = pkt->data;
     p    = rt->flv_data + old_flv_size;
@@ -2210,6 +2221,8 @@ static int handle_metadata(RTMPContext *rt, RTMPPacket *pkt)
             pts = cts;
         ts += cts - pts;
         pts = cts;
+        if (size + 3 + 4 > pkt->data + pkt->size - next)
+            break;
         bytestream_put_byte(&p, type);
         bytestream_put_be24(&p, size);
         bytestream_put_be24(&p, ts);
@@ -2218,7 +2231,11 @@ static int handle_metadata(RTMPContext *rt, RTMPPacket *pkt)
         next += size + 3 + 4;
         p    += size + 3 + 4;
     }
-    memcpy(p, next, RTMP_HEADER);
+    if (p != rt->flv_data + rt->flv_size) {
+        av_log(NULL, AV_LOG_WARNING, "Incomplete flv packets in "
+                                     "RTMP_PT_METADATA packet\n");
+        rt->flv_size = p - rt->flv_data;
+    }
 
     return 0;
 }
@@ -2765,6 +2782,7 @@ static const AVOption rtmp_options[] = {
     {"rtmp_swfverify", "URL to player swf file, compute hash/size automatically.", OFFSET(swfverify), AV_OPT_TYPE_STRING, {.str = NULL }, 0, 0, DEC},
     {"rtmp_tcurl", "URL of the target stream. Defaults to proto://host[:port]/app.", OFFSET(tcurl), AV_OPT_TYPE_STRING, {.str = NULL }, 0, 0, DEC|ENC},
     {"rtmp_listen", "Listen for incoming rtmp connections", OFFSET(listen), AV_OPT_TYPE_INT, {.i64 = 0}, INT_MIN, INT_MAX, DEC, "rtmp_listen" },
+    {"listen",      "Listen for incoming rtmp connections", OFFSET(listen), AV_OPT_TYPE_INT, {.i64 = 0}, INT_MIN, INT_MAX, DEC, "rtmp_listen" },
     {"timeout", "Maximum timeout (in seconds) to wait for incoming connections. -1 is infinite. Implies -rtmp_listen 1",  OFFSET(listen_timeout), AV_OPT_TYPE_INT, {.i64 = -1}, INT_MIN, INT_MAX, DEC, "rtmp_listen" },
     { NULL },
 };

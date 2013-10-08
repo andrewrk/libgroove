@@ -886,8 +886,10 @@ static int mov_read_extradata(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     size= (uint64_t)st->codec->extradata_size + atom.size + 8 + FF_INPUT_BUFFER_PADDING_SIZE;
     if (size > INT_MAX || (uint64_t)atom.size > INT_MAX)
         return AVERROR_INVALIDDATA;
-    if ((err = av_reallocp(&st->codec->extradata, size)) < 0)
+    if ((err = av_reallocp(&st->codec->extradata, size)) < 0) {
+        st->codec->extradata_size = 0;
         return err;
+    }
     buf = st->codec->extradata + st->codec->extradata_size;
     st->codec->extradata_size= size - FF_INPUT_BUFFER_PADDING_SIZE;
     AV_WB32(       buf    , atom.size + 8);
@@ -1722,6 +1724,10 @@ static int mov_read_stts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
         sample_count=avio_rb32(pb);
         sample_duration = avio_rb32(pb);
+        if (sample_count < 0) {
+            av_log(c->fc, AV_LOG_ERROR, "Invalid sample_count=%d\n", sample_count);
+            return AVERROR_INVALIDDATA;
+        }
         sc->stts_data[i].count= sample_count;
         sc->stts_data[i].duration= sample_duration;
 
@@ -2367,7 +2373,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (!sc->ctts_count && sc->sample_count)
     {
         /* Complement ctts table if moov atom doesn't have ctts atom. */
-        ctts_data = av_malloc(sizeof(*sc->ctts_data));
+        ctts_data = av_realloc(NULL, sizeof(*sc->ctts_data));
         if (!ctts_data)
             return AVERROR(ENOMEM);
         sc->ctts_data = ctts_data;

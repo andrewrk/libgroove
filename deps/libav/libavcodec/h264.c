@@ -1548,6 +1548,8 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
 
     ff_h264_decode_init_vlc();
 
+    ff_init_cabac_states();
+
     h->pixel_shift        = 0;
     h->sps.bit_depth_luma = avctx->bits_per_raw_sample = 8;
 
@@ -4244,7 +4246,6 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         align_get_bits(&h->gb);
 
         /* init cabac */
-        ff_init_cabac_states();
         ff_init_cabac_decoder(&h->cabac,
                               h->gb.buffer + get_bits_count(&h->gb) / 8,
                               (get_bits_left(&h->gb) + 7) / 8);
@@ -4547,8 +4548,9 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size,
                 continue;
             }
 
-            // FIXME do not discard SEI id
-            if (avctx->skip_frame >= AVDISCARD_NONREF && h->nal_ref_idc == 0)
+            if (avctx->skip_frame >= AVDISCARD_NONREF &&
+                h->nal_ref_idc == 0 &&
+                h->nal_unit_type != NAL_SEI)
                 continue;
 
 again:
@@ -4559,8 +4561,11 @@ again:
                 (h->avctx->active_thread_type & FF_THREAD_FRAME) &&
                 (hx->nal_unit_type != NAL_PPS &&
                  hx->nal_unit_type != NAL_SPS)) {
-                av_log(avctx, AV_LOG_INFO, "Ignoring NAL unit %d during "
-                       "extradata parsing\n", hx->nal_unit_type);
+                if (hx->nal_unit_type < NAL_AUD ||
+                    hx->nal_unit_type > NAL_AUXILIARY_SLICE)
+                    av_log(avctx, AV_LOG_INFO,
+                           "Ignoring NAL unit %d during extradata parsing\n",
+                           hx->nal_unit_type);
                 hx->nal_unit_type = NAL_FF_IGNORE;
             }
             err = 0;
@@ -4874,6 +4879,7 @@ static const AVProfile profiles[] = {
 
 AVCodec ff_h264_decoder = {
     .name                  = "h264",
+    .long_name             = NULL_IF_CONFIG_SMALL("H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
     .type                  = AVMEDIA_TYPE_VIDEO,
     .id                    = AV_CODEC_ID_H264,
     .priv_data_size        = sizeof(H264Context),
@@ -4884,7 +4890,6 @@ AVCodec ff_h264_decoder = {
                              CODEC_CAP_DELAY | CODEC_CAP_SLICE_THREADS |
                              CODEC_CAP_FRAME_THREADS,
     .flush                 = flush_dpb,
-    .long_name             = NULL_IF_CONFIG_SMALL("H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
     .init_thread_copy      = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy),
     .update_thread_context = ONLY_IF_THREADS_ENABLED(decode_update_thread_context),
     .profiles              = NULL_IF_CONFIG_SMALL(profiles),
