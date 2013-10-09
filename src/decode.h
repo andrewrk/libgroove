@@ -39,8 +39,6 @@ typedef struct GrooveDecodeContext {
 
     // these are the settings that were used to build the filter graph
     double filter_volume;
-
-    GrooveFile *last_decoded_file;
 } GrooveDecodeContext;
 
 typedef struct GrooveFilePrivate {

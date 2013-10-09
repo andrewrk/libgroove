@@ -138,8 +138,6 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
 static int init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
     GrooveFilePrivate *f = file->internals;
 
-    decode_ctx->last_decoded_file = file;
-
     // destruct old graph
     avfilter_graph_free(&decode_ctx->filter_graph);
 
@@ -244,8 +242,7 @@ static int maybe_init_filter_graph(GrooveDecodeContext *decode_ctx, GrooveFile *
         decode_ctx->in_sample_fmt != avctx->sample_fmt ||
         decode_ctx->in_time_base.num != time_base.num ||
         decode_ctx->in_time_base.den != time_base.den ||
-        decode_ctx->volume != decode_ctx->filter_volume ||
-        decode_ctx->last_decoded_file != file)
+        decode_ctx->volume != decode_ctx->filter_volume)
     {
         return init_filter_graph(decode_ctx, file);
     }
@@ -327,7 +324,6 @@ int groove_decode(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
 }
 
 void groove_cleanup_decode_ctx(GrooveDecodeContext *decode_ctx) {
-    decode_ctx->last_decoded_file = NULL;
     avfilter_graph_free(&decode_ctx->filter_graph);
     avcodec_free_frame(&decode_ctx->frame);
 }
