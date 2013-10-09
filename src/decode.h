@@ -5,7 +5,7 @@
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
-#include <SDL/SDL_thread.h>
+#include <SDL2/SDL_thread.h>
 
 typedef struct GrooveDecodeContext {
     AVPacket audio_pkt_temp;

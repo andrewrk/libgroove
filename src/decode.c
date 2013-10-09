@@ -4,8 +4,7 @@
 #include <libavutil/opt.h>
 #include <libavutil/channel_layout.h>
 
-#include <SDL/SDL.h>
-#include <SDL/SDL_thread.h>
+#include <SDL2/SDL.h>
 
 static void deinit_network() {
     avformat_network_deinit();

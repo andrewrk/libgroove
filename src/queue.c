@@ -1,7 +1,7 @@
 #include "queue.h"
 
 #include <libavutil/mem.h>
-#include <SDL/SDL_thread.h>
+#include <SDL2/SDL_thread.h>
 
 typedef struct ItemList {
     void *obj;

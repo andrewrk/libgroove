@@ -4,8 +4,8 @@
 
 #include <libavutil/channel_layout.h>
 
-#include <SDL/SDL.h>
-#include <SDL/SDL_thread.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_thread.h>
 
 // SDL audio buffer size, in samples. Should be small because there is no way
 // to clear the buffer.
@@ -343,7 +343,7 @@ GroovePlayer * groove_create_player() {
     p->audio_buf_index = 0;
     p->play_pos = -1.0;
 
-    p->thread_id = SDL_CreateThread(decode_thread, player);
+    p->thread_id = SDL_CreateThread(decode_thread, "decode", player);
 
     if (!p->thread_id) {
         groove_destroy_player(player);

@@ -18,7 +18,6 @@ Music player backend library.
 You will need these to compile libgroove. These are most likely in your
 distribution's package manager.
 
- * [libsdl1.2-dev](http://www.libsdl.org/)
  * [libbz2](http://www.bzip.org/)
  * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
@@ -33,6 +32,7 @@ dependencies and instead make our own debian upstream release.
 
  * [libav](http://libav.org)
  * [libebur128](https://github.com/jiixyj/libebur128)
+ * [SDL2](http://www.libsdl.org)
 
 ## Installation
 
