@@ -47,19 +47,19 @@ libs: $(GROOVE_SO_SRC) $(GROOVE_A_SRC)
 $(GROOVE_A_SRC): $(O_FILES)
 	ar rcs $(GROOVE_A_SRC) $(O_FILES)
 
-$(GROOVE_SO_SRC): $(O_FILES) $(EBUR128_DEP) $(SDL2_DEP)
+$(GROOVE_SO_SRC): $(O_FILES) $(EBUR128_DEP)
 	$(CC) $(LDFLAGS) -o $(GROOVE_SO_SRC) $(O_FILES) $(STATIC_LIBS) $(LDLIBS)
 
-src/decode.o: src/decode.c $(LIBAV_DEP)
+src/decode.o: src/decode.c $(LIBAV_DEP) $(SDL2_DEP)
 	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
 
-src/queue.o: src/queue.c $(LIBAV_DEP)
+src/queue.o: src/queue.c $(LIBAV_DEP) $(SDL2_DEP)
 	$(CC) $(CFLAGS) -o src/queue.o -c src/queue.c
 
-src/scan.o: src/scan.c $(LIBAV_DEP)
+src/scan.o: src/scan.c $(LIBAV_DEP) $(SDL2_DEP)
 	$(CC) $(CFLAGS) -o src/scan.o -c src/scan.c
 
-src/player.o: src/player.c $(LIBAV_DEP)
+src/player.o: src/player.c $(LIBAV_DEP) $(SDL2_DEP)
 	$(CC) $(CFLAGS) -o src/player.o -c src/player.c
 
 examples: example/playlist example/metadata example/replaygain
