@@ -13,6 +13,10 @@ int main(int argc, char * argv[]) {
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
     GroovePlayer *player = groove_create_player();
+    if (!player) {
+        fprintf(stderr, "Error creating player.\n");
+        return 1;
+    }
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
         GrooveFile * file = groove_open(filename);
