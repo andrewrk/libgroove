@@ -29,7 +29,7 @@ GROOVE_A_DEST = $(PREFIX)/lib/libgroove.a
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
 CFLAGS := -I$(LIBAV_PREFIX)/include -I$(SDL2_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -g -O0 -fPIC 
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP) $(SDL2_DEP)
-LDLIBS = -lbz2 -lz -lm -lpthread
+LDLIBS = -lbz2 -lz -lm -lpthread -ldl
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
 O_FILES = src/scan.o src/decode.o src/player.o src/queue.o
