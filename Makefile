@@ -89,7 +89,7 @@ $(EBUR128_DEP): $(EBUR128_SRC)/CMakeLists.txt
 	rm -rf $(EBUR128_PREFIX) && mkdir -p $(EBUR128_PREFIX) && cd $(EBUR128_PREFIX) && cmake ../ && $(MAKE)
 
 $(SDL2_DEP): $(SDL2_SRC)/configure
-	rm -rf $(SDL2_PREFIX) && cd $(SDL2_SRC) && ./configure --prefix=$(SDL2_PREFIX) --with-pic --disable-shared --disable-video --disable-render --disable-events --disable-joystick --disable-haptic --disable-power --disable-timers --disable-file --disable-loadso --disable-cpuinfo && $(MAKE) && $(MAKE) install
+	rm -rf $(SDL2_PREFIX) && cd $(SDL2_SRC) && ./configure --prefix=$(SDL2_PREFIX) --with-pic --disable-shared --disable-video --disable-render --disable-events --disable-joystick --disable-haptic --disable-power --disable-file --disable-loadso --disable-cpuinfo && $(MAKE) && $(MAKE) install
 
 clean:
 	rm -f src/*.o src/*.so src/*.a
