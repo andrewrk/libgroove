@@ -32,7 +32,7 @@ STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP) $(SDL2_D
 LDLIBS = -lbz2 -lz -lm -lpthread -ldl
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
-O_FILES = src/scan.o src/decode.o src/player.o src/queue.o
+O_FILES = src/scan.o src/player.o src/queue.o src/buffer.o src/device_sink.o src/encoder.o src/file.o src/global.o
 
 # for compiling examples
 EX_CFLAGS = -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
@@ -50,8 +50,20 @@ $(GROOVE_A_SRC): $(O_FILES)
 $(GROOVE_SO_SRC): $(O_FILES) $(EBUR128_DEP)
 	$(CC) $(LDFLAGS) -o $(GROOVE_SO_SRC) $(O_FILES) $(STATIC_LIBS) $(LDLIBS)
 
-src/decode.o: src/decode.c $(LIBAV_DEP) $(SDL2_DEP)
-	$(CC) $(CFLAGS) -o src/decode.o -c src/decode.c
+src/buffer.o: src/buffer.c $(LIBAV_DEP) $(SDL2_DEP)
+	$(CC) $(CFLAGS) -o src/buffer.o -c src/buffer.c
+
+src/device_sink.o: src/device_sink.c $(LIBAV_DEP) $(SDL2_DEP)
+	$(CC) $(CFLAGS) -o src/device_sink.o -c src/device_sink.c
+
+src/encoder.o: src/encoder.c $(LIBAV_DEP) $(SDL2_DEP)
+	$(CC) $(CFLAGS) -o src/encoder.o -c src/encoder.c
+
+src/file.o: src/file.c $(LIBAV_DEP) $(SDL2_DEP)
+	$(CC) $(CFLAGS) -o src/file.o -c src/file.c
+
+src/global.o: src/global.c $(LIBAV_DEP) $(SDL2_DEP)
+	$(CC) $(CFLAGS) -o src/global.o -c src/global.c
 
 src/queue.o: src/queue.c $(LIBAV_DEP) $(SDL2_DEP)
 	$(CC) $(CFLAGS) -o src/queue.o -c src/queue.c

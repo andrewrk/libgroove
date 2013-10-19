@@ -1,5 +1,4 @@
-#include "groove.h"
-#include "decode.h"
+#include "file.h"
 
 #include <ebur128.h>
 
@@ -16,8 +15,9 @@ typedef struct GrooveReplayGainScanPrivate {
     FileStackItem *file_item;
     int file_count;
     int current_index;
-    GrooveDecodeContext decode_ctx;
     ebur128_state **ebur_states;
+    GroovePlayer *player;
+    GrooveSink *sink;
 } GrooveReplayGainScanPrivate;
 
 static void filestack_push(FileStackItem **stack, FileStackItem *item) {
@@ -56,7 +56,7 @@ static void cleanup_ebur(GrooveReplayGainScan *scan) {
     av_freep(&s->ebur_states);
 }
 
-GrooveReplayGainScan * groove_create_replaygainscan() {
+GrooveReplayGainScan * groove_replaygainscan_create() {
     GrooveReplayGainScan * scan = av_mallocz(sizeof(GrooveReplayGainScan));
     GrooveReplayGainScanPrivate * s = av_mallocz(sizeof(GrooveReplayGainScanPrivate));
     if (!scan || !s) {
@@ -84,27 +84,16 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file, void
     return 0;
 }
 
-static int scan_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
-    GrooveReplayGainScan *scan = decode_ctx->callback_context;
-    GrooveReplayGainScanPrivate *s = scan->internals;
-
-    ebur128_state *st = s->ebur_states[s->current_index];
-    ebur128_add_frames_double(st, (double*)frame->data[0], frame->nb_samples);
-
-    av_frame_free(&frame);
-    return 0;
-}
-
 int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain, double *scan_peak) {
     GrooveReplayGainScanPrivate *s = scan->internals;
-    s->decode_ctx.callback_context = scan;
-    s->decode_ctx.buffer = scan_buffer;
-    s->decode_ctx.dest_sample_rate = 44100;
-    s->decode_ctx.dest_channel_layout = AV_CH_LAYOUT_STEREO;
-    s->decode_ctx.dest_sample_fmt = AV_SAMPLE_FMT_DBL;
 
-    if (groove_init_decode_ctx(&s->decode_ctx) < 0)
-        return -1;
+    GrooveAudioFormat audio_format;
+    audio_format.sample_rate = 44100;
+    audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
+    audio_format.sample_fmt = GROOVE_SAMPLE_FMT_DBL;
+
+    s->player = groove_player_create();
+    GrooveSink *sink = groove_player_attach_sink(player, &audio_format);
 
     // init libebur128
     s->ebur_states = av_malloc(s->file_count * sizeof(ebur128_state*));
@@ -128,17 +117,29 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain, do
     while (s->file_item) {
         node = filestack_pop(&s->file_item);
         GrooveFile *file = node->file;
+        GrooveFilePrivate *f = file->internals;
         void *userdata = node->userdata;
         av_freep(&node);
 
         // flush buffers and seek to 0
-        GrooveFilePrivate *f = file->internals;
         f->seek_pos = 0;
         f->seek_flush = 1;
+
+        groove_player_clear(s->player);
+        groove_player_insert(s->player, file, 1.0, NULL);
         double seconds_passed = 0;
         double prev_clock = 0;
         double duration = av_q2d(f->audio_st->time_base) * f->audio_st->duration;
-        while (groove_decode(&s->decode_ctx, file) >= 0) {
+
+
+        GrooveBuffer *buffer;
+        while (groove_player_sink_get_buffer(s->player, s->sink, &buffer, 1) == GROOVE_BUFFER_YES) {
+            // process buffer
+            ebur128_state *st = s->ebur_states[s->current_index];
+            ebur128_add_frames_double(st, (double*)buffer->data[0], buffer->sample_count);
+            groove_buffer_unref(buffer);
+
+            // handle progress
             if (scan->file_progress) {
                 seconds_passed += f->audio_clock - prev_clock;
                 prev_clock = f->audio_clock;
@@ -194,7 +195,7 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     GrooveReplayGainScanPrivate *s = scan->internals;
 
     cleanup_ebur(scan);
-    groove_cleanup_decode_ctx(&s->decode_ctx);
+    groove_player_destroy(s->player);
     filestack_cleanup(&s->file_item);
     av_free(s);
     av_free(scan);

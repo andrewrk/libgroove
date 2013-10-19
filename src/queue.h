@@ -18,6 +18,7 @@ void groove_queue_abort(GrooveQueue *queue);
 
 int groove_queue_put(GrooveQueue *queue, void *obj);
 
+// returns -1 if aborted, 1 if got event, 0 if no event ready
 int groove_queue_get(GrooveQueue *queue, void **obj_ptr, int block);
 
 int groove_queue_peek(GrooveQueue *queue, int block);

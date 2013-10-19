@@ -12,14 +12,18 @@ int main(int argc, char * argv[]) {
     }
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
-    GroovePlayer *player = groove_create_player();
+    GroovePlayer *player = groove_player_create();
+
     if (!player) {
         fprintf(stderr, "Error creating player.\n");
         return 1;
     }
+
+    GrooveDeviceSink *device_sink = groove_device_sink_create(player, NULL);
+
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
-        GrooveFile * file = groove_open(filename);
+        GrooveFile * file = groove_file_open(filename);
         if (!file) {
             fprintf(stderr, "Not queuing %s\n", filename);
             continue;
@@ -28,15 +32,15 @@ int main(int argc, char * argv[]) {
     }
     groove_player_play(player);
 
-    GroovePlayerEvent event;
+    GrooveEvent event;
     GroovePlaylistItem *item;
-    while (groove_player_event_wait(player, &event) >= 0) {
+    while (groove_device_sink_event_get(device_sink, &event) >= 0) {
         switch (event.type) {
-        case GROOVE_PLAYER_EVENT_BUFFERUNDERRUN:
-            printf("buffer underrun\n");
+        case GROOVE_EVENT_BUFFERUNDERRUN:
+            fprintf(stderr, "buffer underrun\n");
             break;
-        case GROOVE_PLAYER_EVENT_NOWPLAYING:
-            groove_player_position(player, &item, NULL);
+        case GROOVE_EVENT_NOWPLAYING:
+            groove_device_sink_position(device_sink, &item, NULL);
             if (!item) {
                 printf("done\n");
                 item = player->playlist_head;
@@ -44,10 +48,11 @@ int main(int argc, char * argv[]) {
                     GrooveFile *file = item->file;
                     GroovePlaylistItem *next = item->next;
                     groove_player_remove(player, item);
-                    groove_close(file);
+                    groove_file_close(file);
                     item = next;
                 }
-                groove_destroy_player(player);
+                groove_device_sink_destroy(device_sink);
+                groove_player_destroy(player);
                 return 0;
             }
             GrooveTag *artist_tag = groove_file_metadata_get(item->file, "artist", NULL, 0);

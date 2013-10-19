@@ -6,15 +6,33 @@ extern "C"
 {
 #endif /* __cplusplus */
 
+#include <stdint.h>
+
 /************* global *************/
 // call once at the beginning of your program
 int groove_init();
+
 // enable/disable logging of errors
 #define GROOVE_LOG_QUIET    -8
 #define GROOVE_LOG_ERROR    16
 #define GROOVE_LOG_WARNING  24
 #define GROOVE_LOG_INFO     32
 void groove_set_logging(int level);
+
+
+// channel layouts
+#define GROOVE_CH_FRONT_LEFT             0x00000001
+#define GROOVE_CH_FRONT_RIGHT            0x00000002
+#define GROOVE_CH_FRONT_CENTER           0x00000004
+
+#define GROOVE_CH_LAYOUT_MONO              (GROOVE_CH_FRONT_CENTER)
+#define GROOVE_CH_LAYOUT_STEREO            (GROOVE_CH_FRONT_LEFT|GROOVE_CH_FRONT_RIGHT)
+
+// get the channel count for the channel layout
+int groove_channel_layout_count(uint64_t channel_layout);
+
+// get the default channel layout based on the channel count
+uint64_t groove_channel_layout_default(int count);
 
 
 /************* GrooveFile *************/
@@ -38,9 +56,9 @@ typedef void GrooveTag;
 const char * groove_tag_key(GrooveTag *tag);
 const char * groove_tag_value(GrooveTag *tag);
 
-// you are always responsible for calling groove_close on the returned GrooveFile.
-GrooveFile * groove_open(char* filename);
-void groove_close(GrooveFile * file);
+// you are always responsible for calling groove_file_close on the returned GrooveFile.
+GrooveFile * groove_file_open(char* filename);
+void groove_file_close(GrooveFile * file);
 
 GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags);
@@ -60,7 +78,6 @@ int groove_file_save(GrooveFile *file);
 
 // song duration in seconds
 double groove_file_duration(GrooveFile *file);
-
 
 /************* GroovePlayer *************/
 typedef struct GroovePlaylistItem {
@@ -86,22 +103,13 @@ typedef struct GroovePlayer {
     void * internals; // don't touch this
 } GroovePlayer;
 
-enum GroovePlayerEventType {
-    // when the currently playing track changes.
-    GROOVE_PLAYER_EVENT_NOWPLAYING,
+// a player manages keeping an audio buffer full
+// to send the buffer to your speakers, use groove_device_sink_create
+GroovePlayer * groove_player_create();
+// this will not call groove_file_close on any files
+// it will remove all playlist items and sinks from the player
+void groove_player_destroy(GroovePlayer *player);
 
-    // when the audio device tries to read from an empty buffer
-    GROOVE_PLAYER_EVENT_BUFFERUNDERRUN,
-};
-
-typedef union GroovePlayerEvent {
-    enum GroovePlayerEventType type;
-} GroovePlayerEvent;
-
-// you may not create two simultaneous players on the same device
-GroovePlayer * groove_create_player();
-// this will not call groove_close on any files
-void groove_destroy_player(GroovePlayer *player);
 
 void groove_player_play(GroovePlayer *player);
 void groove_player_pause(GroovePlayer *player);
@@ -116,20 +124,18 @@ void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double s
 GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
         double gain, GroovePlaylistItem *next);
 
-// this will not call groove_close on item->file !
+// this will not call groove_file_close on item->file !
 // item is destroyed and the address it points to is no longer valid
 void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item);
 
-// get the position of the play head
+// get the position of the decode head
 // both the current playlist item and the position in seconds in the playlist
 // item are given. item will be set to NULL if the playlist is empty
 // you may pass NULL for item or seconds
-void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item, double *seconds);
-
-// get the position of the decode head
-// this is typically 200ms ahead of the playhead due to buffering
-// same API as groove_player_position
-void groove_player_decode_position(GroovePlayer *player, GroovePlaylistItem **item,
+// Note that typically you are more interested in the position of the play
+// head, not the decode head. Example methods which return the play head are
+// groove_device_sink_position and groove_encoder_position
+void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item,
         double *seconds);
 
 // return 1 if the player is playing; 0 if it is not.
@@ -148,14 +154,185 @@ void groove_player_set_gain(GroovePlayer *player, GroovePlaylistItem *item,
 // value is in float format. defaults to 1.0
 void groove_player_set_volume(GroovePlayer *player, double volume);
 
+/************ GrooveBuffer ****************/
+
+#define GROOVE_BUFFER_NO  0
+#define GROOVE_BUFFER_YES 1
+#define GROOVE_BUFFER_END 2
+
+enum GrooveSampleFormat {
+    GROOVE_SAMPLE_FMT_NONE = -1,
+    GROOVE_SAMPLE_FMT_U8,          ///< unsigned 8 bits
+    GROOVE_SAMPLE_FMT_S16,         ///< signed 16 bits
+    GROOVE_SAMPLE_FMT_S32,         ///< signed 32 bits
+    GROOVE_SAMPLE_FMT_FLT,         ///< float (32 bits)
+    GROOVE_SAMPLE_FMT_DBL,         ///< double (64 bits)
+
+    GROOVE_SAMPLE_FMT_U8P,         ///< unsigned 8 bits, planar
+    GROOVE_SAMPLE_FMT_S16P,        ///< signed 16 bits, planar
+    GROOVE_SAMPLE_FMT_S32P,        ///< signed 32 bits, planar
+    GROOVE_SAMPLE_FMT_FLTP,        ///< float (32 bits), planar
+    GROOVE_SAMPLE_FMT_DBLP,        ///< double (64 bits), planar
+};
+
+typedef struct GrooveAudioFormat {
+    int sample_rate;
+    uint64_t channel_layout;
+    enum GrooveSampleFormat sample_fmt;
+} GrooveAudioFormat;
+
+typedef struct GrooveBuffer {
+    // all fields read-only
+    // for interleaved audio, data[0] is the only thing you need.
+    // for planar audio, each channel has a separate data pointer.
+    uint8_t **data;
+
+    enum GrooveAudioFormat format;
+    int sample_count;
+
+    // for convenience the total number of bytes contained in this buffer
+    // are provided.
+    // TODO add and populate this field
+    //int size;
+    GroovePlaylistItem *item;
+    double pos;
+
+    void *internals;
+} GrooveBuffer;
+
+void groove_buffer_ref(GrooveBuffer *buffer);
+void groove_buffer_unref(GrooveBuffer *buffer);
+
+/************** GrooveSink ****************/
+enum GrooveEventType {
+    // when the currently playing track changes.
+    GROOVE_EVENT_NOWPLAYING,
+
+    // when something tries to read from an empty buffer
+    GROOVE_EVENT_BUFFERUNDERRUN,
+};
+
+typedef union GrooveEvent {
+    enum GrooveEventType type;
+} GrooveEvent;
+
+// TODO have the user create and destroy this structure to avoid
+// race conditions with callbacks
+typedef struct GrooveSink {
+    // read-only. the same values you initialized with.
+    GrooveAudioFormat audio_format;
+
+    // TODO add and populate this property
+    //int bytes_per_sec; // read-only
+    // set to whatever you want
+    void *userdata;
+    // called after flushing the sink queue and before destroying it.
+    // if you created a thread to consume data, this is a good time to
+    // wait for it to exit.
+    void (*cleanup)(struct GrooveSink *);
+    // called when paused is changed on this sink's player.
+    // TODO actually call this function
+    void (*pause)(struct GrooveSink *, int paused);
+    // called when a playlist item is deleted. Take this opportunity to remove
+    // all your references to the GroovePlaylistItem.
+    void (*purge)(struct GrooveSink *, GroovePlaylistItem *);
+
+    void *internals; // private
+} GrooveSink;
+
+// use this to get access to a realtime raw audio buffer
+// for example you could use it to draw a waveform or other visualization
+GrooveSink * groove_player_attach_sink(GroovePlayer *player,
+        const GrooveAudioFormat *audio_format);
+void groove_player_remove_sink(GroovePlayer *player, GrooveSink *sink);
+// returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer ready (block=0),
+// GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END on end of playlist
+// buffer is always set to either a valid GrooveBuffer or NULL 
+int groove_player_sink_get_buffer(GroovePlayer *player, GrooveSink *sink,
+        GrooveBuffer **buffer, int block);
+
+
+// TODO add the sync functionality
+
+/************* GrooveDeviceSink ****************/
+
+// use this to make a player utilize your speakers
+typedef void GrooveDeviceSink;
+
+// Returns the number of available devices exposed by the current driver or -1
+// if an explicit list of devices can't be determined. A return value of -1
+// does not necessarily mean an error condition.
+// In many common cases, when this function returns a value <= 0, it can still
+// successfully open the default device (NULL for the name argument of
+// groove_player_attach_device).
+// This function may trigger a complete redetect of available hardware. It
+// should not be called for each iteration of a loop, but rather once at the
+// start of a loop.
+int groove_device_count();
+
+// Returns the name of the audio device at the requested index, or NULL on error.
+// The string returned by this function is UTF-8 encoded, read-only, and
+// managed internally. You are not to free it. If you need to keep the string
+// for any length of time, you should make your own copy of it.
+const char * groove_device_name(int index);
+
+// Starts playback on the device called name. Use NULL for default device.
+// Internally this creates a GrooveSink and sends the samples to the device.
+GrooveDeviceSink* groove_device_sink_create(GroovePlayer *player,
+        const char *name);
+// you must destroy all device sinks before destroying their players
+void groove_device_sink_destroy(GrooveDeviceSink *device_sink);
+
+// get the position of the play head
+// both the current playlist item and the position in seconds in the playlist
+// item are given. item will be set to NULL if the playlist is empty
+// you may pass NULL for item or seconds
+void groove_device_sink_position(GrooveDeviceSink *device_sink,
+        GroovePlaylistItem **item, double *seconds);
+
 // returns < 0 on error, 0 on no event ready, 1 on got event
-int groove_player_event_poll(GroovePlayer *player, GroovePlayerEvent *event);
-// returns < 0 on error
-int groove_player_event_wait(GroovePlayer *player, GroovePlayerEvent *event);
+int groove_device_sink_event_get(GrooveDeviceSink *sink,
+        GroovePlayerEvent *event, int block);
 // returns < 0 on error, 0 on no event ready, 1 on event ready
 // if block is 1, block until event is ready
-int groove_player_event_peek(GroovePlayer *player, int block);
+int groove_device_sink_event_peek(GrooveDeviceSink *sink, int block);
 
+
+/************* GrooveEncoder ************/
+
+// attach a GrooveEncoder to a player to keep a buffer of encoded audio full.
+// for example you could use it to implement an http audio stream
+
+typedef void GrooveEncoder;
+
+typedef struct GrooveEncodeFormat {
+    GrooveAudioFormat audio_format;
+    // select encoding quality by choosing a target bit rate
+    int bit_rate;
+    // optional - choose a short name for the format
+    // to help libgroove guess which format to use
+    // use `avconv -formats` to get a list of possibilities
+    char * format_short_name;
+    // optional - choose a short name for the codec
+    // to help libgroove guess which codec to use
+    // use `avconv -codecs` to get a list of possibilities
+    char * codec_short_name;
+    // optional - provide an example filename
+    // to help libgroove guess which format/codec to use
+    char * filename;
+    // optional - provide a mime type string
+    // to help libgroove guess which format/codec to use
+    char * mime_type;
+} GrooveEncodeFormat;
+
+GrooveEncoder* groove_encoder_create(GroovePlayer *player,
+        const GrooveEncodeFormat *format);
+// you must destroy all encoders before destroying their players
+void groove_encoder_destroy(GrooveEncoder *encoder);
+// returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer ready (block=0),
+// GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END on end of playlist
+int groove_encoder_get_buffer(GrooveEncoder *encoder, GrooveBuffer **buffer,
+        int block);
 
 /************* GrooveReplayGainScan *************/
 typedef struct GrooveReplayGainScan {
@@ -177,7 +354,7 @@ typedef struct GrooveReplayGainScan {
 
 // after you create a GrooveReplayGainScan you may set the callbacks and call
 // groove_replaygainscan_add
-GrooveReplayGainScan * groove_create_replaygainscan();
+GrooveReplayGainScan * groove_replaygainscan_create();
 
 // userdata will be passed back in callbacks
 int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file, void *userdata);

@@ -20,7 +20,7 @@ int main(int argc, char * argv[]) {
     char * filename = argv[1];
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
-    GrooveFile * file = groove_open(filename);
+    GrooveFile * file = groove_file_open(filename);
     if (!file) {
         fprintf(stderr, "error opening file\n");
         return 1;
@@ -30,7 +30,7 @@ int main(int argc, char * argv[]) {
         char * arg = argv[i];
         if (strcmp("--update", arg) == 0) {
             if (i + 2 >= argc) {
-                groove_close(file);
+                groove_file_close(file);
                 fprintf(stderr, "--update requires 2 arguments");
                 return usage(exe);
             }
@@ -39,14 +39,14 @@ int main(int argc, char * argv[]) {
             groove_file_metadata_set(file, key, value, 0);
         } else if (strcmp("--delete", arg) == 0) {
             if (i + 1 >= argc) {
-                groove_close(file);
+                groove_file_close(file);
                 fprintf(stderr, "--delete requires 1 argument");
                 return usage(exe);
             }
             char *key = argv[++i];
             groove_file_metadata_set(file, key, NULL, 0);
         } else {
-            groove_close(file);
+            groove_file_close(file);
             return usage(exe);
         }
     }
@@ -56,6 +56,6 @@ int main(int argc, char * argv[]) {
         printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));
     if (file->dirty && groove_file_save(file) < 0)
         fprintf(stderr, "error saving file\n");
-    groove_close(file);
+    groove_file_close(file);
     return 0;
 }

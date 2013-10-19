@@ -23,14 +23,14 @@ int main(int argc, char * argv[]) {
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
 
-    GrooveReplayGainScan * scan = groove_create_replaygainscan();
+    GrooveReplayGainScan * scan = groove_replaygainscan_create();
     if (!scan) {
         fprintf(stderr, "Unable to create replaygain scan\n");
         return 1;
     }
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
-        GrooveFile * file = groove_open(filename);
+        GrooveFile * file = groove_file_open(filename);
         if (!file) {
             fprintf(stderr, "Unable to open %s\n", filename);
             continue;
