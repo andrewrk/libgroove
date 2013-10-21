@@ -434,19 +434,51 @@ static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     return 0;
 }
 
-// this thread is responsible for maintaining the audio queue
+static int every_sink_full(GroovePlayer *player) {
+    GroovePlayerPrivate *p = player->internals;
+    SinkMap *map_item = p->sink_map;
+    while (map_item) {
+        SinkStack *stack_item = map_item->stack_head;
+        while (stack_item) {
+            GrooveSink *sink = stack_item->sink;
+            GrooveSinkPrivate *s = sink->internals;
+            if (s->audioq_size < s->min_audioq_size)
+                return 0;
+            stack_item = stack_item->next;
+        }
+        map_item = map_item->next;
+    }
+    return 1;
+}
+
+static void every_sink_signal_end(GroovePlayer *player) {
+    GroovePlayerPrivate *p = player->internals;
+    SinkMap *map_item = p->sink_map;
+    while (map_item) {
+        SinkStack *stack_item = map_item->stack_head;
+        while (stack_item) {
+            GrooveSink *sink = stack_item->sink;
+            GrooveSinkPrivate *s = sink->internals;
+            groove_queue_put(s->audioq, &end_of_q_sentinel);
+            stack_item = stack_item->next;
+        }
+        map_item = map_item->next;
+    }
+}
+
+// this thread is responsible for decoding and inserting buffers of decoded
+// audio into each sink
 static int decode_thread(void *arg) {
     GroovePlayer *player = arg;
     GroovePlayerPrivate *p = player->internals;
 
-    // TODO this function needs to change to take into account sinks
     while (!p->abort_request) {
         SDL_LockMutex(p->decode_head_mutex);
 
         // if we don't have anything to decode, wait until we do
         if (!p->decode_head) {
             if (!p->sent_end_of_q) {
-                groove_queue_put(p->audioq, &p->end_of_q_sentinel);
+                every_sink_signal_end(player);
                 p->sent_end_of_q = 1;
             }
             SDL_UnlockMutex(p->decode_head_mutex);
@@ -455,8 +487,8 @@ static int decode_thread(void *arg) {
         }
         p->sent_end_of_q = 0;
 
-        // if the queue is full, no need to read more
-        if (p->audioq_size >= p->min_audioq_size) {
+        // if all sinks are filled up, no need to read more
+        if (every_sink_full(player)) {
             SDL_UnlockMutex(p->decode_head_mutex);
             SDL_Delay(QUEUE_FULL_DELAY);
             continue;
@@ -518,17 +550,17 @@ static int add_sink_to_map(GroovePlayer *player, GrooveSink *sink) {
     if (!stack_entry)
         return -1;
 
-    SinkMap *sink_map = p->sink_map;
-    while (sink_map) {
+    SinkMap *map_item = p->sink_map;
+    while (map_item) {
         // if our sink matches the example sink from this map entry,
         // push our sink onto the stack and we're done
-        GrooveSink *example_sink = sink_map->stack_head->sink;
+        GrooveSink *example_sink = map_item->stack_head->sink;
         if (audio_formats_equal(&example_sink->audio_format, &sink->audio_format)) {
-            stack_entry->next = sink_map->stack_head;
-            sink_map->stack_head = stack_entry;
+            stack_entry->next = map_item->stack_head;
+            map_item->stack_head = stack_entry;
             return 0;
         }
-        sink_map = sink_map->next;
+        map_item = map_item->next;
     }
     // we did not find somewhere to put it, so push it onto the stack.
     SinkMap *map_entry = av_mallocz(sizeof(SinkMap));
@@ -594,8 +626,6 @@ GrooveSink * groove_player_attach_sink(GroovePlayer *player,
 
 void groove_player_remove_sink(GroovePlayer *player, GrooveSink *sink) {
     // TODO
-
-
 }
 
 int groove_player_sink_get_buffer(GroovePlayer *player, GrooveSink *sink,
