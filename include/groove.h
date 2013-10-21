@@ -34,6 +34,22 @@ int groove_channel_layout_count(uint64_t channel_layout);
 // get the default channel layout based on the channel count
 uint64_t groove_channel_layout_default(int count);
 
+enum GrooveSampleFormat {
+    GROOVE_SAMPLE_FMT_NONE = -1,
+    GROOVE_SAMPLE_FMT_U8,          ///< unsigned 8 bits
+    GROOVE_SAMPLE_FMT_S16,         ///< signed 16 bits
+    GROOVE_SAMPLE_FMT_S32,         ///< signed 32 bits
+    GROOVE_SAMPLE_FMT_FLT,         ///< float (32 bits)
+    GROOVE_SAMPLE_FMT_DBL,         ///< double (64 bits)
+
+    GROOVE_SAMPLE_FMT_U8P,         ///< unsigned 8 bits, planar
+    GROOVE_SAMPLE_FMT_S16P,        ///< signed 16 bits, planar
+    GROOVE_SAMPLE_FMT_S32P,        ///< signed 32 bits, planar
+    GROOVE_SAMPLE_FMT_FLTP,        ///< float (32 bits), planar
+    GROOVE_SAMPLE_FMT_DBLP,        ///< double (64 bits), planar
+};
+
+int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
 /************* GrooveFile *************/
 typedef struct GrooveFile {
@@ -79,6 +95,7 @@ int groove_file_save(GrooveFile *file);
 // song duration in seconds
 double groove_file_duration(GrooveFile *file);
 
+// TODO rename GroovePlayer to GroovePlaylist
 /************* GroovePlayer *************/
 typedef struct GroovePlaylistItem {
     // all fields are read-only. modify with methods below.
@@ -160,21 +177,6 @@ void groove_player_set_volume(GroovePlayer *player, double volume);
 #define GROOVE_BUFFER_YES 1
 #define GROOVE_BUFFER_END 2
 
-enum GrooveSampleFormat {
-    GROOVE_SAMPLE_FMT_NONE = -1,
-    GROOVE_SAMPLE_FMT_U8,          ///< unsigned 8 bits
-    GROOVE_SAMPLE_FMT_S16,         ///< signed 16 bits
-    GROOVE_SAMPLE_FMT_S32,         ///< signed 32 bits
-    GROOVE_SAMPLE_FMT_FLT,         ///< float (32 bits)
-    GROOVE_SAMPLE_FMT_DBL,         ///< double (64 bits)
-
-    GROOVE_SAMPLE_FMT_U8P,         ///< unsigned 8 bits, planar
-    GROOVE_SAMPLE_FMT_S16P,        ///< signed 16 bits, planar
-    GROOVE_SAMPLE_FMT_S32P,        ///< signed 32 bits, planar
-    GROOVE_SAMPLE_FMT_FLTP,        ///< float (32 bits), planar
-    GROOVE_SAMPLE_FMT_DBLP,        ///< double (64 bits), planar
-};
-
 typedef struct GrooveAudioFormat {
     int sample_rate;
     uint64_t channel_layout;
@@ -187,7 +189,7 @@ typedef struct GrooveBuffer {
     // for planar audio, each channel has a separate data pointer.
     uint8_t **data;
 
-    enum GrooveAudioFormat format;
+    GrooveAudioFormat format;
     int sample_count;
 
     // for convenience the total number of bytes contained in this buffer
@@ -222,8 +224,9 @@ typedef struct GrooveSink {
     // read-only. the same values you initialized with.
     GrooveAudioFormat audio_format;
 
-    // TODO add and populate this property
-    //int bytes_per_sec; // read-only
+    // read-only. automatically computed when you call groove_player_attach_sink
+    int bytes_per_sec;
+
     // set to whatever you want
     void *userdata;
     // called after flushing the sink queue and before destroying it.
@@ -254,6 +257,7 @@ int groove_player_sink_get_buffer(GroovePlayer *player, GrooveSink *sink,
 
 // TODO add the sync functionality
 
+// TODO rename GrooveDeviceSink to GroovePlayer
 /************* GrooveDeviceSink ****************/
 
 // use this to make a player utilize your speakers

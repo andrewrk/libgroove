@@ -18,8 +18,6 @@
 #define EMPTY_PLAYLIST_DELAY 1
 
 typedef struct GrooveSinkPrivate {
-    struct GrooveSink *prev;
-    struct GrooveSink *next;
     GroovePlayer *player;
 
     GrooveQueue *audioq;
@@ -31,6 +29,16 @@ typedef struct GrooveSinkPrivate {
     // only touched by decode_thread, tells whether we have sent the end_of_q_sentinel
     int sent_end_of_q;
 } GrooveSinkPrivate;
+
+typedef struct SinkStack {
+    GrooveSink *sink;
+    struct SinkStack *next;
+} SinkStack;
+
+typedef struct SinkMap {
+    SinkStack *stack_head;
+    struct SinkMap *next;
+} SinkMap;
 
 typedef struct GroovePlayerPrivate {
     SDL_Thread *thread_id;
@@ -46,11 +54,10 @@ typedef struct GroovePlayerPrivate {
     enum AVSampleFormat in_sample_fmt;
     AVRational in_time_base;
 
-    int dest_sample_rate;
-    uint64_t dest_channel_layout;
-    enum AVSampleFormat dest_sample_fmt;
-    int dest_channel_count; // computed
-    int dest_bytes_per_sec; // computed
+    // map audio format to list of sinks
+    // for each map entry, use the first sink in the stack as the example
+    // of the audio format in that stack
+    SinkMap *sink_map;
 
     char strbuf[512];
     AVFilterGraph *filter_graph;
@@ -70,10 +77,6 @@ typedef struct GroovePlayerPrivate {
 
     // the value for volume that was used to construct the filter graph
     double filter_volume;
-
-    // list of attached sinks
-    GrooveSink *sink_head;
-    GrooveSink *sink_tail;
 } GroovePlayerPrivate;
 
 // this is used to tell the difference between a buffer underrun
@@ -500,31 +503,47 @@ static void destroy_sink(GrooveSink *sink) {
     av_free(sink);
 }
 
-static void rebuild_sink_routing(GroovePlayer *player) {
-    // TODO: instead of telling decode context what single format we want, tell decode_ctx
-    // about the list of formats we are interested in, along with a context for each one
-    // context points to a list of sinks
-    // TODO: do this when we attach or remove a sink instead of in create_player
-    p->decode_ctx.dest_sample_fmt = sdl_format_to_av_format(spec.format);
-    if (p->decode_ctx.dest_sample_fmt == AV_SAMPLE_FMT_NONE) {
-        groove_player_destroy(player);
-        av_log(NULL, AV_LOG_ERROR, "unsupported audio device format\n");
-        return NULL;
+static int audio_formats_equal(const GrooveAudioFormat *a, const GrooveAudioFormat *b) {
+    return a->sample_rate == b->sample_rate &&
+        a->channel_layout == b->channel_layout &&
+        a->sample_fmt == b->sample_fmt;
+}
+
+static int add_sink_to_map(GroovePlayer *player, GrooveSink *sink) {
+    GroovePlayerPrivate *p = player->internals;
+
+    SinkStack *stack_entry = av_mallocz(sizeof(SinkStack));
+    stack_entry->sink = sink;
+
+    if (!stack_entry)
+        return -1;
+
+    SinkMap *sink_map = p->sink_map;
+    while (sink_map) {
+        // if our sink matches the example sink from this map entry,
+        // push our sink onto the stack and we're done
+        GrooveSink *example_sink = sink_map->stack_head->sink;
+        if (audio_formats_equal(&example_sink->audio_format, &sink->audio_format)) {
+            stack_entry->next = sink_map->stack_head;
+            sink_map->stack_head = stack_entry;
+            return 0;
+        }
+        sink_map = sink_map->next;
     }
-
-    p->decode_ctx.dest_sample_rate = spec.freq;
-    p->decode_ctx.dest_channel_layout = spec.channels == 2 ?
-        AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
-
-    // TODO this should change to reflect sinks
-    decode_ctx->dest_channel_count =
-        av_get_channel_layout_nb_channels(decode_ctx->dest_channel_layout);
-    decode_ctx->dest_bytes_per_sec = decode_ctx->dest_sample_rate *
-        decode_ctx->dest_channel_count * av_get_bytes_per_sample(decode_ctx->dest_sample_fmt);
-
-
-    p->min_audioq_size = AUDIOQ_BUF_SIZE * p->decode_ctx.dest_bytes_per_sec / 1000;
-    av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", p->min_audioq_size);
+    // we did not find somewhere to put it, so push it onto the stack.
+    SinkMap *map_entry = av_mallocz(sizeof(SinkMap));
+    map_entry->stack_head = stack_entry;
+    if (!map_entry) {
+        av_free(stack_entry);
+        return -1;
+    }
+    if (p->sink_map) {
+        map_entry->next = p->sink_map;
+        p->sink_map = map_entry;
+    } else {
+        p->sink_map = map_entry;
+    }
+    return 0;
 }
 
 GrooveSink * groove_player_attach_sink(GroovePlayer *player,
@@ -543,12 +562,19 @@ GrooveSink * groove_player_attach_sink(GroovePlayer *player,
     sink->internals = s;
 
     sink->audio_format = *audio_format;
+    // cache computed audio format stuff
+    int channel_count = av_get_channel_layout_nb_channels(audio_format->channel_layout);
+    sink->bytes_per_sec = channel_count * audio_format->sample_rate *
+        av_get_bytes_per_sample(audio_format->sample_fmt);
+    s->min_audioq_size = AUDIOQ_BUF_SIZE * sink->bytes_per_sec / 1000;
+    av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
+
     s->audioq = groove_queue_create();
     s->play_head_mutex = SDL_CreateMutex();
 
     if (!p->audioq || !p->play_head_mutex) {
         destroy_sink(sink);
-        av_log(NULL, AV_LOG_WARNING, "unable to attach device: out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
         return NULL;
     }
 
@@ -558,21 +584,18 @@ GrooveSink * groove_player_attach_sink(GroovePlayer *player,
     s->audioq->get = audioq_get;
     s->audioq->purge = audioq_purge;
 
-    // add it to the list
-    if (!p->sink_tail)
-        p->sink_head = sink;
-    else
-        p->sink_tail->next = sink;
-    p->sink_tail = sink;
-
-    rebuild_sink_routing();
+    // add the sink to the entry that matches its audio format
+    if (add_sink_to_map(player, sink) < 0) {
+        destroy_sink(sink);
+        av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
+        return NULL;
+    }
 }
 
 void groove_player_remove_sink(GroovePlayer *player, GrooveSink *sink) {
     // TODO
 
 
-    rebuild_sink_routing();
 }
 
 int groove_player_sink_get_buffer(GroovePlayer *player, GrooveSink *sink,

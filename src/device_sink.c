@@ -174,6 +174,12 @@ GrooveDeviceSink* groove_device_sink_create(GroovePlayer *player,
     audio_format.channel_layout = groove_channel_layout_default(spec.channels);
     audio_format.sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
 
+    if (audio_format.sample_fmt == GROOVE_SAMPLE_FMT_NONE) {
+        groove_device_sink_destroy(dsc);
+        av_log(NULL, AV_LOG_ERROR, "unsupported audio device sample format\n");
+        return NULL;
+    }
+
     dsc->sink = groove_player_attach_sink(player, &audio_format);
     if (!dsc->sink) {
         groove_device_sink_destroy(dsc);

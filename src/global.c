@@ -59,3 +59,7 @@ int groove_channel_layout_count(uint64_t channel_layout) {
 uint64_t groove_channel_layout_default(int count) {
     return av_get_default_channel_layout(count);
 }
+
+int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format) {
+    return av_get_bytes_per_sample(format);
+}

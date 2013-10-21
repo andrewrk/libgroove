@@ -15,11 +15,11 @@ For documentation, see include/groove.h and the examples. Join us in #libgroove 
    - [EBU R 128](http://tech.ebu.ch/loudness) loudness scanning which outputs
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification)-compatible values.
    - progress callbacks at a configurable interval
-   - (roadmap) perfectly accurate duration
-   - (roadmap) accoustid fingerprint
+   - (on the roadmap) perfectly accurate duration
+   - (on the roadmap) accoustid fingerprint
  * Per-playlist item gain adjustment so you can implement
-   loudness compensation without any glitches.
- * Powerful audio routing.
+   loudness compensation without audio glitches.
+ * Generic audio routing.
    - You can create multiple player instances.
    - You can attach multiple raw audio sinks to a player instance.
      This could be used for live audio visualization, for example.
