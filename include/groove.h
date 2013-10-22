@@ -191,13 +191,12 @@ typedef struct GrooveBuffer {
 
     GrooveAudioFormat format;
     int sample_count;
+    GroovePlaylistItem *item;
+    double pos;
 
     // for convenience the total number of bytes contained in this buffer
     // are provided.
-    // TODO add and populate this field
-    //int size;
-    GroovePlaylistItem *item;
-    double pos;
+    int size;
 
     void *internals;
 } GrooveBuffer;

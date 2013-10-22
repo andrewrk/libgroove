@@ -94,7 +94,7 @@ static int frame_size(const AVFrame *frame) {
         frame->nb_samples;
 }
 
-static GrooveBuffer * frame_to_groove_buffer(GroovePlayer *player, GrooveQueue *queue, AVFrame *frame) {
+static GrooveBuffer * frame_to_groove_buffer(GroovePlayer *player, GrooveSink *sink, AVFrame *frame) {
     GrooveBuffer *buffer = av_mallocz(sizeof(GrooveBuffer));
     GrooveBufferPrivate *b = av_mallocz(sizeof(GrooveBufferPrivate));
 
@@ -117,11 +117,18 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlayer *player, GrooveQueue *
     }
 
     buffer->item = p->decode_head;
+    buffer->data = frame->extended_data;
+    buffer->sample_count = frame->nb_samples;
+    buffer->audio_format.channel_layout = frame->channel_layout;
+    buffer->audio_format.sample_fmt = frame->format;
+    buffer->audio_format.sample_rate = frame->sample_rate;
+    buffer->size = frame_size(frame);
     b->frame = frame;
 
     GrooveFile *file = p->decode_head->file;
     GrooveFilePrivate *f = file->internals;
     buffer->pos = f->audio_clock;
+
 
     return buffer;
 }
@@ -183,6 +190,7 @@ static int audio_decode_frame(GroovePlayer *player, GrooveFile *file) {
         // count for each sink in that stack.
         SinkMap *map_item = p->sink_map;
         while (map_item) {
+            Sink *example_sink = map_item->stack_head->sink;
             data_size = 0;
             for (;;) {
                 AVFrame *oframe = av_frame_alloc();
@@ -193,10 +201,10 @@ static int audio_decode_frame(GroovePlayer *player, GrooveFile *file) {
                     av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
                     return -1;
                 }
-                data_size += frame_size(oframe);
-                GrooveBuffer *buffer = frame_to_groove_buffer(player, oframe);
+                GrooveBuffer *buffer = frame_to_groove_buffer(player, example_sink, oframe);
                 if (!buffer)
                     return -1;
+                data_size += buffer->size;
                 SinkStack *stack_item = map_item->stack_head;
                 while (stack_item) {
                     GrooveSink *sink = stack_item->sink;
