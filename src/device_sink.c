@@ -29,7 +29,6 @@ typedef struct GrooveDeviceSinkPrivate {
 } GrooveDeviceSinkPrivate;
 
 static Uint16 groove_fmt_to_sdl_fmt(enum GrooveSampleFormat fmt) {
-    // TODO: more of those
     switch (fmt) {
         case GROOVE_SAMPLE_FMT_U8:
             return AUDIO_U8;

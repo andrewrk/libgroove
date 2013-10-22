@@ -86,8 +86,7 @@ typedef struct GrooveBufferPrivate {
 
 // this is used to tell the difference between a buffer underrun
 // and the end of the playlist.
-// TODO see if we can use NULL for the end_of_q_sentinel
-static GrooveBuffer end_of_q_sentinel;
+static GrooveBuffer *end_of_q_sentinel = NULL;
 
 static int frame_size(const AVFrame *frame) {
     return av_get_channel_layout_nb_channels(frame->channel_layout) *
@@ -434,7 +433,7 @@ static int every_sink_full(GroovePlayer *player) {
 
 static int sink_signal_end(GrooveSink *sink) {
     GrooveSinkPrivate *s = sink->internals;
-    groove_queue_put(s->audioq, &end_of_q_sentinel);
+    groove_queue_put(s->audioq, end_of_q_sentinel);
     return 0;
 }
 
@@ -532,7 +531,7 @@ static void audioq_put(GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     GrooveSink *sink = queue->context;
     GrooveSinkPrivate *s = sink->internals;
-    if (buffer == &end_of_q_sentinel)
+    if (buffer == end_of_q_sentinel)
         return;
     s->audioq_buf_count += 1;
     s->audioq_size += buffer->size;
@@ -542,7 +541,7 @@ static void audioq_get(GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     GrooveSink *sink = queue->context;
     GrooveSinkPrivate *s = sink->internals;
-    if (buffer == &end_of_q_sentinel)
+    if (buffer == end_of_q_sentinel)
         return;
     s->audioq_buf_count -= 1;
     s->audioq_size -= buffer->size;
@@ -552,7 +551,7 @@ static void audioq_cleanup(GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     GrooveSink *sink = queue->context;
     GrooveSinkPrivate *s = sink->internals;
-    if (buffer == &end_of_q_sentinel)
+    if (buffer == end_of_q_sentinel)
         return;
     s->audioq_buf_count -= 1;
     s->audioq_size -= buffer->size;
@@ -751,7 +750,7 @@ int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block) {
     GrooveSinkPrivate *s = sink->internals;
 
     if (groove_queue_get(s->audioq, (void**)buffer, block) == 1) {
-        if (*buffer == &end_of_q_sentinel) {
+        if (*buffer == end_of_q_sentinel) {
             *buffer = NULL;
             return GROOVE_BUFFER_END;
         } else {
