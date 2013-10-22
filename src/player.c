@@ -1,4 +1,5 @@
-#include "groove.h"
+#include "file.h"
+#include "buffer.h"
 #include "queue.h"
 
 #include <libavutil/opt.h>
@@ -78,6 +79,11 @@ typedef struct GroovePlayerPrivate {
     // only touched by decode_thread, tells whether we have sent the end_of_q_sentinel
     int sent_end_of_q;
 } GroovePlayerPrivate;
+
+typedef struct GrooveBufferPrivate {
+    AVFrame *frame;
+    int ref_count;
+} GrooveBufferPrivate;
 
 // this is used to tell the difference between a buffer underrun
 // and the end of the playlist.
@@ -1035,4 +1041,25 @@ void groove_sink_destroy(GrooveSink *sink) {
 
     av_free(s);
     av_free(sink);
+}
+
+void groove_buffer_ref(GrooveBuffer *buffer) {
+    GrooveBufferPrivate *b = buffer->internals;
+
+    b->ref_count += 1;
+}
+
+void groove_buffer_unref(GrooveBuffer *buffer) {
+    if (!buffer)
+        return;
+
+    GrooveBufferPrivate *b = buffer->internals;
+
+    b->ref_count -= 1;
+
+    if (b->ref_count == 0) {
+        av_frame_free(&b->frame);
+        av_free(b);
+        av_free(buffer);
+    }
 }

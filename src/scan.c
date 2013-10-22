@@ -1,4 +1,4 @@
-#include "file.h"
+#include "groove.h"
 
 #include <ebur128.h>
 
@@ -119,33 +119,30 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
     while (s->file_item) {
         node = filestack_pop(&s->file_item);
         GrooveFile *file = node->file;
-        GrooveFilePrivate *f = file->internals;
         void *userdata = node->userdata;
         av_freep(&node);
 
-        // flush buffers and seek to 0
-        f->seek_pos = 0;
-        f->seek_flush = 1;
-
         groove_player_clear(s->player);
-        groove_player_insert(s->player, file, 1.0, NULL);
+        GroovePlaylistItem *item = groove_player_insert(s->player, file, 1.0, NULL);
+        groove_player_seek(s->player, item, 0);
         double seconds_passed = 0;
         double prev_clock = 0;
-        double duration = av_q2d(f->audio_st->time_base) * f->audio_st->duration;
+        double duration = groove_file_duration(file);
 
         GrooveBuffer *buffer;
         while (groove_sink_get_buffer(s->sink, &buffer, 1) == GROOVE_BUFFER_YES) {
             // process buffer
             ebur128_state *st = s->ebur_states[s->current_index];
             ebur128_add_frames_double(st, (double*)buffer->data[0], buffer->sample_count);
+            double audio_clock = buffer->pos;
             groove_buffer_unref(buffer);
 
             // handle progress
             if (scan->file_progress) {
-                seconds_passed += f->audio_clock - prev_clock;
-                prev_clock = f->audio_clock;
+                seconds_passed += audio_clock - prev_clock;
+                prev_clock = audio_clock;
                 if (seconds_passed > progress_interval) {
-                    double percent = f->audio_clock / duration;
+                    double percent = audio_clock / duration;
                     seconds_passed -= progress_interval;
                     scan->file_progress(userdata, percent);
                     if (scan->abort_request) {
