@@ -52,6 +52,7 @@ int main(int argc, char * argv[]) {
                     groove_file_close(file);
                     item = next;
                 }
+                groove_device_sink_detach(device_sink);
                 groove_device_sink_destroy(device_sink);
                 groove_player_destroy(player);
                 return 0;

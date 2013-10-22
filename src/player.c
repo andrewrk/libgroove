@@ -714,9 +714,10 @@ int groove_sink_detach(GrooveSink *sink) {
         groove_queue_flush(s->audioq);
     }
 
+    int err = remove_sink_from_map(sink);
     sink->player = NULL;
 
-    return remove_sink_from_map(sink);
+    return err;
 }
 
 int groove_sink_attach(GrooveSink *sink, GroovePlayer *player) {
