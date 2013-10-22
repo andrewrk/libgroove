@@ -120,7 +120,7 @@ typedef struct GroovePlaylist {
 } GroovePlaylist;
 
 // a playlist manages keeping an audio buffer full
-// to send the buffer to your speakers, use groove_device_sink_create
+// to send the buffer to your speakers, use groove_player_create
 GroovePlaylist * groove_playlist_create();
 // this will not call groove_file_close on any files
 // it will remove all playlist items and sinks from the playlist
@@ -150,7 +150,7 @@ void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item);
 // you may pass NULL for item or seconds
 // Note that typically you are more interested in the position of the play
 // head, not the decode head. Example methods which return the play head are
-// groove_device_sink_position and groove_encoder_position
+// groove_player_position and groove_encoder_position
 void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **item,
         double *seconds);
 
@@ -207,7 +207,7 @@ void groove_buffer_unref(GrooveBuffer *buffer);
 
 // use this to get access to a realtime raw audio buffer
 // for example you could use it to draw a waveform or other visualization
-// GrooveDeviceSink uses this internally to get the audio buffer for playback
+// GroovePlayer uses this internally to get the audio buffer for playback
 
 enum GrooveEventType {
     // when the currently playing track changes.
@@ -264,18 +264,17 @@ int groove_sink_detach(GrooveSink *sink);
 int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block);
 
 
-// TODO rename GrooveDeviceSink to GroovePlayer
-/************* GrooveDeviceSink ****************/
+/************* GroovePlayer ****************/
 
 // use this to make a playlist utilize your speakers
 
-typedef struct GrooveDeviceSink {
+typedef struct GroovePlayer {
     // set this to the device you want to open
     // NULL means default device
     char *device_name;
 
     // The desired audio format settings with which to open the device.
-    // groove_device_sink_create defaults these to 44100 Hz,
+    // groove_player_create defaults these to 44100 Hz,
     // signed 16-bit int, stereo.
     // These are preferences; if a setting cannot be used, a substitute will
     // be used instead. In this case, audio_format will be updated to reflect
@@ -284,15 +283,15 @@ typedef struct GrooveDeviceSink {
 
     // how big the device buffer should be, in sample frames.
     // must be a power of 2.
-    // groove_device_sink_create defaults this to 1024
+    // groove_player_create defaults this to 1024
     int device_buffer_size;
 
     // how big the memory buffer should be, in sample frames.
-    // groove_device_sink_create defaults this to 8192
+    // groove_player_create defaults this to 8192
     int memory_buffer_size;
 
-    // read-only. set when you call groove_device_sink_attach and cleared when
-    // you call groove_device_sink_detach
+    // read-only. set when you call groove_player_attach and cleared when
+    // you call groove_player_detach
     GroovePlaylist *playlist;
 
     // read-only. set to the actual format you get when you open the device.
@@ -300,7 +299,7 @@ typedef struct GrooveDeviceSink {
     GrooveAudioFormat actual_audio_format;
 
     void *internals;
-} GrooveDeviceSink;
+} GroovePlayer;
 
 // Returns the number of available devices exposed by the current driver or -1
 // if an explicit list of devices can't be determined. A return value of -1
@@ -318,32 +317,32 @@ int groove_device_count();
 // for any length of time, you should make your own copy of it.
 const char * groove_device_name(int index);
 
-GrooveDeviceSink* groove_device_sink_create();
-void groove_device_sink_destroy(GrooveDeviceSink *device_sink);
+GroovePlayer* groove_player_create();
+void groove_player_destroy(GroovePlayer *player);
 
-// Attaches the device sink to the playlist instance and opens the device to
+// Attaches the player to the playlist instance and opens the device to
 // begin playback.
 // Internally this creates a GrooveSink and sends the samples to the device.
-// you must detach a device sink before destroying it or the playlist it is
+// you must detach a player before destroying it or the playlist it is
 // attached to
 // returns 0 on success, < 0 on error
-int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlaylist *playlist);
+int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist);
 // returns 0 on success, < 0 on error
-int groove_device_sink_detach(GrooveDeviceSink *device_sink);
+int groove_player_detach(GroovePlayer *player);
 
 // get the position of the play head
 // both the current playlist item and the position in seconds in the playlist
 // item are given. item will be set to NULL if the playlist is empty
 // you may pass NULL for item or seconds
-void groove_device_sink_position(GrooveDeviceSink *device_sink,
+void groove_player_position(GroovePlayer *player,
         GroovePlaylistItem **item, double *seconds);
 
 // returns < 0 on error, 0 on no event ready, 1 on got event
-int groove_device_sink_event_get(GrooveDeviceSink *device_sink,
+int groove_player_event_get(GroovePlayer *player,
         GrooveEvent *event, int block);
 // returns < 0 on error, 0 on no event ready, 1 on event ready
 // if block is 1, block until event is ready
-int groove_device_sink_event_peek(GrooveDeviceSink *device_sink, int block);
+int groove_player_event_peek(GroovePlayer *player, int block);
 
 
 /************* GrooveEncoder ************/
