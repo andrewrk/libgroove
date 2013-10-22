@@ -4,16 +4,13 @@
 #include <libavutil/frame.h>
 #include <SDL2/SDL_audio.h>
 
-// SDL audio buffer size, in samples. Should be small because there is no way
-// to clear the buffer.
-#define SDL_AUDIO_BUFFER_SIZE 1024
-
-typedef struct DeviceSinkContext {
+typedef struct GrooveDeviceSinkPrivate {
     GrooveBuffer *audio_buf;
     size_t audio_buf_size; // in bytes
     size_t audio_buf_index; // in bytes
 
     // this mutex applies to the variables in this block
+    // TODO initialize and destroy this
     SDL_mutex *play_head_mutex;
     // pointer to current item where the buffered audio is reaching the device
     GroovePlaylistItem *play_head;
@@ -23,14 +20,13 @@ typedef struct DeviceSinkContext {
 
     SDL_AudioDeviceID device_id;
     GrooveSink *sink;
-    GroovePlayer *player;
 
     // only touched by sdl_audio_callback, tells whether we have reached end
     // of audio queue naturally rather than a buffer underrun
     int end_of_q;
 
     GrooveQueue *eventq;
-} DeviceSinkContext;
+} GrooveDeviceSinkPrivate;
 
 static enum GrooveSampleFormat sdl_fmt_to_groove_fmt(Uint16 sdl_format) {
     switch (sdl_format) {
@@ -62,19 +58,20 @@ static void emit_event(GrooveQueue *queue, enum GrooveEventType type) {
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     DeviceSinkContext *dsc = opaque;
     GrooveSink *sink = dsc->sink;
+    GroovePlayer *player = sink->player;
 
     double bytes_per_sec = sink->bytes_per_sec;
 
     SDL_LockMutex(dsc->play_head_mutex);
 
     while (len > 0) {
-        int paused = groove_player_playing(dsc->player);
+        int paused = groove_player_playing(player);
         if (!paused && dsc->audio_buf_index >= dsc->audio_buf_size) {
             groove_buffer_unref(dsc->audio_buf);
             dsc->audio_buf_index = 0;
             dsc->audio_buf_size = 0;
 
-            int ret = groove_player_sink_get_buffer(dsc->player, dsc->sink,
+            int ret = groove_player_sink_get_buffer(player, dsc->sink,
                     &dsc->audio_buf, 0);
             if (ret == GROOVE_BUFFER_END) {
                 emit_event(dsc->eventq, GROOVE_EVENT_NOWPLAYING);
@@ -114,15 +111,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
 }
 
 static void destroy_device_sink(DeviceSinkContext *dsc) {
-    if (dsc->device_id > 0) {
-        SDL_CloseAudioDevice(dsc->device_id);
-    }
     av_frame_free(&dsc->audio_buf);
-}
-
-static void sink_cleanup(GrooveSink *sink) {
-    DeviceSinkContext *dsc = sink->userdata;
-    destroy_device_sink(dsc);
 }
 
 static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
@@ -134,6 +123,7 @@ static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
         dsc->play_head = NULL;
         dsc->play_pos = -1.0;
         groove_buffer_unref(dsc->audio_buf);
+        dsc->audio_buf = NULL;
         dsc->audio_buf_index = 0;
         dsc->audio_buf_size = 0;
         emit_event(dsc->eventq, GROOVE_EVENT_NOWPLAYING);
@@ -142,68 +132,130 @@ static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
     SDL_UnlockMutex(dsc->play_head_mutex);
 }
 
-GrooveDeviceSink* groove_device_sink_create(GroovePlayer *player,
-        const char *name)
-{
-    DeviceSinkContext *dsc = av_mallocz(sizeof(DeviceSinkContext));
+static void sink_flush(GrooveSink *sink) {
+    DeviceSinkContext *dsc = sink->userdata;
 
-    if (!dsc) {
-        av_log(NULL, AV_LOG_ERROR, "unable to create device sink: out of memory\n");
-        return NULL;
-    }
-    dsc->player = player;
+    SDL_LockMutex(dsc->play_head_mutex);
 
-    SDL_AudioSpec wanted_spec, spec;
-    wanted_spec.format = AUDIO_S16SYS;
-    wanted_spec.freq = 44100;
-    wanted_spec.channels = 2;
-    wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
-    wanted_spec.callback = sdl_audio_callback;
-    wanted_spec.userdata = dsc;
-    dsc->device_id = SDL_OpenAudioDevice(name, 0, &wanted_spec,
-            &spec, SDL_AUDIO_ALLOW_ANY_CHANGE);
-    if (dsc->device_id == 0) {
-        groove_device_sink_destroy(dsc);
-        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
-        return NULL;
-    }
+    groove_buffer_unref(dsc->audio_buf);
+    dsc->audio_buf = NULL;
+    dsc->audio_buf_index = 0;
+    dsc->audio_buf_size = 0;
 
-    // based on spec that we got, attach a sink with those properties
-    GrooveAudioFormat audio_format;
-    audio_format.sample_rate = spec.freq;
-    audio_format.channel_layout = groove_channel_layout_default(spec.channels);
-    audio_format.sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
+    SDL_UnlockMutex(dsc->play_head_mutex);
+}
 
-    if (audio_format.sample_fmt == GROOVE_SAMPLE_FMT_NONE) {
-        groove_device_sink_destroy(dsc);
-        av_log(NULL, AV_LOG_ERROR, "unsupported audio device sample format\n");
+GrooveDeviceSink * groove_device_sink_create() {
+    GrooveDeviceSink *device_sink = av_mallocz(sizeof(GrooveDeviceSink));
+    GrooveDeviceSinkPrivate *ds = av_mallocz(sizeof(GrooveDeviceSinkPrivate));
+
+    if (!device_sink || !ds) {
+        av_free(device_sink);
+        av_free(ds);
+        av_log(NULL, AV_LOG_ERROR("unable to create device sink: out of memory\n"));
         return NULL;
     }
 
-    dsc->sink = groove_player_attach_sink(player, &audio_format);
-    if (!dsc->sink) {
-        groove_device_sink_destroy(dsc);
-        av_log(NULL, AV_LOG_ERROR, "unable to attach sink for playback\n");
+    device_sink->internals = ds;
+
+    ds->sink = groove_sink_create();
+    if (!ds->sink) {
+        groove_device_sink_destroy(device_sink);
+        av_log(NULL, AV_LOG_ERROR("unable to create sink: out of memory\n"));
         return NULL;
     }
 
-    dsc->play_pos = -1.0;
+    ds->play_head_mutex = SDL_CreateMutex();
+    if (!ds->play_head_mutex) {
+        groove_device_sink_destroy(device_sink);
+        av_log(NULL, AV_LOG_ERROR("unable to create play head mutex: out of memory\n"));
+        return NULL;
+    }
 
-    dsc->sink->userdata = dsc;
-    dsc->sink->cleanup = sink_cleanup;
-    dsc->sink->purge = sink_purge;
+    // set some nice defaults
+    device_sink->target_audio_format.sample_rate = 44100;
+    device_sink->target_audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
+    device_sink->target_audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
+    // small because there is no way to clear the buffer.
+    device_sink->device_buffer_size = 1024;
+    device_sink->memory_buffer_size = 8192;
 
-    SDL_PauseAudioDevice(dsc->device_id, 0);
+    return device_sink;
 }
 
 void groove_device_sink_destroy(GrooveDeviceSink *device_sink) {
-    DeviceSinkContext *dsc = device_sink;
-    if (dsc->sink) {
-        groove_player_remove_sink(dsc->player, dsc->sink);
-    } else {
-        destroy_device_sink(dsc);
+    if (!device_sink)
+        return;
+
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
+
+    SDL_DestroyMutex(ds->play_head_mutex);
+    groove_sink_destroy(ds->sink);
+    av_free(ds);
+    av_free(device_sink);
+}
+
+int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *player) {
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
+
+    SDL_AudioSpec wanted_spec, spec;
+    wanted_spec.format = groove_fmt_to_sdl_fmt(device_sink->target_audio_format.sample_fmt);
+    wanted_spec.freq = device_sink->target_audio_format.sample_rate;
+    wanted_spec.channels = groove_channel_layout_count(device_sink->target_audio_format.channel_layout);
+    wanted_spec.samples = device_sink->device_buffer_size;
+    wanted_spec.callback = sdl_audio_callback;
+    wanted_spec.userdata = device_sink;
+
+    ds->device_id = SDL_OpenAudioDevice(name, 0, &wanted_spec,
+            &spec, SDL_AUDIO_ALLOW_ANY_CHANGE);
+    if (ds->device_id == 0) {
+        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
+        return -1;
     }
-    av_free(dsc);
+
+    // save the actual spec back into the struct
+    device_sink->actual_audio_format.sample_rate = spec.freq;
+    device_sink->actual_audio_format.channel_layout = groove_channel_layout_default(spec.channels);
+    device_sink->actual_audio_format.sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
+
+    // based on spec that we got, attach a sink with those properties
+    ds->sink->audio_format = device_sink->actual_audio_format;
+
+    if (ds->sink->audio_format.sample_fmt == GROOVE_SAMPLE_FMT_NONE) {
+        groove_device_sink_detach(device_sink);
+        av_log(NULL, AV_LOG_ERROR, "unsupported audio device sample format\n");
+        return -1;
+    }
+
+    int err = groove_sink_attach(ds->sink, player);
+    if (err < 0) {
+        groove_device_sink_detach(device_sink);
+        av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
+        return err;
+    }
+
+    ds->play_pos = -1.0;
+
+    ds->sink->userdata = device_sink;
+    ds->sink->purge = sink_purge;
+    ds->sink->flush = sink_flush;
+
+    SDL_PauseAudioDevice(ds->device_id, 0);
+}
+
+void groove_device_sink_detach(GrooveDeviceSink *device_sink) {
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
+    if (ds->sink->player) {
+        groove_sink_detach(ds->sink);
+    }
+    if (ds->device_id > 0) {
+        SDL_CloseAudioDevice(ds->device_id);
+        ds->device_id = 0;
+    }
+    device_sink->player = NULL;
+
+    groove_buffer_unref(ds->audio_buf);
+    ds->audio_buf = NULL;
 }
 
 int groove_device_count() {

@@ -18,16 +18,11 @@
 #define EMPTY_PLAYLIST_DELAY 1
 
 typedef struct GrooveSinkPrivate {
-    GroovePlayer *player;
-
     GrooveQueue *audioq;
     int audioq_buf_count;
     int audioq_size;
     int min_audioq_size;
     GroovePlaylistItem *purge_item; // set temporarily
-
-    // only touched by decode_thread, tells whether we have sent the end_of_q_sentinel
-    int sent_end_of_q;
 } GrooveSinkPrivate;
 
 typedef struct SinkStack {
@@ -79,6 +74,9 @@ typedef struct GroovePlayerPrivate {
 
     // the value for volume that was used to construct the filter graph
     double filter_volume;
+
+    // only touched by decode_thread, tells whether we have sent the end_of_q_sentinel
+    int sent_end_of_q;
 } GroovePlayerPrivate;
 
 // this is used to tell the difference between a buffer underrun
@@ -333,6 +331,60 @@ static int maybe_init_filter_graph(GroovePlayer *player, GrooveFile *file) {
     return 0;
 }
 
+static int every_sink(GroovePlayer *player, int (*func)(GrooveSink *), int default_value) {
+    GroovePlayerPrivate *p = player->internals;
+    SinkMap *map_item = p->sink_map;
+    while (map_item) {
+        SinkStack *stack_item = map_item->stack_head;
+        while (stack_item) {
+            GrooveSink *sink = stack_item->sink;
+            int value = func(sink);
+            if (value != default_value)
+                return value;
+            stack_item = stack_item->next;
+        }
+        map_item = map_item->next;
+    }
+    return default_value;
+}
+
+static int sink_is_full(GrooveSink *sink) {
+    GrooveSinkPrivate *s = sink->internals;
+    return s->audioq_size >= s->min_audioq_size;
+}
+
+static int every_sink_full(GroovePlayer *player) {
+    return every_sink(player, sink_is_full, 1);
+}
+
+static int sink_signal_end(GrooveSink *sink) {
+    GrooveSinkPrivate *s = sink->internals;
+    groove_queue_put(s->audioq, &end_of_q_sentinel);
+    return 0;
+}
+
+static void every_sink_signal_end(GroovePlayer *player) {
+    every_sink(player, sink_signal_end, 0);
+}
+
+static int sink_flush(GrooveSink *sink) {
+    GrooveSinkPrivate *s = sink->internals;
+
+    groove_queue_flush(s->audioq);
+    if (sink->flush)
+        sink->flush(sink);
+
+    return 0;
+}
+
+static void every_sink_flush(GroovePlayer *player) {
+    every_sink(player, sink_flush, 0);
+
+
+    // TODO flush each sink
+    GroovePlayerPrivate *p = player->internals;
+    groove_queue_flush(p->audioq);
+}
 
 static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
     GroovePlayerPrivate *p = player->internals;
@@ -348,10 +400,10 @@ static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
         return -1;
 
     // handle pause requests
-    // only read decode_ctx->paused once so that we don't need a mutex
-    int paused = decode_ctx->paused;
-    if (paused != decode_ctx->last_paused) {
-        decode_ctx->last_paused = paused;
+    // only read p->paused once so that we don't need a mutex
+    int paused = p->paused;
+    if (paused != p->last_paused) {
+        p->last_paused = paused;
         if (paused) {
             av_read_pause(f->ic);
         } else {
@@ -365,8 +417,7 @@ static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
         if (av_seek_frame(f->ic, f->audio_stream_index, f->seek_pos, 0) < 0) {
             av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->filename);
         } else if (f->seek_flush) {
-            if (decode_ctx->flush)
-                decode_ctx->flush(decode_ctx);
+            every_sink_flush(player);
         }
         avcodec_flush_buffers(f->audio_st->codec);
         f->seek_pos = -1;
@@ -446,24 +497,6 @@ static int audioq_purge(GrooveQueue *queue, void *obj) {
     return tb->item == s->purge_item;
 }
 
-static void player_flush(GroovePlayer *player) {
-    // TODO flush each sink
-    GroovePlayerPrivate *p = player->internals;
-    groove_queue_flush(p->audioq);
-
-    // also flush p->audio_buf
-    SDL_LockMutex(p->play_head_mutex);
-    av_frame_free(&p->audio_buf);
-    p->audio_buf_index = 0;
-    p->audio_buf_size = 0;
-    SDL_UnlockMutex(p->play_head_mutex);
-}
-
-static void player_flush_cb(GrooveDecodeContext *decode_ctx) {
-    GroovePlayer *player = decode_ctx->callback_context;
-    player_flush(player);
-}
-
 static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     GroovePlayer *player = decode_ctx->callback_context;
     GroovePlayerPrivate *p = player->internals;
@@ -485,37 +518,6 @@ static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
     return 0;
 }
 
-static int every_sink_full(GroovePlayer *player) {
-    GroovePlayerPrivate *p = player->internals;
-    SinkMap *map_item = p->sink_map;
-    while (map_item) {
-        SinkStack *stack_item = map_item->stack_head;
-        while (stack_item) {
-            GrooveSink *sink = stack_item->sink;
-            GrooveSinkPrivate *s = sink->internals;
-            if (s->audioq_size < s->min_audioq_size)
-                return 0;
-            stack_item = stack_item->next;
-        }
-        map_item = map_item->next;
-    }
-    return 1;
-}
-
-static void every_sink_signal_end(GroovePlayer *player) {
-    GroovePlayerPrivate *p = player->internals;
-    SinkMap *map_item = p->sink_map;
-    while (map_item) {
-        SinkStack *stack_item = map_item->stack_head;
-        while (stack_item) {
-            GrooveSink *sink = stack_item->sink;
-            GrooveSinkPrivate *s = sink->internals;
-            groove_queue_put(s->audioq, &end_of_q_sentinel);
-            stack_item = stack_item->next;
-        }
-        map_item = map_item->next;
-    }
-}
 
 // this thread is responsible for decoding and inserting buffers of decoded
 // audio into each sink
@@ -570,17 +572,10 @@ static int decode_thread(void *arg) {
 }
 
 static void destroy_sink(GrooveSink *sink) {
-    GrooveSink *s = sink->internals;
+    GrooveSinkPrivate *s = sink->internals;
 
-    // flush audio queue
-    if (s->audioq)
-        groove_queue_abort(s->audioq);
-    if (sink->cleanup)
-        sink->cleanup(sink);
     if (s->audioq)
         groove_queue_destroy(s->audioq);
-    if (s->play_head_mutex)
-        SDL_DestroyMutex(s->play_head_mutex);
 
     av_free(s);
     av_free(sink);
@@ -590,6 +585,48 @@ static int audio_formats_equal(const GrooveAudioFormat *a, const GrooveAudioForm
     return a->sample_rate == b->sample_rate &&
         a->channel_layout == b->channel_layout &&
         a->sample_fmt == b->sample_fmt;
+}
+
+static int remove_sink_from_map(GrooveSink *sink) {
+    GroovePlayer *player = sink->player;
+    GroovePlayerPrivate *p = player->internals;
+
+    SinkMap *map_item = p->sink_map;
+    SinkMap *prev_map_item = NULL;
+    while (map_item) {
+        SinkMap *next_map_item = map_item->next;
+        SinkStack *stack_item = map_item->stack_head;
+        SinkStack *prev_stack_item = NULL;
+        while (stack_item) {
+            SinkStack *next_stack_item = stack_item->next;
+            GrooveSink *item_sink = stack_item->sink;
+            if (item_sink == sink) {
+                av_free(stack_item);
+                if (prev_stack_item) {
+                    prev_stack_item->next = next_stack_item;
+                } else if (next_stack_item) {
+                    map_item->stack_head = next_stack_item;
+                } else {
+                    // the stack is empty; delete the map item
+                    av_free(map_item);
+                    p->sink_map_count -= 1;
+                    if (prev_map_item) {
+                        prev_map_item->next = next_map_item;
+                    } else {
+                        p->sink_map = next_map_item;
+                    }
+                }
+                return 0;
+            }
+
+            prev_stack_item = stack_item;
+            stack_item = next_stack_item;
+        }
+        prev_map_item = map_item;
+        map_item = next_map_item;
+    }
+
+    return -1;
 }
 
 static int add_sink_to_map(GroovePlayer *player, GrooveSink *sink) {
@@ -609,7 +646,6 @@ static int add_sink_to_map(GroovePlayer *player, GrooveSink *sink) {
         if (audio_formats_equal(&example_sink->audio_format, &sink->audio_format)) {
             stack_entry->next = map_item->stack_head;
             map_item->stack_head = stack_entry;
-            p->sink_map_count += 1;
             return 0;
         }
         map_item = map_item->next;
@@ -631,60 +667,44 @@ static int add_sink_to_map(GroovePlayer *player, GrooveSink *sink) {
     return 0;
 }
 
-GrooveSink * groove_player_attach_sink(GroovePlayer *player,
-        const GrooveAudioFormat *audio_format)
-{
-    GroovePlayerPrivate * p = player->internals;
+void groove_sink_detach(GrooveSink *sink) {
+    GrooveSinkPrivate *s = device_sink->internals;
+    GrooveSink *s = sink->internals;
 
-    GrooveSink *sink = av_mallocz(sizeof(GrooveSink));
-    GrooveSinkPrivate *s = av_mallocz(sizeof(GrooveSinkPrivate));
-    if (!sink || !s) {
-        av_free(sink);
-        av_free(s);
-        av_log(NULL, AV_LOG_ERROR, "Could not attach sink - out of memory\n");
-        return NULL;
+    // flush audio queue
+    if (s->audioq) {
+        groove_queue_abort(s->audioq);
+        groove_queue_flush(s->audioq);
     }
-    sink->internals = s;
+    // remove from the map
+    remove_sink_from_map(sink);
+}
 
-    sink->audio_format = *audio_format;
+int groove_sink_attach(GrooveSink *sink, GroovePlayer *player) {
+    GroovePlayerPrivate *p = player->internals;
+    GrooveSinkPrivate *s = sink->internals;
+
     // cache computed audio format stuff
-    int channel_count = av_get_channel_layout_nb_channels(audio_format->channel_layout);
-    sink->bytes_per_sec = channel_count * audio_format->sample_rate *
-        av_get_bytes_per_sample(audio_format->sample_fmt);
+    int channel_count = av_get_channel_layout_nb_channels(sink->audio_format.channel_layout);
+    sink->bytes_per_sec = channel_count * sink->audio_format.sample_rate *
+        av_get_bytes_per_sample(sink->audio_format.sample_fmt);
     s->min_audioq_size = AUDIOQ_BUF_SIZE * sink->bytes_per_sec / 1000;
     av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
 
-    s->audioq = groove_queue_create();
-    s->play_head_mutex = SDL_CreateMutex();
-
-    if (!p->audioq || !p->play_head_mutex) {
-        destroy_sink(sink);
-        av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
-        return NULL;
-    }
-
-    s->audioq->context = sink;
-    s->audioq->cleanup = audioq_cleanup;
-    s->audioq->put = audioq_put;
-    s->audioq->get = audioq_get;
-    s->audioq->purge = audioq_purge;
+    // in case we've called abort on the queue, reset
+    groove_queue_reset(s->audioq);
 
     // add the sink to the entry that matches its audio format
-    if (add_sink_to_map(player, sink) < 0) {
-        destroy_sink(sink);
+    int err = add_sink_to_map(player, sink);
+    if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
-        return NULL;
+        return err;
     }
+
+    return 0;
 }
 
-void groove_player_remove_sink(GroovePlayer *player, GrooveSink *sink) {
-    // TODO
-    // TODO don't forget to decrement sink_map_count
-}
-
-int groove_player_sink_get_buffer(GroovePlayer *player, GrooveSink *sink,
-        GrooveBuffer **buffer, int block)
-{
+int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block) {
     GrooveSinkPrivate *s = sink->internals;
 
     if (groove_queue_get(s->audioq, (void**)buffer, block) == 1) {
@@ -986,4 +1006,45 @@ void groove_player_set_volume(GroovePlayer *player, double volume) {
 int groove_player_playing(GroovePlayer *player) {
     GroovePlayerPrivate *p = player->internals;
     return !p->paused;
+}
+
+GrooveSink * groove_sink_create() {
+    GrooveSink *sink = av_mallocz(sizeof(GrooveSink));
+    GrooveSinkPrivate *s = av_mallocz(sizeof(GrooveSinkPrivate));
+
+    if (!sink || !s) {
+        av_free(sink);
+        av_free(s);
+        av_log(NULL, AV_LOG_ERROR, "could not create sink: out of memory\n");
+        return NULL;
+    }
+
+    sink->internals = s;
+
+    s->audioq = groove_queue_create();
+
+    if (!s->audioq) {
+        groove_sink_destroy(sink);
+        av_log(NULL, AV_LOG_ERROR, "could not create audio buffer: out of memory\n");
+        return NULL;
+    }
+
+    s->audioq->context = sink;
+    s->audioq->cleanup = audioq_cleanup;
+    s->audioq->put = audioq_put;
+    s->audioq->get = audioq_get;
+    s->audioq->purge = audioq_purge;
+
+    return sink;
+}
+
+void groove_sink_destroy(GrooveSink *sink) {
+    if (!sink)
+        return;
+
+    GrooveSinkPrivate *s = sink->internals;
+
+    if (s->audioq) {
+
+    }
 }

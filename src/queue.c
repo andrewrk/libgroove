@@ -80,6 +80,16 @@ void groove_queue_abort(GrooveQueue *queue) {
     SDL_UnlockMutex(q->mutex);
 }
 
+void groove_queue_reset(GrooveQueue *queue) {
+    GrooveQueuePrivate *q = queue->internals;
+
+    SDL_LockMutex(q->mutex);
+
+    q->abort_request = 0;
+
+    SDL_UnlockMutex(q->mutex);
+}
+
 int groove_queue_put(GrooveQueue *queue, void *obj) {
     ItemList * el1 = av_mallocz(sizeof(ItemList));
 
