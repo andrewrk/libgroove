@@ -48,12 +48,6 @@ typedef struct GroovePlaylistPrivate {
     enum AVSampleFormat in_sample_fmt;
     AVRational in_time_base;
 
-    // map audio format to list of sinks
-    // for each map entry, use the first sink in the stack as the example
-    // of the audio format in that stack
-    SinkMap *sink_map;
-    int sink_map_count;
-
     char strbuf[512];
     AVFilterGraph *filter_graph;
     AVFilterContext *abuffer_ctx;
@@ -68,6 +62,11 @@ typedef struct GroovePlaylistPrivate {
     double volume;
     // set to 1 to trigger a rebuild
     int rebuild_filter_graph_flag;
+    // map audio format to list of sinks
+    // for each map entry, use the first sink in the stack as the example
+    // of the audio format in that stack
+    SinkMap *sink_map;
+    int sink_map_count;
 
     // the value for volume that was used to construct the filter graph
     double filter_volume;
@@ -707,15 +706,24 @@ static int add_sink_to_map(GroovePlaylist *playlist, GrooveSink *sink) {
 }
 
 int groove_sink_detach(GrooveSink *sink) {
+    GroovePlaylist *playlist = sink->playlist;
+
+    if (!playlist)
+        return -1;
+
     GrooveSinkPrivate *s = sink->internals;
 
-    // flush audio queue
     if (s->audioq) {
         groove_queue_abort(s->audioq);
         groove_queue_flush(s->audioq);
     }
 
+    GroovePlaylistPrivate *p = playlist->internals;
+
+    SDL_LockMutex(p->decode_head_mutex);
     int err = remove_sink_from_map(sink);
+    SDL_UnlockMutex(p->decode_head_mutex);
+
     sink->playlist = NULL;
 
     return err;
@@ -733,15 +741,20 @@ int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist) {
         av_get_bytes_per_sample(sink->audio_format.sample_fmt);
     av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
 
-    // in case we've called abort on the queue, reset
-    groove_queue_reset(s->audioq);
-
     // add the sink to the entry that matches its audio format
+    GroovePlaylistPrivate *p = playlist->internals;
+
+    SDL_LockMutex(p->decode_head_mutex);
     int err = add_sink_to_map(playlist, sink);
+    SDL_UnlockMutex(p->decode_head_mutex);
+
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
         return err;
     }
+
+    // in case we've called abort on the queue, reset
+    groove_queue_reset(s->audioq);
 
     sink->playlist = playlist;
 
