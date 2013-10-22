@@ -27,7 +27,7 @@ STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
 LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
-O_FILES = src/scan.o src/playlist.o src/queue.o src/device_sink.o src/encoder.o src/file.o src/global.o
+O_FILES = src/scan.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/global.o
 
 # for compiling examples
 EX_CFLAGS = -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
@@ -45,8 +45,8 @@ $(GROOVE_A_SRC): $(O_FILES)
 $(GROOVE_SO_SRC): $(O_FILES) $(EBUR128_DEP)
 	$(CC) $(LDFLAGS) -o $(GROOVE_SO_SRC) $(O_FILES) $(STATIC_LIBS) $(LDLIBS)
 
-src/device_sink.o: src/device_sink.c $(LIBAV_DEP)
-	$(CC) $(CFLAGS) -o src/device_sink.o -c src/device_sink.c
+src/player.o: src/player.c $(LIBAV_DEP)
+	$(CC) $(CFLAGS) -o src/player.o -c src/player.c
 
 src/encoder.o: src/encoder.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/encoder.o -c src/encoder.c
