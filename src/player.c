@@ -34,7 +34,7 @@ typedef struct SinkMap {
     struct SinkMap *next;
 } SinkMap;
 
-typedef struct GroovePlayerPrivate {
+typedef struct GroovePlaylistPrivate {
     SDL_Thread *thread_id;
     int abort_request;
 
@@ -76,7 +76,7 @@ typedef struct GroovePlayerPrivate {
     int sent_end_of_q;
 
     GroovePlaylistItem *purge_item; // set temporarily
-} GroovePlayerPrivate;
+} GroovePlaylistPrivate;
 
 typedef struct GrooveBufferPrivate {
     AVFrame *frame;
@@ -94,7 +94,7 @@ static int frame_size(const AVFrame *frame) {
         frame->nb_samples;
 }
 
-static GrooveBuffer * frame_to_groove_buffer(GroovePlayer *player, GrooveSink *sink, AVFrame *frame) {
+static GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSink *sink, AVFrame *frame) {
     GrooveBuffer *buffer = av_mallocz(sizeof(GrooveBuffer));
     GrooveBufferPrivate *b = av_mallocz(sizeof(GrooveBufferPrivate));
 
@@ -116,7 +116,7 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlayer *player, GrooveSink *s
         return NULL;
     }
 
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylistPrivate *p = playlist->internals;
     GrooveFile *file = p->decode_head->file;
     GrooveFilePrivate *f = file->internals;
 
@@ -137,8 +137,8 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlayer *player, GrooveSink *s
 
 
 // decode one audio packet and return its uncompressed size
-static int audio_decode_frame(GroovePlayer *player, GrooveFile *file) {
-    GroovePlayerPrivate * p = player->internals;
+static int audio_decode_frame(GroovePlaylist *playlist, GrooveFile *file) {
+    GroovePlaylistPrivate * p = playlist->internals;
     GrooveFilePrivate * f = file->internals;
 
     AVPacket *pkt = &f->audio_pkt;
@@ -204,7 +204,7 @@ static int audio_decode_frame(GroovePlayer *player, GrooveFile *file) {
                     av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
                     return -1;
                 }
-                GrooveBuffer *buffer = frame_to_groove_buffer(player, example_sink, oframe);
+                GrooveBuffer *buffer = frame_to_groove_buffer(playlist, example_sink, oframe);
                 if (!buffer)
                     return -1;
                 data_size += buffer->size;
@@ -240,8 +240,8 @@ static int audio_decode_frame(GroovePlayer *player, GrooveFile *file) {
 
 // abuffer -> volume -> asplit for each audio format
 //                     -> aformat -> abuffersink
-static int init_filter_graph(GroovePlayer *player, GrooveFile *file) {
-    GroovePlayerPrivate *p = player->internals;
+static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
+    GroovePlaylistPrivate *p = playlist->internals;
     GrooveFilePrivate *f = file->internals;
 
     // destruct old graph
@@ -384,8 +384,8 @@ static int init_filter_graph(GroovePlayer *player, GrooveFile *file) {
     return 0;
 }
 
-static int maybe_init_filter_graph(GroovePlayer *player, GrooveFile *file) {
-    GroovePlayerPrivate *p = player->internals;
+static int maybe_init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
+    GroovePlaylistPrivate *p = playlist->internals;
     GrooveFilePrivate *f = file->internals;
     AVCodecContext *avctx = f->audio_st->codec;
     AVRational time_base = f->audio_st->time_base;
@@ -399,14 +399,14 @@ static int maybe_init_filter_graph(GroovePlayer *player, GrooveFile *file) {
         p->in_time_base.den != time_base.den ||
         p->volume != p->filter_volume)
     {
-        return init_filter_graph(player, file);
+        return init_filter_graph(playlist, file);
     }
 
     return 0;
 }
 
-static int every_sink(GroovePlayer *player, int (*func)(GrooveSink *), int default_value) {
-    GroovePlayerPrivate *p = player->internals;
+static int every_sink(GroovePlaylist *playlist, int (*func)(GrooveSink *), int default_value) {
+    GroovePlaylistPrivate *p = playlist->internals;
     SinkMap *map_item = p->sink_map;
     while (map_item) {
         SinkStack *stack_item = map_item->stack_head;
@@ -427,8 +427,8 @@ static int sink_is_full(GrooveSink *sink) {
     return s->audioq_size >= s->min_audioq_size;
 }
 
-static int every_sink_full(GroovePlayer *player) {
-    return every_sink(player, sink_is_full, 1);
+static int every_sink_full(GroovePlaylist *playlist) {
+    return every_sink(playlist, sink_is_full, 1);
 }
 
 static int sink_signal_end(GrooveSink *sink) {
@@ -437,8 +437,8 @@ static int sink_signal_end(GrooveSink *sink) {
     return 0;
 }
 
-static void every_sink_signal_end(GroovePlayer *player) {
-    every_sink(player, sink_signal_end, 0);
+static void every_sink_signal_end(GroovePlaylist *playlist) {
+    every_sink(playlist, sink_signal_end, 0);
 }
 
 static int sink_flush(GrooveSink *sink) {
@@ -451,17 +451,17 @@ static int sink_flush(GrooveSink *sink) {
     return 0;
 }
 
-static void every_sink_flush(GroovePlayer *player) {
-    every_sink(player, sink_flush, 0);
+static void every_sink_flush(GroovePlaylist *playlist) {
+    every_sink(playlist, sink_flush, 0);
 }
 
-static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
-    GroovePlayerPrivate *p = player->internals;
+static int decode_one_frame(GroovePlaylist *playlist, GrooveFile *file) {
+    GroovePlaylistPrivate *p = playlist->internals;
     GrooveFilePrivate * f = file->internals;
     AVPacket *pkt = &f->audio_pkt;
 
     // might need to rebuild the filter graph if certain things changed
-    if (maybe_init_filter_graph(player, file) < 0)
+    if (maybe_init_filter_graph(playlist, file) < 0)
         return -1;
 
     // abort_request is set if we are destroying the file
@@ -486,7 +486,7 @@ static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
         if (av_seek_frame(f->ic, f->audio_stream_index, f->seek_pos, 0) < 0) {
             av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->filename);
         } else if (f->seek_flush) {
-            every_sink_flush(player);
+            every_sink_flush(playlist);
         }
         avcodec_flush_buffers(f->audio_st->codec);
         f->seek_pos = -1;
@@ -500,7 +500,7 @@ static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
             pkt->data = NULL;
             pkt->size = 0;
             pkt->stream_index = f->audio_stream_index;
-            if (audio_decode_frame(player, file) > 0) {
+            if (audio_decode_frame(playlist, file) > 0) {
                 // keep flushing
                 return 0;
             }
@@ -522,7 +522,7 @@ static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
         av_free_packet(pkt);
         return 0;
     }
-    audio_decode_frame(player, file);
+    audio_decode_frame(playlist, file);
     av_free_packet(pkt);
     return 0;
 }
@@ -560,8 +560,8 @@ static void audioq_cleanup(GrooveQueue *queue, void *obj) {
 
 static int audioq_purge(GrooveQueue *queue, void *obj) {
     GrooveSink *sink = queue->context;
-    GroovePlayer *player = sink->player;
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylist *playlist = sink->playlist;
+    GroovePlaylistPrivate *p = playlist->internals;
     GroovePlaylistItem *item = p->purge_item;
     GrooveBuffer *buffer = obj;
     return buffer->item == item;
@@ -570,8 +570,8 @@ static int audioq_purge(GrooveQueue *queue, void *obj) {
 // this thread is responsible for decoding and inserting buffers of decoded
 // audio into each sink
 static int decode_thread(void *arg) {
-    GroovePlayer *player = arg;
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylist *playlist = arg;
+    GroovePlaylistPrivate *p = playlist->internals;
 
     while (!p->abort_request) {
         SDL_LockMutex(p->decode_head_mutex);
@@ -579,7 +579,7 @@ static int decode_thread(void *arg) {
         // if we don't have anything to decode, wait until we do
         if (!p->decode_head) {
             if (!p->sent_end_of_q) {
-                every_sink_signal_end(player);
+                every_sink_signal_end(playlist);
                 p->sent_end_of_q = 1;
             }
             SDL_UnlockMutex(p->decode_head_mutex);
@@ -589,7 +589,7 @@ static int decode_thread(void *arg) {
         p->sent_end_of_q = 0;
 
         // if all sinks are filled up, no need to read more
-        if (every_sink_full(player)) {
+        if (every_sink_full(playlist)) {
             SDL_UnlockMutex(p->decode_head_mutex);
             SDL_Delay(NOOP_DELAY);
             continue;
@@ -597,9 +597,9 @@ static int decode_thread(void *arg) {
 
         GrooveFile *file = p->decode_head->file;
 
-        p->volume = p->decode_head->gain * player->volume;
+        p->volume = p->decode_head->gain * playlist->volume;
 
-        if (decode_one_frame(player, file) < 0) {
+        if (decode_one_frame(playlist, file) < 0) {
             p->decode_head = p->decode_head->next;
             // seek to beginning of next song
             if (p->decode_head) {
@@ -625,8 +625,8 @@ static int audio_formats_equal(const GrooveAudioFormat *a, const GrooveAudioForm
 }
 
 static int remove_sink_from_map(GrooveSink *sink) {
-    GroovePlayer *player = sink->player;
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylist *playlist = sink->playlist;
+    GroovePlaylistPrivate *p = playlist->internals;
 
     SinkMap *map_item = p->sink_map;
     SinkMap *prev_map_item = NULL;
@@ -666,8 +666,8 @@ static int remove_sink_from_map(GrooveSink *sink) {
     return -1;
 }
 
-static int add_sink_to_map(GroovePlayer *player, GrooveSink *sink) {
-    GroovePlayerPrivate *p = player->internals;
+static int add_sink_to_map(GroovePlaylist *playlist, GrooveSink *sink) {
+    GroovePlaylistPrivate *p = playlist->internals;
 
     SinkStack *stack_entry = av_mallocz(sizeof(SinkStack));
     stack_entry->sink = sink;
@@ -714,12 +714,12 @@ int groove_sink_detach(GrooveSink *sink) {
     }
 
     int err = remove_sink_from_map(sink);
-    sink->player = NULL;
+    sink->playlist = NULL;
 
     return err;
 }
 
-int groove_sink_attach(GrooveSink *sink, GroovePlayer *player) {
+int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist) {
     GrooveSinkPrivate *s = sink->internals;
 
     // cache computed audio format stuff
@@ -735,13 +735,13 @@ int groove_sink_attach(GrooveSink *sink, GroovePlayer *player) {
     groove_queue_reset(s->audioq);
 
     // add the sink to the entry that matches its audio format
-    int err = add_sink_to_map(player, sink);
+    int err = add_sink_to_map(playlist, sink);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
         return err;
     }
 
-    sink->player = player;
+    sink->playlist = playlist;
 
     return 0;
 }
@@ -762,58 +762,58 @@ int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block) {
     }
 }
 
-GroovePlayer * groove_player_create() {
-    GroovePlayer * player = av_mallocz(sizeof(GroovePlayer));
-    GroovePlayerPrivate * p = av_mallocz(sizeof(GroovePlayerPrivate));
-    if (!player || !p) {
+GroovePlaylist * groove_playlist_create() {
+    GroovePlaylist * playlist = av_mallocz(sizeof(GroovePlaylist));
+    GroovePlaylistPrivate * p = av_mallocz(sizeof(GroovePlaylistPrivate));
+    if (!playlist || !p) {
         av_free(p);
-        av_free(player);
-        av_log(NULL, AV_LOG_ERROR, "Could not create player - out of memory\n");
+        av_free(playlist);
+        av_log(NULL, AV_LOG_ERROR, "Could not create playlist - out of memory\n");
         return NULL;
     }
-    player->internals = p;
+    playlist->internals = p;
 
-    // the one that the player can read
-    player->volume = 1.0;
+    // the one that the playlist can read
+    playlist->volume = 1.0;
     // the other volume multiplied by the playlist item's gain
     p->volume = 1.0;
 
     p->decode_head_mutex = SDL_CreateMutex();
     if (!p->decode_head_mutex) {
-        groove_player_destroy(player);
-        av_log(NULL, AV_LOG_WARNING, "unable to create player: out of memory\n");
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_WARNING, "unable to create playlist: out of memory\n");
         return NULL;
     }
 
     p->in_frame = avcodec_alloc_frame();
 
     if (!p->in_frame) {
-        groove_player_destroy(player);
+        groove_playlist_destroy(playlist);
         av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
         return NULL;
     }
 
-    p->thread_id = SDL_CreateThread(decode_thread, "decode", player);
+    p->thread_id = SDL_CreateThread(decode_thread, "decode", playlist);
 
     if (!p->thread_id) {
-        groove_player_destroy(player);
-        av_log(NULL, AV_LOG_ERROR, "Error creating player thread: Out of memory\n");
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "Error creating playlist thread: Out of memory\n");
         return NULL;
     }
 
-    return player;
+    return playlist;
 }
 
-void groove_player_destroy(GroovePlayer *player) {
-    groove_player_clear(player);
+void groove_playlist_destroy(GroovePlaylist *playlist) {
+    groove_playlist_clear(playlist);
 
-    GroovePlayerPrivate * p = player->internals;
+    GroovePlaylistPrivate * p = playlist->internals;
 
     // wait for decode thread to finish
     p->abort_request = 1;
     SDL_WaitThread(p->thread_id, NULL);
 
-    every_sink(player, groove_sink_detach, 0);
+    every_sink(playlist, groove_sink_detach, 0);
 
     avfilter_graph_free(&p->filter_graph);
     avcodec_free_frame(&p->in_frame);
@@ -822,22 +822,22 @@ void groove_player_destroy(GroovePlayer *player) {
         SDL_DestroyMutex(p->decode_head_mutex);
 
     av_free(p);
-    av_free(player);
+    av_free(playlist);
 }
 
-void groove_player_play(GroovePlayer *player) {
-    GroovePlayerPrivate * p = player->internals;
+void groove_playlist_play(GroovePlaylist *playlist) {
+    GroovePlaylistPrivate * p = playlist->internals;
     // no mutex needed for this boolean flag
     p->paused = 0;
 }
 
-void groove_player_pause(GroovePlayer *player) {
-    GroovePlayerPrivate * p = player->internals;
+void groove_playlist_pause(GroovePlaylist *playlist) {
+    GroovePlaylistPrivate * p = playlist->internals;
     // no mutex needed for this boolean flag
     p->paused = 1;
 }
 
-void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double seconds) {
+void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, double seconds) {
     GrooveFile * file = item->file;
     GrooveFilePrivate * f = file->internals;
 
@@ -845,7 +845,7 @@ void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double s
     if (f->ic->start_time != AV_NOPTS_VALUE)
         ts += f->ic->start_time;
 
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylistPrivate *p = playlist->internals;
 
     SDL_LockMutex(p->decode_head_mutex);
     SDL_LockMutex(f->seek_mutex);
@@ -858,7 +858,7 @@ void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double s
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
+GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, GrooveFile *file,
         double gain, GroovePlaylistItem *next)
 {
     GroovePlaylistItem * item = av_mallocz(sizeof(GroovePlaylistItem));
@@ -869,7 +869,7 @@ GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file
     item->next = next;
     item->gain = gain;
 
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylistPrivate *p = playlist->internals;
     GrooveFilePrivate *f = file->internals;
 
     // lock decode_head_mutex so that decode_head cannot point to a new item
@@ -882,22 +882,22 @@ GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file
             item->prev->next = item;
             next->prev = item;
         } else {
-            player->playlist_head = item;
+            playlist->head = item;
         }
-    } else if (!player->playlist_head) {
-        player->playlist_head = item;
-        player->playlist_tail = item;
+    } else if (!playlist->head) {
+        playlist->head = item;
+        playlist->tail = item;
 
-        p->decode_head = player->playlist_head;
+        p->decode_head = playlist->head;
 
         SDL_LockMutex(f->seek_mutex);
         f->seek_pos = 0;
         f->seek_flush = 0;
         SDL_UnlockMutex(f->seek_mutex);
     } else {
-        item->prev = player->playlist_tail;
-        player->playlist_tail->next = item;
-        player->playlist_tail = item;
+        item->prev = playlist->tail;
+        playlist->tail->next = item;
+        playlist->tail = item;
     }
 
     SDL_UnlockMutex(p->decode_head_mutex);
@@ -909,8 +909,8 @@ static int purge_sink(GrooveSink *sink) {
 
     groove_queue_purge(s->audioq);
 
-    GroovePlayer *player = sink->player;
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylist *playlist = sink->playlist;
+    GroovePlaylistPrivate *p = playlist->internals;
     GroovePlaylistItem *item = p->purge_item;
 
     if (sink->purge)
@@ -919,8 +919,8 @@ static int purge_sink(GrooveSink *sink) {
     return 0;
 }
 
-void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item) {
-    GroovePlayerPrivate *p = player->internals;
+void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item) {
+    GroovePlaylistPrivate *p = playlist->internals;
 
     SDL_LockMutex(p->decode_head_mutex);
 
@@ -932,19 +932,19 @@ void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item) {
     if (item->prev) {
         item->prev->next = item->next;
     } else {
-        player->playlist_head = item->next;
+        playlist->head = item->next;
     }
     if (item->next) {
         item->next->prev = item->prev;
     } else {
-        player->playlist_tail = item->prev;
+        playlist->tail = item->prev;
     }
 
     // in each sink,
     // we must be absolutely sure to purge the audio buffer queue
     // of references to item before freeing it at the bottom of this method
     p->purge_item = item;
-    every_sink(player, purge_sink, 0);
+    every_sink(playlist, purge_sink, 0);
     p->purge_item = NULL;
 
     SDL_UnlockMutex(p->decode_head_mutex);
@@ -952,17 +952,17 @@ void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item) {
     av_free(item);
 }
 
-void groove_player_clear(GroovePlayer *player) {
-    GroovePlaylistItem * node = player->playlist_head;
+void groove_playlist_clear(GroovePlaylist *playlist) {
+    GroovePlaylistItem * node = playlist->head;
     if (!node) return;
     while (node) {
-        groove_player_remove(player, node);
+        groove_playlist_remove(playlist, node);
         node = node->next;
     }
 }
 
-int groove_player_count(GroovePlayer *player) {
-    GroovePlaylistItem * node = player->playlist_head;
+int groove_playlist_count(GroovePlaylist *playlist) {
+    GroovePlaylistItem * node = playlist->head;
     int count = 0;
     while (node) {
         count += 1;
@@ -971,23 +971,23 @@ int groove_player_count(GroovePlayer *player) {
     return count;
 }
 
-void groove_player_set_gain(GroovePlayer *player, GroovePlaylistItem *item,
+void groove_playlist_set_gain(GroovePlaylist *playlist, GroovePlaylistItem *item,
         double gain)
 {
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylistPrivate *p = playlist->internals;
 
     SDL_LockMutex(p->decode_head_mutex);
     item->gain = gain;
     if (item == p->decode_head) {
-        p->volume = player->volume * p->decode_head->gain;
+        p->volume = playlist->volume * p->decode_head->gain;
     }
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item,
+void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **item,
         double *seconds)
 {
-    GroovePlayerPrivate *p = player->internals;
+    GroovePlaylistPrivate *p = playlist->internals;
 
     SDL_LockMutex(p->decode_head_mutex);
     if (item)
@@ -1001,17 +1001,17 @@ void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item,
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-void groove_player_set_volume(GroovePlayer *player, double volume) {
-    GroovePlayerPrivate *p = player->internals;
+void groove_playlist_set_volume(GroovePlaylist *playlist, double volume) {
+    GroovePlaylistPrivate *p = playlist->internals;
 
     SDL_LockMutex(p->decode_head_mutex);
-    player->volume = volume;
+    playlist->volume = volume;
     p->volume = p->decode_head ? volume * p->decode_head->gain : volume;
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-int groove_player_playing(GroovePlayer *player) {
-    GroovePlayerPrivate *p = player->internals;
+int groove_playlist_playing(GroovePlaylist *playlist) {
+    GroovePlaylistPrivate *p = playlist->internals;
     return !p->paused;
 }
 

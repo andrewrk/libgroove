@@ -77,10 +77,10 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     GrooveDeviceSinkPrivate *ds = device_sink->internals;
 
     GrooveSink *sink = ds->sink;
-    GroovePlayer *player = sink->player;
+    GroovePlaylist *playlist = sink->playlist;
 
     double bytes_per_sec = sink->bytes_per_sec;
-    int paused = !groove_player_playing(player);
+    int paused = !groove_playlist_playing(playlist);
 
     SDL_LockMutex(ds->play_head_mutex);
 
@@ -224,7 +224,7 @@ void groove_device_sink_destroy(GrooveDeviceSink *device_sink) {
     av_free(device_sink);
 }
 
-int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *player) {
+int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlaylist *playlist) {
     GrooveDeviceSinkPrivate *ds = device_sink->internals;
 
     SDL_AudioSpec wanted_spec, spec;
@@ -257,7 +257,7 @@ int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *playe
         return -1;
     }
 
-    int err = groove_sink_attach(ds->sink, player);
+    int err = groove_sink_attach(ds->sink, playlist);
     if (err < 0) {
         groove_device_sink_detach(device_sink);
         av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
@@ -280,14 +280,14 @@ int groove_device_sink_detach(GrooveDeviceSink *device_sink) {
     if (ds->eventq) {
         groove_queue_abort(ds->eventq);
     }
-    if (ds->sink->player) {
+    if (ds->sink->playlist) {
         groove_sink_detach(ds->sink);
     }
     if (ds->device_id > 0) {
         SDL_CloseAudioDevice(ds->device_id);
         ds->device_id = 0;
     }
-    device_sink->player = NULL;
+    device_sink->playlist = NULL;
 
     groove_buffer_unref(ds->audio_buf);
     ds->audio_buf = NULL;

@@ -12,15 +12,15 @@ int main(int argc, char * argv[]) {
     }
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
-    GroovePlayer *player = groove_player_create();
+    GroovePlaylist *playlist = groove_playlist_create();
 
-    if (!player) {
-        fprintf(stderr, "Error creating player.\n");
+    if (!playlist) {
+        fprintf(stderr, "Error creating playlist.\n");
         return 1;
     }
 
     GrooveDeviceSink *device_sink = groove_device_sink_create();
-    groove_device_sink_attach(device_sink, player);
+    groove_device_sink_attach(device_sink, playlist);
 
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
@@ -29,9 +29,9 @@ int main(int argc, char * argv[]) {
             fprintf(stderr, "Not queuing %s\n", filename);
             continue;
         }
-        groove_player_insert(player, file, 1.0, NULL);
+        groove_playlist_insert(playlist, file, 1.0, NULL);
     }
-    groove_player_play(player);
+    groove_playlist_play(playlist);
 
     GrooveEvent event;
     GroovePlaylistItem *item;
@@ -44,17 +44,17 @@ int main(int argc, char * argv[]) {
             groove_device_sink_position(device_sink, &item, NULL);
             if (!item) {
                 printf("done\n");
-                item = player->playlist_head;
+                item = playlist->head;
                 while (item) {
                     GrooveFile *file = item->file;
                     GroovePlaylistItem *next = item->next;
-                    groove_player_remove(player, item);
+                    groove_playlist_remove(playlist, item);
                     groove_file_close(file);
                     item = next;
                 }
                 groove_device_sink_detach(device_sink);
                 groove_device_sink_destroy(device_sink);
-                groove_player_destroy(player);
+                groove_playlist_destroy(playlist);
                 return 0;
             }
             GrooveTag *artist_tag = groove_file_metadata_get(item->file, "artist", NULL, 0);

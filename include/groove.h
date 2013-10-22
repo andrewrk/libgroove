@@ -95,8 +95,7 @@ int groove_file_save(GrooveFile *file);
 // song duration in seconds
 double groove_file_duration(GrooveFile *file);
 
-// TODO rename GroovePlayer to GroovePlaylist
-/************* GroovePlayer *************/
+/************* GroovePlaylist *************/
 typedef struct GroovePlaylistItem {
     // all fields are read-only. modify with methods below.
     struct GroovePlaylistItem * prev;
@@ -108,42 +107,42 @@ typedef struct GroovePlaylistItem {
     struct GroovePlaylistItem * next;
 } GroovePlaylistItem;
 
-typedef struct GroovePlayer {
+typedef struct GroovePlaylist {
     // all fields are read-only. modify using methods below.
     // doubly linked list which is the playlist
-    GroovePlaylistItem * playlist_head;
-    GroovePlaylistItem * playlist_tail;
+    GroovePlaylistItem * head;
+    GroovePlaylistItem * tail;
 
     // in float format, defaults to 1.0
     double volume;
 
     void * internals; // don't touch this
-} GroovePlayer;
+} GroovePlaylist;
 
-// a player manages keeping an audio buffer full
+// a playlist manages keeping an audio buffer full
 // to send the buffer to your speakers, use groove_device_sink_create
-GroovePlayer * groove_player_create();
+GroovePlaylist * groove_playlist_create();
 // this will not call groove_file_close on any files
-// it will remove all playlist items and sinks from the player
-void groove_player_destroy(GroovePlayer *player);
+// it will remove all playlist items and sinks from the playlist
+void groove_playlist_destroy(GroovePlaylist *playlist);
 
 
-void groove_player_play(GroovePlayer *player);
-void groove_player_pause(GroovePlayer *player);
+void groove_playlist_play(GroovePlaylist *playlist);
+void groove_playlist_pause(GroovePlaylist *playlist);
 
-void groove_player_seek(GroovePlayer *player, GroovePlaylistItem *item, double seconds);
+void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, double seconds);
 
 // once you add a file to the playlist, you must not destroy it until you first
 // remove it from the playlist.
 // next: the item you will insert before. if it is NULL, you will append to the playlist.
 // gain: see GroovePlaylistItem structure. use 0 for no adjustment.
 // returns the newly created playlist item.
-GroovePlaylistItem * groove_player_insert(GroovePlayer *player, GrooveFile *file,
+GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, GrooveFile *file,
         double gain, GroovePlaylistItem *next);
 
 // this will not call groove_file_close on item->file !
 // item is destroyed and the address it points to is no longer valid
-void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item);
+void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item);
 
 // get the position of the decode head
 // both the current playlist item and the position in seconds in the playlist
@@ -152,24 +151,24 @@ void groove_player_remove(GroovePlayer *player, GroovePlaylistItem *item);
 // Note that typically you are more interested in the position of the play
 // head, not the decode head. Example methods which return the play head are
 // groove_device_sink_position and groove_encoder_position
-void groove_player_position(GroovePlayer *player, GroovePlaylistItem **item,
+void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **item,
         double *seconds);
 
-// return 1 if the player is playing; 0 if it is not.
-int groove_player_playing(GroovePlayer *player);
+// return 1 if the playlist is playing; 0 if it is not.
+int groove_playlist_playing(GroovePlaylist *playlist);
 
 
 // remove all playlist items
-void groove_player_clear(GroovePlayer *player);
+void groove_playlist_clear(GroovePlaylist *playlist);
 
 // return the count of playlist items
-int groove_player_count(GroovePlayer *player);
+int groove_playlist_count(GroovePlaylist *playlist);
 
-void groove_player_set_gain(GroovePlayer *player, GroovePlaylistItem *item,
+void groove_playlist_set_gain(GroovePlaylist *playlist, GroovePlaylistItem *item,
         double gain);
 
 // value is in float format. defaults to 1.0
-void groove_player_set_volume(GroovePlayer *player, double volume);
+void groove_playlist_set_volume(GroovePlaylist *playlist, double volume);
 
 /************ GrooveBuffer ****************/
 
@@ -241,7 +240,7 @@ typedef struct GrooveSink {
 
     // read-only. set when you call groove_sink_attach. cleared when you call
     // groove_sink_detach
-    GroovePlayer *player;
+    GroovePlaylist *playlist;
 
     // read-only. automatically computed from audio_format when you call
     // groove_sink_attach
@@ -255,7 +254,7 @@ void groove_sink_destroy(GrooveSink *sink);
 
 // before calling this, set audio_format
 // returns 0 on success, < 0 on error
-int groove_sink_attach(GrooveSink *sink, GroovePlayer *player);
+int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist);
 // returns 0 on success, < 0 on error
 int groove_sink_detach(GrooveSink *sink);
 
@@ -268,7 +267,7 @@ int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block);
 // TODO rename GrooveDeviceSink to GroovePlayer
 /************* GrooveDeviceSink ****************/
 
-// use this to make a player utilize your speakers
+// use this to make a playlist utilize your speakers
 
 typedef struct GrooveDeviceSink {
     // set this to the device you want to open
@@ -294,7 +293,7 @@ typedef struct GrooveDeviceSink {
 
     // read-only. set when you call groove_device_sink_attach and cleared when
     // you call groove_device_sink_detach
-    GroovePlayer *player;
+    GroovePlaylist *playlist;
 
     // read-only. set to the actual format you get when you open the device.
     // ideally will be the same as target_audio_format but might not be.
@@ -307,8 +306,7 @@ typedef struct GrooveDeviceSink {
 // if an explicit list of devices can't be determined. A return value of -1
 // does not necessarily mean an error condition.
 // In many common cases, when this function returns a value <= 0, it can still
-// successfully open the default device (NULL for the name argument of
-// groove_player_attach_device).
+// successfully open the default device (NULL for the device name)
 // This function may trigger a complete redetect of available hardware. It
 // should not be called for each iteration of a loop, but rather once at the
 // start of a loop.
@@ -323,13 +321,13 @@ const char * groove_device_name(int index);
 GrooveDeviceSink* groove_device_sink_create();
 void groove_device_sink_destroy(GrooveDeviceSink *device_sink);
 
-// Attaches the device sink to the player instance and opens the device to
+// Attaches the device sink to the playlist instance and opens the device to
 // begin playback.
 // Internally this creates a GrooveSink and sends the samples to the device.
-// you must detach a device sink before destroying it or the player it is
+// you must detach a device sink before destroying it or the playlist it is
 // attached to
 // returns 0 on success, < 0 on error
-int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *player);
+int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlaylist *playlist);
 // returns 0 on success, < 0 on error
 int groove_device_sink_detach(GrooveDeviceSink *device_sink);
 
@@ -350,7 +348,7 @@ int groove_device_sink_event_peek(GrooveDeviceSink *device_sink, int block);
 
 /************* GrooveEncoder ************/
 
-// attach a GrooveEncoder to a player to keep a buffer of encoded audio full.
+// attach a GrooveEncoder to a playlist to keep a buffer of encoded audio full.
 // for example you could use it to implement an http audio stream
 
 typedef void GrooveEncoder;
@@ -375,9 +373,9 @@ typedef struct GrooveEncodeFormat {
     char * mime_type;
 } GrooveEncodeFormat;
 
-GrooveEncoder* groove_encoder_create(GroovePlayer *player,
+GrooveEncoder* groove_encoder_create(GroovePlaylist *playlist,
         const GrooveEncodeFormat *format);
-// you must destroy all encoders before destroying their players
+// you must destroy all encoders before destroying their playlists
 void groove_encoder_destroy(GrooveEncoder *encoder);
 // returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer ready (block=0),
 // GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END on end of playlist

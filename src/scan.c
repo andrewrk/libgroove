@@ -17,7 +17,7 @@ typedef struct GrooveReplayGainScanPrivate {
     int file_count;
     int current_index;
     ebur128_state **ebur_states;
-    GroovePlayer *player;
+    GroovePlaylist *playlist;
     GrooveSink *sink;
 } GrooveReplayGainScanPrivate;
 
@@ -90,13 +90,13 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
 {
     GrooveReplayGainScanPrivate *s = scan->internals;
 
-    s->player = groove_player_create();
+    s->playlist = groove_playlist_create();
     s->sink = groove_sink_create();
     s->sink->audio_format.sample_rate = 44100;
     s->sink->audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
     s->sink->audio_format.sample_fmt = GROOVE_SAMPLE_FMT_DBL;
     
-    groove_sink_attach(s->sink, s->player);
+    groove_sink_attach(s->sink, s->playlist);
 
     // init libebur128
     s->ebur_states = av_malloc(s->file_count * sizeof(ebur128_state*));
@@ -123,9 +123,9 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
         void *userdata = node->userdata;
         av_freep(&node);
 
-        groove_player_clear(s->player);
-        GroovePlaylistItem *item = groove_player_insert(s->player, file, 1.0, NULL);
-        groove_player_seek(s->player, item, 0);
+        groove_playlist_clear(s->playlist);
+        GroovePlaylistItem *item = groove_playlist_insert(s->playlist, file, 1.0, NULL);
+        groove_playlist_seek(s->playlist, item, 0);
         double seconds_passed = 0;
         double prev_clock = 0;
         double duration = groove_file_duration(file);
@@ -196,7 +196,7 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     cleanup_ebur(scan);
     groove_sink_detach(s->sink);
     groove_sink_destroy(s->sink);
-    groove_player_destroy(s->player);
+    groove_playlist_destroy(s->playlist);
     filestack_cleanup(&s->file_item);
     av_free(s);
     av_free(scan);
