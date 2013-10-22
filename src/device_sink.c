@@ -81,7 +81,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     GroovePlayer *player = sink->player;
 
     double bytes_per_sec = sink->bytes_per_sec;
-    int paused = groove_player_playing(player);
+    int paused = !groove_player_playing(player);
 
     SDL_LockMutex(ds->play_head_mutex);
 
