@@ -14,11 +14,6 @@ EBUR128_SRC = $(abspath deps/ebur128)
 EBUR128_PREFIX = $(EBUR128_SRC)/build
 EBUR128_DEP = $(EBUR128_PREFIX)/libebur128.a
 
-SDL2_SRC = $(abspath deps/SDL2)
-# do NOT set this to /usr - it will be rm -rf'd before building!
-SDL2_PREFIX = $(SDL2_SRC)/build
-SDL2_DEP = $(SDL2_PREFIX)/lib/libSDL2.a
-
 GROOVE_SO_NAME = libgroove.so.$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
 GROOVE_SO_SRC = src/groove.so
 GROOVE_SO_DEST = $(PREFIX)/lib/$(GROOVE_SO_NAME)
@@ -27,9 +22,9 @@ GROOVE_A_DEST = $(PREFIX)/lib/libgroove.a
 
 # for compiling groove
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
-CFLAGS := -I$(LIBAV_PREFIX)/include -I$(SDL2_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -g -O0 -fPIC 
-STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP) $(SDL2_DEP)
-LDLIBS = -lbz2 -lz -lm -lpthread -ldl
+CFLAGS := -I$(LIBAV_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -g -O0 -fPIC -D_REENTRANT
+STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
+LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
 O_FILES = src/scan.o src/player.o src/queue.o src/buffer.o src/device_sink.o src/encoder.o src/file.o src/global.o
@@ -50,28 +45,28 @@ $(GROOVE_A_SRC): $(O_FILES)
 $(GROOVE_SO_SRC): $(O_FILES) $(EBUR128_DEP)
 	$(CC) $(LDFLAGS) -o $(GROOVE_SO_SRC) $(O_FILES) $(STATIC_LIBS) $(LDLIBS)
 
-src/buffer.o: src/buffer.c $(LIBAV_DEP) $(SDL2_DEP)
+src/buffer.o: src/buffer.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/buffer.o -c src/buffer.c
 
-src/device_sink.o: src/device_sink.c $(LIBAV_DEP) $(SDL2_DEP)
+src/device_sink.o: src/device_sink.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/device_sink.o -c src/device_sink.c
 
-src/encoder.o: src/encoder.c $(LIBAV_DEP) $(SDL2_DEP)
+src/encoder.o: src/encoder.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/encoder.o -c src/encoder.c
 
-src/file.o: src/file.c $(LIBAV_DEP) $(SDL2_DEP)
+src/file.o: src/file.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/file.o -c src/file.c
 
-src/global.o: src/global.c $(LIBAV_DEP) $(SDL2_DEP)
+src/global.o: src/global.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/global.o -c src/global.c
 
-src/queue.o: src/queue.c $(LIBAV_DEP) $(SDL2_DEP)
+src/queue.o: src/queue.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/queue.o -c src/queue.c
 
-src/scan.o: src/scan.c $(LIBAV_DEP) $(SDL2_DEP)
+src/scan.o: src/scan.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/scan.o -c src/scan.c
 
-src/player.o: src/player.c $(LIBAV_DEP) $(SDL2_DEP)
+src/player.o: src/player.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/player.o -c src/player.c
 
 examples: example/playlist example/metadata example/replaygain
@@ -100,9 +95,6 @@ $(LIBAV_DEP): $(LIBAV_SRC)/configure
 $(EBUR128_DEP): $(EBUR128_SRC)/CMakeLists.txt
 	rm -rf $(EBUR128_PREFIX) && mkdir -p $(EBUR128_PREFIX) && cd $(EBUR128_PREFIX) && cmake ../ && $(MAKE)
 
-$(SDL2_DEP): $(SDL2_SRC)/configure
-	rm -rf $(SDL2_PREFIX) && cd $(SDL2_SRC) && ./configure --prefix=$(SDL2_PREFIX) --with-pic --disable-shared --disable-video --disable-render --disable-events --disable-joystick --disable-haptic --disable-power --disable-file --disable-loadso --disable-cpuinfo && $(MAKE) && $(MAKE) install
-
 clean:
 	rm -f src/*.o src/*.so src/*.a
 	rm -f example/*.o
@@ -111,7 +103,7 @@ clean:
 	rm -f example/replaygain
 
 distclean: clean
-	rm -rf $(LIBAV_PREFIX) $(EBUR128_PREFIX) $(SDL2_PREFIX)
+	rm -rf $(LIBAV_PREFIX) $(EBUR128_PREFIX)
 	cd $(LIBAV_SRC) && $(MAKE) distclean
 
 install: $(GROOVE_SO_SRC) $(GROOVE_A_SRC) include/groove.h

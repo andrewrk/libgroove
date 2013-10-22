@@ -36,12 +36,7 @@ distribution's package manager.
  * [libbz2](http://www.bzip.org/)
  * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
-
-In addition to these dependencies you will need the appropriate -dev library
-for your sound backend. For example on Ubuntu you will need libpulse-dev.
-Without this library, libgroove will compile and run but you will get
-"unable to open audio device: Invalid audio device ID" when you try
-to create a device sink.
+ * [libsdl2-dev](http://www.libsdl.org/)
 
 ### Bundled Dependencies
 
@@ -53,7 +48,6 @@ dependencies and instead make our own debian upstream release.
 
  * [libav](http://libav.org)
  * [libebur128](https://github.com/jiixyj/libebur128)
- * [SDL2](http://www.libsdl.org)
 
 ## Installation
 
