@@ -11,18 +11,15 @@
 
 #include <SDL2/SDL_thread.h>
 
-// If there is at least this many milliseconds of buffered audio in the queue,
-// the decode thread will sleep for QUEUE_FULL_DELAY rather than decoding more.
-#define AUDIOQ_BUF_SIZE 200
-#define QUEUE_FULL_DELAY 10
 // How many ms to wait to check whether anything is added to the playlist yet.
-#define EMPTY_PLAYLIST_DELAY 1
+// also when the buffers are full
+#define NOOP_DELAY 5
 
 typedef struct GrooveSinkPrivate {
     GrooveQueue *audioq;
     int audioq_buf_count;
-    int audioq_size;
-    int min_audioq_size;
+    int audioq_size; // in bytes
+    int min_audioq_size; // in bytes
     GroovePlaylistItem *purge_item; // set temporarily
 } GrooveSinkPrivate;
 
@@ -535,7 +532,7 @@ static int decode_thread(void *arg) {
                 p->sent_end_of_q = 1;
             }
             SDL_UnlockMutex(p->decode_head_mutex);
-            SDL_Delay(EMPTY_PLAYLIST_DELAY);
+            SDL_Delay(NOOP_DELAY);
             continue;
         }
         p->sent_end_of_q = 0;
@@ -543,7 +540,7 @@ static int decode_thread(void *arg) {
         // if all sinks are filled up, no need to read more
         if (every_sink_full(player)) {
             SDL_UnlockMutex(p->decode_head_mutex);
-            SDL_Delay(QUEUE_FULL_DELAY);
+            SDL_Delay(NOOP_DELAY);
             continue;
         }
 
@@ -680,7 +677,9 @@ int groove_sink_attach(GrooveSink *sink, GroovePlayer *player) {
     int channel_count = av_get_channel_layout_nb_channels(sink->audio_format.channel_layout);
     sink->bytes_per_sec = channel_count * sink->audio_format.sample_rate *
         av_get_bytes_per_sample(sink->audio_format.sample_fmt);
-    s->min_audioq_size = AUDIOQ_BUF_SIZE * sink->bytes_per_sec / 1000;
+
+    s->min_audioq_size = sink->buffer_size * channel_count *
+        av_get_bytes_per_sample(sink->audio_format.sample_fmt);
     av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
 
     // in case we've called abort on the queue, reset
@@ -1012,6 +1011,7 @@ GrooveSink * groove_sink_create() {
     }
 
     sink->internals = s;
+    sink->buffer_size = 8192;
 
     s->audioq = groove_queue_create();
 

@@ -227,6 +227,10 @@ typedef struct GrooveSink {
     // set this to the audio format you want the sink to output
     GrooveAudioFormat audio_format;
 
+    // how big the buffer should be, in sample frames.
+    // groove_sink_create defaults this to 8192
+    int buffer_size;
+
     // set to whatever you want
     void *userdata;
     // called when the audio queue is flushed. For example, if you seek to a
@@ -280,11 +284,12 @@ typedef struct GrooveDeviceSink {
     // the substituted values.
     GrooveAudioFormat target_audio_format;
 
-    // how big the device buffer should be, in samples. should be a power of 2.
+    // how big the device buffer should be, in sample frames.
+    // must be a power of 2.
     // groove_device_sink_create defaults this to 1024
     int device_buffer_size;
 
-    // how big the memory buffer should be, in samples.
+    // how big the memory buffer should be, in sample frames.
     // groove_device_sink_create defaults this to 8192
     int memory_buffer_size;
 

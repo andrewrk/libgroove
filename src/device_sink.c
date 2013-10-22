@@ -220,6 +220,7 @@ int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *playe
     device_sink->actual_audio_format.sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
 
     // based on spec that we got, attach a sink with those properties
+    ds->sink->buffer_size = device_sink->memory_buffer_size;
     ds->sink->audio_format = device_sink->actual_audio_format;
 
     if (ds->sink->audio_format.sample_fmt == GROOVE_SAMPLE_FMT_NONE) {
