@@ -379,11 +379,6 @@ static int sink_flush(GrooveSink *sink) {
 
 static void every_sink_flush(GroovePlayer *player) {
     every_sink(player, sink_flush, 0);
-
-
-    // TODO flush each sink
-    GroovePlayerPrivate *p = player->internals;
-    groove_queue_flush(p->audioq);
 }
 
 static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
@@ -465,36 +460,35 @@ static void audioq_put(GrooveQueue *queue, void *obj) {
     if (buffer == &end_of_q_sentinel)
         return;
     s->audioq_buf_count += 1;
-    s->audioq_size += tb->buffer->size;
+    s->audioq_size += buffer->size;
 }
 
 static void audioq_get(GrooveQueue *queue, void *obj) {
-    TaggedBuffer *tb = obj;
+    GrooveBuffer *buffer = obj;
     GrooveSink *sink = queue->context;
     GrooveSinkPrivate *s = sink->internals;
-    if (tb == &end_of_q_sentinel)
+    if (buffer == &end_of_q_sentinel)
         return;
     s->audioq_buf_count -= 1;
-    s->audioq_size -= tb->buffer->size;
+    s->audioq_size -= buffer->size;
 }
 
 static void audioq_cleanup(GrooveQueue *queue, void *obj) {
-    TaggedBuffer *tb = obj;
+    GrooveBuffer *buffer = obj;
     GrooveSink *sink = queue->context;
     GrooveSinkPrivate *s = sink->internals;
-    if (tb == &end_of_q_sentinel)
+    if (buffer == &end_of_q_sentinel)
         return;
     s->audioq_buf_count -= 1;
-    s->audioq_size -= tb->buffer->size;
-    groove_buffer_unref(tb->buffer);
-    av_free(tb);
+    s->audioq_size -= buffer->size;
+    groove_buffer_unref(buffer);
 }
 
 static int audioq_purge(GrooveQueue *queue, void *obj) {
     GrooveSink *sink = queue->context;
     GrooveSinkPrivate *s = sink->internals;
-    TaggedBuffer *tb = obj;
-    return tb->item == s->purge_item;
+    GrooveBuffer *buffer = obj;
+    return buffer->item == s->purge_item;
 }
 
 static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
@@ -569,16 +563,6 @@ static int decode_thread(void *arg) {
     }
 
     return 0;
-}
-
-static void destroy_sink(GrooveSink *sink) {
-    GrooveSinkPrivate *s = sink->internals;
-
-    if (s->audioq)
-        groove_queue_destroy(s->audioq);
-
-    av_free(s);
-    av_free(sink);
 }
 
 static int audio_formats_equal(const GrooveAudioFormat *a, const GrooveAudioFormat *b) {
@@ -667,7 +651,7 @@ static int add_sink_to_map(GroovePlayer *player, GrooveSink *sink) {
     return 0;
 }
 
-void groove_sink_detach(GrooveSink *sink) {
+int groove_sink_detach(GrooveSink *sink) {
     GrooveSinkPrivate *s = device_sink->internals;
     GrooveSink *s = sink->internals;
 
@@ -676,8 +660,10 @@ void groove_sink_detach(GrooveSink *sink) {
         groove_queue_abort(s->audioq);
         groove_queue_flush(s->audioq);
     }
-    // remove from the map
-    remove_sink_from_map(sink);
+
+    sink->player = NULL;
+
+    return remove_sink_from_map(sink);
 }
 
 int groove_sink_attach(GrooveSink *sink, GroovePlayer *player) {
@@ -1044,7 +1030,9 @@ void groove_sink_destroy(GrooveSink *sink) {
 
     GrooveSinkPrivate *s = sink->internals;
 
-    if (s->audioq) {
+    if (s->audioq)
+        groove_queue_destroy(s->audioq);
 
-    }
+    av_free(s);
+    av_free(sink);
 }

@@ -1,7 +1,7 @@
 #include "groove.h"
 #include "queue.h"
 
-#include <libavutil/frame.h>
+#include <libavutil/mem.h>
 #include <SDL2/SDL_audio.h>
 
 typedef struct GrooveDeviceSinkPrivate {
@@ -10,7 +10,6 @@ typedef struct GrooveDeviceSinkPrivate {
     size_t audio_buf_index; // in bytes
 
     // this mutex applies to the variables in this block
-    // TODO initialize and destroy this
     SDL_mutex *play_head_mutex;
     // pointer to current item where the buffered audio is reaching the device
     GroovePlaylistItem *play_head;
@@ -56,93 +55,92 @@ static void emit_event(GrooveQueue *queue, enum GrooveEventType type) {
 
 
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
-    DeviceSinkContext *dsc = opaque;
-    GrooveSink *sink = dsc->sink;
+    GrooveDeviceSink *device_sink = opaque;
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
+
+    GrooveSink *sink = ds->sink;
     GroovePlayer *player = sink->player;
 
     double bytes_per_sec = sink->bytes_per_sec;
+    int paused = groove_player_playing(player);
 
-    SDL_LockMutex(dsc->play_head_mutex);
+    SDL_LockMutex(ds->play_head_mutex);
 
     while (len > 0) {
-        int paused = groove_player_playing(player);
-        if (!paused && dsc->audio_buf_index >= dsc->audio_buf_size) {
-            groove_buffer_unref(dsc->audio_buf);
-            dsc->audio_buf_index = 0;
-            dsc->audio_buf_size = 0;
+        if (!paused && ds->audio_buf_index >= ds->audio_buf_size) {
+            groove_buffer_unref(ds->audio_buf);
+            ds->audio_buf_index = 0;
+            ds->audio_buf_size = 0;
 
-            int ret = groove_player_sink_get_buffer(player, dsc->sink,
-                    &dsc->audio_buf, 0);
+            int ret = groove_sink_get_buffer(ds->sink, &ds->audio_buf, 0);
             if (ret == GROOVE_BUFFER_END) {
-                emit_event(dsc->eventq, GROOVE_EVENT_NOWPLAYING);
+                emit_event(ds->eventq, GROOVE_EVENT_NOWPLAYING);
 
-                dsc->end_of_q = 1;
-                dsc->play_head = NULL;
-                dsc->play_pos = -1.0;
+                ds->end_of_q = 1;
+                ds->play_head = NULL;
+                ds->play_pos = -1.0;
             } else if (ret == GROOVE_BUFFER_YES) {
-                if (dsc->play_head != dsc->audio_buf->item)
-                    emit_event(dsc->eventq, GROOVE_EVENT_NOWPLAYING);
+                if (ds->play_head != ds->audio_buf->item)
+                    emit_event(ds->eventq, GROOVE_EVENT_NOWPLAYING);
 
-                dsc->end_of_q = 0;
-                dsc->play_head = dsc->audio_buf->item;
-                dsc->play_pos = dsc->audio_buf->pos;
-                dsc->audio_buf_size = dsc->audio_buf->size;
+                ds->end_of_q = 0;
+                ds->play_head = ds->audio_buf->item;
+                ds->play_pos = ds->audio_buf->pos;
+                ds->audio_buf_size = ds->audio_buf->size;
             } else {
                 // errors are treated the same as no buffer ready
-                emit_event(dsc->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
+                emit_event(ds->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
             }
         }
-        if (paused || !dsc->audio_buf) {
+        if (paused || !ds->audio_buf) {
             // fill with silence
             memset(stream, 0, len);
             break;
         }
-        size_t len1 = dsc->audio_buf_size - dsc->audio_buf_index;
+        size_t len1 = ds->audio_buf_size - ds->audio_buf_index;
         if (len1 > len)
             len1 = len;
-        memcpy(stream, dsc->audio_buf->data[0] + dsc->audio_buf_index, len1);
+        memcpy(stream, ds->audio_buf->data[0] + ds->audio_buf_index, len1);
         len -= len1;
         stream += len1;
-        dsc->audio_buf_index += len1;
-        dsc->play_pos += len1 / bytes_per_sec;
+        ds->audio_buf_index += len1;
+        ds->play_pos += len1 / bytes_per_sec;
     }
 
-    SDL_UnlockMutex(dsc->play_head_mutex);
-}
-
-static void destroy_device_sink(DeviceSinkContext *dsc) {
-    av_frame_free(&dsc->audio_buf);
+    SDL_UnlockMutex(ds->play_head_mutex);
 }
 
 static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
-    DeviceSinkContext *dsc = sink->userdata;
+    GrooveDeviceSink *device_sink = sink->userdata;
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
 
-    SDL_LockMutex(dsc->play_head_mutex);
+    SDL_LockMutex(ds->play_head_mutex);
 
-    if (dsc->play_head == item) {
-        dsc->play_head = NULL;
-        dsc->play_pos = -1.0;
-        groove_buffer_unref(dsc->audio_buf);
-        dsc->audio_buf = NULL;
-        dsc->audio_buf_index = 0;
-        dsc->audio_buf_size = 0;
-        emit_event(dsc->eventq, GROOVE_EVENT_NOWPLAYING);
+    if (ds->play_head == item) {
+        ds->play_head = NULL;
+        ds->play_pos = -1.0;
+        groove_buffer_unref(ds->audio_buf);
+        ds->audio_buf = NULL;
+        ds->audio_buf_index = 0;
+        ds->audio_buf_size = 0;
+        emit_event(ds->eventq, GROOVE_EVENT_NOWPLAYING);
     }
 
-    SDL_UnlockMutex(dsc->play_head_mutex);
+    SDL_UnlockMutex(ds->play_head_mutex);
 }
 
 static void sink_flush(GrooveSink *sink) {
-    DeviceSinkContext *dsc = sink->userdata;
+    GrooveDeviceSink *device_sink = sink->userdata;
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
 
-    SDL_LockMutex(dsc->play_head_mutex);
+    SDL_LockMutex(ds->play_head_mutex);
 
-    groove_buffer_unref(dsc->audio_buf);
-    dsc->audio_buf = NULL;
-    dsc->audio_buf_index = 0;
-    dsc->audio_buf_size = 0;
+    groove_buffer_unref(ds->audio_buf);
+    ds->audio_buf = NULL;
+    ds->audio_buf_index = 0;
+    ds->audio_buf_size = 0;
 
-    SDL_UnlockMutex(dsc->play_head_mutex);
+    SDL_UnlockMutex(ds->play_head_mutex);
 }
 
 GrooveDeviceSink * groove_device_sink_create() {
@@ -189,8 +187,11 @@ void groove_device_sink_destroy(GrooveDeviceSink *device_sink) {
 
     GrooveDeviceSinkPrivate *ds = device_sink->internals;
 
-    SDL_DestroyMutex(ds->play_head_mutex);
+    if (ds->play_head_mutex)
+        SDL_DestroyMutex(ds->play_head_mutex);
+
     groove_sink_destroy(ds->sink);
+
     av_free(ds);
     av_free(device_sink);
 }
@@ -241,9 +242,11 @@ int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *playe
     ds->sink->flush = sink_flush;
 
     SDL_PauseAudioDevice(ds->device_id, 0);
+
+    return 0;
 }
 
-void groove_device_sink_detach(GrooveDeviceSink *device_sink) {
+int groove_device_sink_detach(GrooveDeviceSink *device_sink) {
     GrooveDeviceSinkPrivate *ds = device_sink->internals;
     if (ds->sink->player) {
         groove_sink_detach(ds->sink);
@@ -256,6 +259,8 @@ void groove_device_sink_detach(GrooveDeviceSink *device_sink) {
 
     groove_buffer_unref(ds->audio_buf);
     ds->audio_buf = NULL;
+
+    return 0;
 }
 
 int groove_device_count() {
@@ -269,13 +274,13 @@ const char * groove_device_name(int index) {
 void groove_device_sink_position(GrooveDeviceSink *device_sink,
         GroovePlaylistItem **item, double *seconds)
 {
-    DeviceSinkContext *dsc = device_sink;
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
 
-    SDL_LockMutex(dsc->play_head_mutex);
+    SDL_LockMutex(ds->play_head_mutex);
     if (item)
-        *item = dsc->play_head;
+        *item = ds->play_head;
 
     if (seconds)
-        *seconds = dsc->play_pos;
+        *seconds = ds->play_pos;
     SDL_UnlockMutex(p->decode_head_mutex);
 }

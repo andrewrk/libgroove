@@ -253,7 +253,8 @@ void groove_sink_destroy(GrooveSink *sink);
 // before calling this, set audio_format
 // returns 0 on success, < 0 on error
 int groove_sink_attach(GrooveSink *sink, GroovePlayer *player);
-void groove_sink_detach(GrooveSink *sink);
+// returns 0 on success, < 0 on error
+int groove_sink_detach(GrooveSink *sink);
 
 // returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer ready (block=0),
 // GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END on end of playlist
@@ -325,7 +326,8 @@ void groove_device_sink_destroy(GrooveDeviceSink *device_sink);
 // attached to
 // returns 0 on success, < 0 on error
 int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *player);
-void groove_device_sink_detach(GrooveDeviceSink *device_sink);
+// returns 0 on success, < 0 on error
+int groove_device_sink_detach(GrooveDeviceSink *device_sink);
 
 // get the position of the play head
 // both the current playlist item and the position in seconds in the playlist
