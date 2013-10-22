@@ -347,7 +347,9 @@ static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
         err = avfilter_graph_create_filter(&map_item->aformat_ctx, aformat,
                 NULL, p->strbuf, NULL, p->filter_graph);
         if (err < 0) {
-            av_log(NULL, AV_LOG_ERROR, "unable to create aformat filter\n");
+            av_strerror(err, p->strbuf, sizeof(p->strbuf));
+            av_log(NULL, AV_LOG_ERROR, "unable to create aformat filter: %s\n",
+                    p->strbuf);
             return err;
         }
         err = avfilter_link(audio_src_ctx, pad_index, map_item->aformat_ctx, 0);
