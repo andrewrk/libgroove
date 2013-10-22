@@ -1,6 +1,7 @@
 #include "file.h"
 
 #include <libavutil/mem.h>
+#include <libavutil/channel_layout.h>
 
 static int decode_interrupt_cb(void *ctx) {
     GrooveFile *file = ctx;

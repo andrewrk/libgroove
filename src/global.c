@@ -1,4 +1,8 @@
+#include "groove.h"
+
+#include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
+#include <libavutil/channel_layout.h>
 #include <SDL2/SDL.h>
 
 static void deinit_network() {

@@ -19,7 +19,8 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    GrooveDeviceSink *device_sink = groove_device_sink_create(player, NULL);
+    GrooveDeviceSink *device_sink = groove_device_sink_create();
+    groove_device_sink_attach(device_sink, player);
 
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
@@ -34,7 +35,7 @@ int main(int argc, char * argv[]) {
 
     GrooveEvent event;
     GroovePlaylistItem *item;
-    while (groove_device_sink_event_get(device_sink, &event) >= 0) {
+    while (groove_device_sink_event_get(device_sink, &event, 1) >= 0) {
         switch (event.type) {
         case GROOVE_EVENT_BUFFERUNDERRUN:
             fprintf(stderr, "buffer underrun\n");

@@ -2,7 +2,8 @@
 
 #include <ebur128.h>
 
-#include <libavutil/channel_layout.h>
+#include <libavutil/mem.h>
+#include <libavutil/log.h>
 
 typedef struct FileStackItem {
     void *userdata;

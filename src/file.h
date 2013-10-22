@@ -3,6 +3,9 @@
 
 #include "groove.h"
 
+#include <libavformat/avformat.h>
+#include <SDL2/SDL_thread.h>
+
 typedef struct GrooveFilePrivate {
     int audio_stream_index;
     int abort_request; // true when we're closing the file

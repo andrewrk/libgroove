@@ -2,6 +2,7 @@
 #include "queue.h"
 
 #include <libavutil/mem.h>
+#include <libavutil/log.h>
 #include <SDL2/SDL_audio.h>
 
 typedef struct GrooveDeviceSinkPrivate {
@@ -26,6 +27,24 @@ typedef struct GrooveDeviceSinkPrivate {
 
     GrooveQueue *eventq;
 } GrooveDeviceSinkPrivate;
+
+static Uint16 groove_fmt_to_sdl_fmt(enum GrooveSampleFormat fmt) {
+    // TODO: more of those
+    switch (fmt) {
+        case GROOVE_SAMPLE_FMT_U8:
+            return AUDIO_U8;
+        case GROOVE_SAMPLE_FMT_S16:
+            return AUDIO_S16SYS;
+        case GROOVE_SAMPLE_FMT_S32:
+            return AUDIO_S32SYS;
+        case GROOVE_SAMPLE_FMT_FLT:
+            return AUDIO_F32SYS;
+        default:
+            av_log(NULL, AV_LOG_ERROR,
+                "unable to use selected format. using GROOVE_SAMPLE_FMT_S16 instead.\n");
+            return AUDIO_S16SYS;
+    }
+}
 
 static enum GrooveSampleFormat sdl_fmt_to_groove_fmt(Uint16 sdl_format) {
     switch (sdl_format) {
@@ -150,7 +169,7 @@ GrooveDeviceSink * groove_device_sink_create() {
     if (!device_sink || !ds) {
         av_free(device_sink);
         av_free(ds);
-        av_log(NULL, AV_LOG_ERROR("unable to create device sink: out of memory\n"));
+        av_log(NULL, AV_LOG_ERROR, "unable to create device sink: out of memory\n");
         return NULL;
     }
 
@@ -159,14 +178,21 @@ GrooveDeviceSink * groove_device_sink_create() {
     ds->sink = groove_sink_create();
     if (!ds->sink) {
         groove_device_sink_destroy(device_sink);
-        av_log(NULL, AV_LOG_ERROR("unable to create sink: out of memory\n"));
+        av_log(NULL, AV_LOG_ERROR,"unable to create sink: out of memory\n");
         return NULL;
     }
 
     ds->play_head_mutex = SDL_CreateMutex();
     if (!ds->play_head_mutex) {
         groove_device_sink_destroy(device_sink);
-        av_log(NULL, AV_LOG_ERROR("unable to create play head mutex: out of memory\n"));
+        av_log(NULL, AV_LOG_ERROR,"unable to create play head mutex: out of memory\n");
+        return NULL;
+    }
+
+    ds->eventq = groove_queue_create();
+    if (!ds->eventq) {
+        groove_device_sink_destroy(device_sink);
+        av_log(NULL, AV_LOG_ERROR,"unable to create event queue: out of memory\n");
         return NULL;
     }
 
@@ -190,6 +216,9 @@ void groove_device_sink_destroy(GrooveDeviceSink *device_sink) {
     if (ds->play_head_mutex)
         SDL_DestroyMutex(ds->play_head_mutex);
 
+    if (ds->eventq)
+        groove_queue_destroy(ds->eventq);
+
     groove_sink_destroy(ds->sink);
 
     av_free(ds);
@@ -207,7 +236,7 @@ int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *playe
     wanted_spec.callback = sdl_audio_callback;
     wanted_spec.userdata = device_sink;
 
-    ds->device_id = SDL_OpenAudioDevice(name, 0, &wanted_spec,
+    ds->device_id = SDL_OpenAudioDevice(device_sink->device_name, 0, &wanted_spec,
             &spec, SDL_AUDIO_ALLOW_ANY_CHANGE);
     if (ds->device_id == 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
@@ -249,6 +278,9 @@ int groove_device_sink_attach(GrooveDeviceSink *device_sink, GroovePlayer *playe
 
 int groove_device_sink_detach(GrooveDeviceSink *device_sink) {
     GrooveDeviceSinkPrivate *ds = device_sink->internals;
+    if (ds->eventq) {
+        groove_queue_abort(ds->eventq);
+    }
     if (ds->sink->player) {
         groove_sink_detach(ds->sink);
     }
@@ -278,10 +310,30 @@ void groove_device_sink_position(GrooveDeviceSink *device_sink,
     GrooveDeviceSinkPrivate *ds = device_sink->internals;
 
     SDL_LockMutex(ds->play_head_mutex);
+
     if (item)
         *item = ds->play_head;
 
     if (seconds)
         *seconds = ds->play_pos;
-    SDL_UnlockMutex(p->decode_head_mutex);
+
+    SDL_UnlockMutex(ds->play_head_mutex);
+}
+
+int groove_device_sink_event_get(GrooveDeviceSink *device_sink, GrooveEvent *event,
+        int block)
+{
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
+    GrooveEvent *tmp;
+    int err = groove_queue_get(ds->eventq, (void **)&tmp, block);
+    if (err > 0) {
+        *event = *tmp;
+        av_free(tmp);
+    }
+    return err;
+}
+
+int groove_device_sink_event_peek(GrooveDeviceSink *device_sink, int block) {
+    GrooveDeviceSinkPrivate *ds = device_sink->internals;
+    return groove_queue_peek(ds->eventq, block);
 }

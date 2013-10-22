@@ -341,11 +341,11 @@ void groove_device_sink_position(GrooveDeviceSink *device_sink,
         GroovePlaylistItem **item, double *seconds);
 
 // returns < 0 on error, 0 on no event ready, 1 on got event
-int groove_device_sink_event_get(GrooveDeviceSink *sink,
-        GroovePlayerEvent *event, int block);
+int groove_device_sink_event_get(GrooveDeviceSink *device_sink,
+        GrooveEvent *event, int block);
 // returns < 0 on error, 0 on no event ready, 1 on event ready
 // if block is 1, block until event is ready
-int groove_device_sink_event_peek(GrooveDeviceSink *sink, int block);
+int groove_device_sink_event_peek(GrooveDeviceSink *device_sink, int block);
 
 
 /************* GrooveEncoder ************/
