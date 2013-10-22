@@ -40,7 +40,7 @@ typedef struct GroovePlayerPrivate {
     int abort_request;
 
     AVPacket audio_pkt_temp;
-    AVFrame *frame;
+    AVFrame *in_frame;
     int paused;
     int last_paused;
 
@@ -80,6 +80,7 @@ typedef struct GroovePlayerPrivate {
 typedef struct GrooveBufferPrivate {
     AVFrame *frame;
     int ref_count;
+    SDL_mutex *mutex;
 } GrooveBufferPrivate;
 
 // this is used to tell the difference between a buffer underrun
@@ -93,31 +94,65 @@ static int frame_size(const AVFrame *frame) {
         frame->nb_samples;
 }
 
+static GrooveBuffer * frame_to_groove_buffer(GroovePlayer *player, GrooveQueue *queue, AVFrame *frame) {
+    GrooveBuffer *buffer = av_mallocz(sizeof(GrooveBuffer));
+    GrooveBufferPrivate *b = av_mallocz(sizeof(GrooveBufferPrivate));
+
+    if (!buffer || !b) {
+        av_free(buffer);
+        av_free(b);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer: out of memory");
+        return NULL;
+    }
+
+    buffer->internals = b;
+
+    b->mutex = SDL_CreateMutex();
+
+    if (!b->mutex) {
+        av_free(buffer);
+        av_free(b);
+        av_log(NULL, AV_LOG_ERROR, "unable to create mutex: out of memory\n");
+        return NULL;
+    }
+
+    buffer->item = p->decode_head;
+    b->frame = frame;
+
+    GrooveFile *file = p->decode_head->file;
+    GrooveFilePrivate *f = file->internals;
+    buffer->pos = f->audio_clock;
+
+    return buffer;
+}
+
+
 // decode one audio packet and return its uncompressed size
-static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file) {
+static int audio_decode_frame(GroovePlayer *player, GrooveFile *file) {
+    GroovePlayerPrivate * p = player->internals;
     GrooveFilePrivate * f = file->internals;
 
     AVPacket *pkt = &f->audio_pkt;
     AVCodecContext *dec = f->audio_st->codec;
 
-    AVPacket *pkt_temp = &decode_ctx->audio_pkt_temp;
+    AVPacket *pkt_temp = &p->audio_pkt_temp;
     *pkt_temp = *pkt;
 
     // update the audio clock with the pts if we can
     if (pkt->pts != AV_NOPTS_VALUE)
-        f->audio_clock = av_q2d(f->audio_st->time_base)*pkt->pts;
+        f->audio_clock = av_q2d(f->audio_st->time_base) * pkt->pts;
 
     int data_size = 0;
     int len1, got_frame;
     int new_packet = 1;
-    AVFrame *frame = decode_ctx->frame;
+    AVFrame *in_frame = p->in_frame;
 
     // NOTE: the audio packet can contain several frames
     while (pkt_temp->size > 0 || (!pkt_temp->data && new_packet)) {
-        avcodec_get_frame_defaults(frame);
+        avcodec_get_frame_defaults(in_frame);
         new_packet = 0;
 
-        len1 = avcodec_decode_audio4(dec, frame, &got_frame, pkt_temp);
+        len1 = avcodec_decode_audio4(dec, in_frame, &got_frame, pkt_temp);
         if (len1 < 0) {
             // if error, we skip the frame
             pkt_temp->size = 0;
@@ -135,33 +170,54 @@ static int audio_decode_frame(GrooveDecodeContext *decode_ctx, GrooveFile *file)
         }
 
         // push the audio data from decoded frame into the filtergraph
-        int err = av_buffersrc_write_frame(decode_ctx->abuffer_ctx, frame);
+        int err = av_buffersrc_write_frame(p->abuffer_ctx, in_frame);
         if (err < 0) {
-            av_strerror(err, decode_ctx->strbuf, sizeof(decode_ctx->strbuf));
+            av_strerror(err, p->strbuf, sizeof(p->strbuf));
             av_log(NULL, AV_LOG_ERROR, "error writing frame to buffersrc: %s\n",
-                    decode_ctx->strbuf);
+                    p->strbuf);
             return -1;
         }
 
-        // pull filtered audio from the filtergraph
-        AVFrame *oframe = av_frame_alloc();
-        for (;;) {
-            int err = av_buffersink_get_frame(decode_ctx->abuffersink_ctx, oframe);
-            if (err == AVERROR_EOF || err == AVERROR(EAGAIN))
-                break;
-            if (err < 0) {
-                av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
-                return -1;
+        // for each data format in the sink map, pull filtered audio from its
+        // buffersink, turn it into a GrooveBuffer and then increment the ref
+        // count for each sink in that stack.
+        SinkMap *map_item = p->sink_map;
+        while (map_item) {
+            data_size = 0;
+            for (;;) {
+                AVFrame *oframe = av_frame_alloc();
+                int err = av_buffersink_get_frame(map_item->abuffersink_ctx, oframe);
+                if (err == AVERROR_EOF || err == AVERROR(EAGAIN))
+                    break;
+                if (err < 0) {
+                    av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
+                    return -1;
+                }
+                data_size += frame_size(oframe);
+                GrooveBuffer *buffer = frame_to_groove_buffer(player, oframe);
+                if (!buffer)
+                    return -1;
+                SinkStack *stack_item = map_item->stack_head;
+                while (stack_item) {
+                    GrooveSink *sink = stack_item->sink;
+                    GrooveSinkPrivate *s = sink->internals;
+                    if (groove_queue_put(s->audioq, buffer) < 0) {
+                        av_log(NULL, AV_LOG_ERROR, "unable to put buffer in queue\n");
+                    } else {
+                        groove_buffer_ref(buffer);
+                    }
+                    stack_item = stack_item->next;
+                }
+                // do a ref/unref to trigger cleanup if there were no refs
+                groove_buffer_ref(buffer);
+                groove_buffer_unref(buffer);
             }
-            data_size += frame_size(oframe);
-            err = decode_ctx->buffer(decode_ctx, oframe);
-            if (err < 0)
-                return err;
+            map_item = map_item->next;
         }
 
         // if no pts, then estimate it
         if (pkt->pts == AV_NOPTS_VALUE)
-            f->audio_clock += data_size / (double)decode_ctx->dest_bytes_per_sec;
+            f->audio_clock += data_size / (double)player->bytes_per_sec;
 
         return data_size;
     }
@@ -429,7 +485,7 @@ static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
             pkt->data = NULL;
             pkt->size = 0;
             pkt->stream_index = f->audio_stream_index;
-            if (audio_decode_frame(decode_ctx, file) > 0) {
+            if (audio_decode_frame(player, file) > 0) {
                 // keep flushing
                 return 0;
             }
@@ -451,7 +507,7 @@ static int decode_one_frame(GroovePlayer *player, GrooveFile *file) {
         av_free_packet(pkt);
         return 0;
     }
-    audio_decode_frame(decode_ctx, file);
+    audio_decode_frame(player, file);
     av_free_packet(pkt);
     return 0;
 }
@@ -493,28 +549,6 @@ static int audioq_purge(GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     return buffer->item == s->purge_item;
 }
-
-static int player_buffer(GrooveDecodeContext *decode_ctx, AVFrame *frame) {
-    GroovePlayer *player = decode_ctx->callback_context;
-    GroovePlayerPrivate *p = player->internals;
-    TaggedFrame *tf = av_malloc(sizeof(TaggedFrame));
-    if (!tf) {
-        av_log(NULL, AV_LOG_ERROR, "error allocating tagged frame: out of memory\n");
-        return -1;
-    }
-    tf->frame = frame;
-    tf->item = p->decode_head;
-    GrooveFile *file = p->decode_head->file;
-    GrooveFilePrivate *f = file->internals;
-    tf->pos = f->audio_clock;
-    if (groove_queue_put(p->audioq, tf) < 0) {
-        av_free(tf);
-        av_log(NULL, AV_LOG_ERROR, "error allocating buffer queue item: out of memory\n");
-        return -1;
-    }
-    return 0;
-}
-
 
 // this thread is responsible for decoding and inserting buffers of decoded
 // audio into each sink
@@ -735,9 +769,9 @@ GroovePlayer * groove_player_create() {
         return NULL;
     }
 
-    p->frame = avcodec_alloc_frame();
+    p->in_frame = avcodec_alloc_frame();
 
-    if (!p->frame) {
+    if (!p->in_frame) {
         groove_player_destroy(player);
         av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
         return -1;
@@ -776,7 +810,7 @@ void groove_player_destroy(GroovePlayer *player) {
     }
 
     avfilter_graph_free(&p->filter_graph);
-    avcodec_free_frame(&p->frame);
+    avcodec_free_frame(&p->in_frame);
 
     if (p->decode_head_mutex)
         SDL_DestroyMutex(p->decode_head_mutex);
@@ -1046,7 +1080,9 @@ void groove_sink_destroy(GrooveSink *sink) {
 void groove_buffer_ref(GrooveBuffer *buffer) {
     GrooveBufferPrivate *b = buffer->internals;
 
+    SDL_LockMutex(b->mutex);
     b->ref_count += 1;
+    SDL_UnlockMutex(b->mutex);
 }
 
 void groove_buffer_unref(GrooveBuffer *buffer) {
@@ -1055,11 +1091,16 @@ void groove_buffer_unref(GrooveBuffer *buffer) {
 
     GrooveBufferPrivate *b = buffer->internals;
 
+    SDL_LockMutex(b->mutex);
     b->ref_count -= 1;
+    int free = b->ref_count == 0;
+    SDL_UnlockMutex(b->mutex);
 
-    if (b->ref_count == 0) {
+    if (free) {
+        SDL_DestroyMutex(b->mutex);
         av_frame_free(&b->frame);
         av_free(b);
         av_free(buffer);
     }
+
 }
