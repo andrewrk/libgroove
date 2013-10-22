@@ -134,7 +134,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
         while (groove_sink_get_buffer(s->sink, &buffer, 1) == GROOVE_BUFFER_YES) {
             // process buffer
             ebur128_state *st = s->ebur_states[s->current_index];
-            ebur128_add_frames_double(st, (double*)buffer->data[0], buffer->sample_count);
+            ebur128_add_frames_double(st, (double*)buffer->data[0], buffer->frame_count);
             double audio_clock = buffer->pos;
             groove_buffer_unref(buffer);
 

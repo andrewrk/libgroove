@@ -124,7 +124,7 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSin
     buffer->pos = f->audio_clock;
 
     buffer->data = frame->extended_data;
-    buffer->sample_count = frame->nb_samples;
+    buffer->frame_count = frame->nb_samples;
     buffer->format.channel_layout = frame->channel_layout;
     buffer->format.sample_fmt = frame->format;
     buffer->format.sample_rate = frame->sample_rate;

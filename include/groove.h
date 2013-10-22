@@ -189,7 +189,9 @@ typedef struct GrooveBuffer {
     uint8_t **data;
 
     GrooveAudioFormat format;
-    int sample_count;
+
+    // number of audio frames described by this buffer
+    int frame_count;
     GroovePlaylistItem *item;
     double pos;
 
