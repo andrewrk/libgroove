@@ -279,8 +279,7 @@ typedef struct GroovePlayer {
     // groove_player_create defaults these to 44100 Hz,
     // signed 16-bit int, stereo.
     // These are preferences; if a setting cannot be used, a substitute will
-    // be used instead. In this case, audio_format will be updated to reflect
-    // the substituted values.
+    // be used instead. actual_audio_format is set to the actual values.
     GrooveAudioFormat target_audio_format;
 
     // how big the device buffer should be, in sample frames.
