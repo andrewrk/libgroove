@@ -270,6 +270,8 @@ int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist) {
     p->sink->purge = sink_purge;
     p->sink->flush = sink_flush;
 
+    groove_queue_reset(p->eventq);
+
     SDL_PauseAudioDevice(p->device_id, 0);
 
     return 0;
@@ -278,6 +280,7 @@ int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist) {
 int groove_player_detach(GroovePlayer *player) {
     GroovePlayerPrivate *p = player->internals;
     if (p->eventq) {
+        groove_queue_flush(p->eventq);
         groove_queue_abort(p->eventq);
     }
     if (p->sink->playlist) {
