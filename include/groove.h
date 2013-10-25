@@ -21,12 +21,12 @@ void groove_set_logging(int level);
 
 
 // channel layouts
-#define GROOVE_CH_FRONT_LEFT             0x00000001
-#define GROOVE_CH_FRONT_RIGHT            0x00000002
-#define GROOVE_CH_FRONT_CENTER           0x00000004
+#define GROOVE_CH_FRONT_LEFT       0x00000001
+#define GROOVE_CH_FRONT_RIGHT      0x00000002
+#define GROOVE_CH_FRONT_CENTER     0x00000004
 
-#define GROOVE_CH_LAYOUT_MONO              (GROOVE_CH_FRONT_CENTER)
-#define GROOVE_CH_LAYOUT_STEREO            (GROOVE_CH_FRONT_LEFT|GROOVE_CH_FRONT_RIGHT)
+#define GROOVE_CH_LAYOUT_MONO      (GROOVE_CH_FRONT_CENTER)
+#define GROOVE_CH_LAYOUT_STEREO    (GROOVE_CH_FRONT_LEFT|GROOVE_CH_FRONT_RIGHT)
 
 // get the channel count for the channel layout
 int groove_channel_layout_count(uint64_t channel_layout);
@@ -48,6 +48,12 @@ enum GrooveSampleFormat {
     GROOVE_SAMPLE_FMT_FLTP,        ///< float (32 bits), planar
     GROOVE_SAMPLE_FMT_DBLP,        ///< double (64 bits), planar
 };
+
+typedef struct GrooveAudioFormat {
+    int sample_rate;
+    uint64_t channel_layout;
+    enum GrooveSampleFormat sample_fmt;
+} GrooveAudioFormat;
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
@@ -72,7 +78,8 @@ typedef void GrooveTag;
 const char * groove_tag_key(GrooveTag *tag);
 const char * groove_tag_value(GrooveTag *tag);
 
-// you are always responsible for calling groove_file_close on the returned GrooveFile.
+// you are always responsible for calling groove_file_close on the
+// returned GrooveFile.
 GrooveFile * groove_file_open(char* filename);
 void groove_file_close(GrooveFile * file);
 
@@ -82,8 +89,10 @@ GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
 // value entry to add to metadata. will be strdup'd
 //    passing NULL causes existing entry to be deleted.
 // return >= 0 on success otherwise an error code < 0
-// note that this will not save the file; you must call groove_file_save to do that.
-int groove_file_metadata_set(GrooveFile *file, const char *key, const char *value, int flags);
+// note that this will not save the file; you must call groove_file_save
+// to do that.
+int groove_file_metadata_set(GrooveFile *file, const char *key,
+        const char *value, int flags);
 
 // a comma separated list of short names for the format
 const char * groove_file_short_names(GrooveFile *file);
@@ -92,8 +101,15 @@ const char * groove_file_short_names(GrooveFile *file);
 // return < 0 on error
 int groove_file_save(GrooveFile *file);
 
-// song duration in seconds
+// main audio stream duration in seconds. note that this relies on a
+// combination of format headers and heuristics. It can be inaccurate.
+// The only foolproof way to learn the duration of a file is to scan it
+// completely and 
 double groove_file_duration(GrooveFile *file);
+
+// get the audio format of the main audio stream of a file
+void groove_file_audio_format(GrooveFile *file,
+        GrooveAudioFormat *audio_format);
 
 /************* GroovePlaylist *************/
 typedef struct GroovePlaylistItem {
@@ -130,15 +146,16 @@ void groove_playlist_destroy(GroovePlaylist *playlist);
 void groove_playlist_play(GroovePlaylist *playlist);
 void groove_playlist_pause(GroovePlaylist *playlist);
 
-void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, double seconds);
+void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item,
+        double seconds);
 
 // once you add a file to the playlist, you must not destroy it until you first
 // remove it from the playlist.
-// next: the item you will insert before. if it is NULL, you will append to the playlist.
+// next: the item to insert before. if NULL, you will append to the playlist.
 // gain: see GroovePlaylistItem structure. use 0 for no adjustment.
 // returns the newly created playlist item.
-GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, GrooveFile *file,
-        double gain, GroovePlaylistItem *next);
+GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist,
+        GrooveFile *file, double gain, GroovePlaylistItem *next);
 
 // this will not call groove_file_close on item->file !
 // item is destroyed and the address it points to is no longer valid
@@ -149,10 +166,10 @@ void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item);
 // item are given. item will be set to NULL if the playlist is empty
 // you may pass NULL for item or seconds
 // Note that typically you are more interested in the position of the play
-// head, not the decode head. Example methods which return the play head are
-// groove_player_position and groove_encoder_position
-void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **item,
-        double *seconds);
+// head, not the decode head. For example, if you have a GroovePlayer attached,
+// groove_player_position will give you the position of the play head.
+void groove_playlist_position(GroovePlaylist *playlist,
+        GroovePlaylistItem **item, double *seconds);
 
 // return 1 if the playlist is playing; 0 if it is not.
 int groove_playlist_playing(GroovePlaylist *playlist);
@@ -164,8 +181,8 @@ void groove_playlist_clear(GroovePlaylist *playlist);
 // return the count of playlist items
 int groove_playlist_count(GroovePlaylist *playlist);
 
-void groove_playlist_set_gain(GroovePlaylist *playlist, GroovePlaylistItem *item,
-        double gain);
+void groove_playlist_set_gain(GroovePlaylist *playlist,
+        GroovePlaylistItem *item, double gain);
 
 // value is in float format. defaults to 1.0
 void groove_playlist_set_volume(GroovePlaylist *playlist, double volume);
@@ -175,12 +192,6 @@ void groove_playlist_set_volume(GroovePlaylist *playlist, double volume);
 #define GROOVE_BUFFER_NO  0
 #define GROOVE_BUFFER_YES 1
 #define GROOVE_BUFFER_END 2
-
-typedef struct GrooveAudioFormat {
-    int sample_rate;
-    uint64_t channel_layout;
-    enum GrooveSampleFormat sample_fmt;
-} GrooveAudioFormat;
 
 typedef struct GrooveBuffer {
     // all fields read-only
@@ -226,6 +237,9 @@ typedef union GrooveEvent {
 typedef struct GrooveSink {
     // set this to the audio format you want the sink to output
     GrooveAudioFormat audio_format;
+    // Set this flag to ignore audio_format. If you set this flag, the
+    // buffers you pull from this sink could have any audio format.
+    int disable_resample;
 
     // how big the buffer should be, in sample frames.
     // groove_sink_create defaults this to 8192
@@ -260,9 +274,10 @@ int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist);
 // returns 0 on success, < 0 on error
 int groove_sink_detach(GrooveSink *sink);
 
-// returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer ready (block=0),
-// GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END on end of playlist
-// buffer is always set to either a valid GrooveBuffer or NULL 
+// returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer
+// ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
+// on end of playlist.
+// buffer is always set to either a valid GrooveBuffer or NULL
 int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block);
 
 
@@ -278,8 +293,8 @@ typedef struct GroovePlayer {
     // The desired audio format settings with which to open the device.
     // groove_player_create defaults these to 44100 Hz,
     // signed 16-bit int, stereo.
-    // These are preferences; if a setting cannot be used, a substitute will
-    // be used instead. actual_audio_format is set to the actual values.
+    // These are preferences; if a setting cannot be used, a substitute will be
+    // used instead. actual_audio_format is set to the actual values.
     GrooveAudioFormat target_audio_format;
 
     // how big the device buffer should be, in sample frames.
@@ -312,7 +327,7 @@ typedef struct GroovePlayer {
 // start of a loop.
 int groove_device_count();
 
-// Returns the name of the audio device at the requested index, or NULL on error.
+// Returns the name of the audio device at the requested index, or NULL on error
 // The string returned by this function is UTF-8 encoded, read-only, and
 // managed internally. You are not to free it. If you need to keep the string
 // for any length of time, you should make your own copy of it.
@@ -351,12 +366,20 @@ int groove_player_event_peek(GroovePlayer *player, int block);
 // attach a GrooveEncoder to a playlist to keep a buffer of encoded audio full.
 // for example you could use it to implement an http audio stream
 
-typedef void GrooveEncoder;
+typedef struct GrooveEncoder {
+    // The desired audio format to encode.
+    // groove_encoder_create defaults these to 44100 Hz,
+    // signed 16-bit int, stereo.
+    // These are preferences; if a setting cannot be used, a substitute will be
+    // used instead. actual_audio_format is set to the actual values.
+    GrooveAudioFormat target_audio_format;
 
-typedef struct GrooveEncodeFormat {
-    GrooveAudioFormat audio_format;
-    // select encoding quality by choosing a target bit rate
+    // Select encoding quality by choosing a target bit rate in bits per
+    // second. Note that typically you see this expressed in "kbps", such
+    // as 320kbps or 128kbps. Surprisingly, in this circumstance 1 kbps is
+    // 1000 bps, *not* 1024 bps as you would expect.
     int bit_rate;
+
     // optional - choose a short name for the format
     // to help libgroove guess which format to use
     // use `avconv -formats` to get a list of possibilities
@@ -371,16 +394,43 @@ typedef struct GrooveEncodeFormat {
     // optional - provide a mime type string
     // to help libgroove guess which format/codec to use
     char * mime_type;
-} GrooveEncodeFormat;
 
-GrooveEncoder* groove_encoder_create(GroovePlaylist *playlist,
-        const GrooveEncodeFormat *format);
-// you must destroy all encoders before destroying their playlists
+    // read-only. set when attached and cleared when you detached
+    GroovePlaylist *playlist;
+
+    // read-only. set to the actual format you get when you attach to a
+    // playlist. ideally will be the same as target_audio_format but might
+    // not be.
+    int actual_audio_format;
+
+    void * internals; // private
+} GrooveEncoder;
+
+GrooveEncoder * groove_encoder_create();
+// detach before destroying
 void groove_encoder_destroy(GrooveEncoder *encoder);
-// returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer ready (block=0),
-// GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END on end of playlist
+
+// once you attach, you must detach before destroying the playlist
+int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist);
+int groove_encoder_detach(GrooveEncoder *encoder);
+
+// returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer
+// ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
+// on end of playlist.
+// buffer is always set to either a valid GrooveBuffer or NULL
 int groove_encoder_get_buffer(GrooveEncoder *encoder, GrooveBuffer **buffer,
         int block);
+
+// provides a buffer of data which is the format header
+// returns < 0 on error, 0 on success.
+// buffer is always set to either a valid GrooveBuffer or NULL
+int groove_encoder_get_header(GrooveEncoder *encoder, GrooveBuffer **buffer);
+
+// provides a buffer of data which is the format trailer
+// returns < 0 on error, 0 on success.
+// buffer is always set to either a valid GrooveBuffer or NULL
+int groove_encoder_get_trailer(GrooveEncoder *encoder, GrooveBuffer **buffer);
+
 
 /************* GrooveReplayGainScan *************/
 typedef struct GrooveReplayGainScan {
@@ -405,12 +455,14 @@ typedef struct GrooveReplayGainScan {
 GrooveReplayGainScan * groove_replaygainscan_create();
 
 // userdata will be passed back in callbacks
-int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file, void *userdata);
+int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file,
+        void *userdata);
 
 // starts replaygain scanning. blocks until scanning is complete.
 // gain: recommended gain adjustment of all files in scan, in float format
 // peak: peak amplitude of all files in scan, in float format
-int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *gain, double *peak);
+int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *gain,
+        double *peak);
 
 // must be called to cleanup. May not be called during a callback.
 void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);

@@ -149,6 +149,15 @@ double groove_file_duration(GrooveFile *file) {
     return time_base * f->audio_st->duration;
 }
 
+void groove_file_audio_format(GrooveFile *file, GrooveAudioFormat *audio_format) {
+    GrooveFilePrivate * f = file->internals;
+
+    AVCodecContext *codec_ctx = f->audio_st->codec;
+    audio_format->sample_rate = codec_ctx->sample_rate;
+    audio_format->channel_layout = codec_ctx->channel_layout;
+    audio_format->sample_fmt = codec_ctx->sample_fmt;
+}
+
 GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags)
 {

@@ -337,24 +337,30 @@ static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
         GrooveSink *example_sink = map_item->stack_head->sink;
         GrooveAudioFormat *audio_format = &example_sink->audio_format;
 
-        // create aformat filter
-        snprintf(p->strbuf, sizeof(p->strbuf),
-                "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%"PRIx64,
-                av_get_sample_fmt_name(audio_format->sample_fmt),
-                audio_format->sample_rate, audio_format->channel_layout);
-        av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
-        err = avfilter_graph_create_filter(&map_item->aformat_ctx, aformat,
-                NULL, p->strbuf, NULL, p->filter_graph);
-        if (err < 0) {
-            av_strerror(err, p->strbuf, sizeof(p->strbuf));
-            av_log(NULL, AV_LOG_ERROR, "unable to create aformat filter: %s\n",
-                    p->strbuf);
-            return err;
-        }
-        err = avfilter_link(audio_src_ctx, pad_index, map_item->aformat_ctx, 0);
-        if (err < 0) {
-            av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
-            return err;
+        AVFilterContext *inner_audio_src_ctx = audio_src_ctx;
+        if (example_sink->disable_resample) {
+            map_item->aformat_ctx = NULL;
+        } else {
+            // create aformat filter
+            snprintf(p->strbuf, sizeof(p->strbuf),
+                    "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%"PRIx64,
+                    av_get_sample_fmt_name(audio_format->sample_fmt),
+                    audio_format->sample_rate, audio_format->channel_layout);
+            av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
+            err = avfilter_graph_create_filter(&map_item->aformat_ctx, aformat,
+                    NULL, p->strbuf, NULL, p->filter_graph);
+            if (err < 0) {
+                av_strerror(err, p->strbuf, sizeof(p->strbuf));
+                av_log(NULL, AV_LOG_ERROR, "unable to create aformat filter: %s\n",
+                        p->strbuf);
+                return err;
+            }
+            err = avfilter_link(audio_src_ctx, pad_index, map_item->aformat_ctx, 0);
+            if (err < 0) {
+                av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
+                return err;
+            }
+            inner_audio_src_ctx = map_item->aformat_ctx;
         }
 
         // create abuffersink filter
@@ -364,7 +370,7 @@ static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
             av_log(NULL, AV_LOG_ERROR, "unable to create abuffersink filter\n");
             return err;
         }
-        err = avfilter_link(map_item->aformat_ctx, 0, map_item->abuffersink_ctx, 0);
+        err = avfilter_link(inner_audio_src_ctx, 0, map_item->abuffersink_ctx, 0);
         if (err < 0) {
             av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
             return err;
@@ -619,10 +625,15 @@ static int decode_thread(void *arg) {
     return 0;
 }
 
-static int audio_formats_equal(const GrooveAudioFormat *a, const GrooveAudioFormat *b) {
-    return a->sample_rate == b->sample_rate &&
-        a->channel_layout == b->channel_layout &&
-        a->sample_fmt == b->sample_fmt;
+static int sink_formats_equal(const GrooveSink *a, const GrooveSink *b) {
+    if (a->disable_resample) {
+        return b->disable_resample;
+    } else {
+        return b->disable_resample ? 0 :
+            (a->audio_format.sample_rate == b->audio_format.sample_rate &&
+            a->audio_format.channel_layout == b->audio_format.channel_layout &&
+            a->audio_format.sample_fmt == b->audio_format.sample_fmt);
+    }
 }
 
 static int remove_sink_from_map(GrooveSink *sink) {
@@ -681,7 +692,7 @@ static int add_sink_to_map(GroovePlaylist *playlist, GrooveSink *sink) {
         // if our sink matches the example sink from this map entry,
         // push our sink onto the stack and we're done
         GrooveSink *example_sink = map_item->stack_head->sink;
-        if (audio_formats_equal(&example_sink->audio_format, &sink->audio_format)) {
+        if (sink_formats_equal(example_sink, sink)) {
             stack_entry->next = map_item->stack_head;
             map_item->stack_head = stack_entry;
             return 0;
