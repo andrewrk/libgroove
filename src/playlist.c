@@ -1,5 +1,6 @@
 #include "file.h"
 #include "queue.h"
+#include "buffer.h"
 
 #include <libavutil/opt.h>
 #include <libavutil/channel_layout.h>
@@ -76,12 +77,6 @@ typedef struct GroovePlaylistPrivate {
 
     GroovePlaylistItem *purge_item; // set temporarily
 } GroovePlaylistPrivate;
-
-typedef struct GrooveBufferPrivate {
-    AVFrame *frame;
-    int ref_count;
-    SDL_mutex *mutex;
-} GrooveBufferPrivate;
 
 // this is used to tell the difference between a buffer underrun
 // and the end of the playlist.
@@ -1083,32 +1078,4 @@ void groove_sink_destroy(GrooveSink *sink) {
 
     av_free(s);
     av_free(sink);
-}
-
-void groove_buffer_ref(GrooveBuffer *buffer) {
-    GrooveBufferPrivate *b = buffer->internals;
-
-    SDL_LockMutex(b->mutex);
-    b->ref_count += 1;
-    SDL_UnlockMutex(b->mutex);
-}
-
-void groove_buffer_unref(GrooveBuffer *buffer) {
-    if (!buffer)
-        return;
-
-    GrooveBufferPrivate *b = buffer->internals;
-
-    SDL_LockMutex(b->mutex);
-    b->ref_count -= 1;
-    int free = b->ref_count == 0;
-    SDL_UnlockMutex(b->mutex);
-
-    if (free) {
-        SDL_DestroyMutex(b->mutex);
-        av_frame_free(&b->frame);
-        av_free(b);
-        av_free(buffer);
-    }
-
 }

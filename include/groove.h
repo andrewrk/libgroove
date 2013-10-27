@@ -103,8 +103,8 @@ int groove_file_save(GrooveFile *file);
 
 // main audio stream duration in seconds. note that this relies on a
 // combination of format headers and heuristics. It can be inaccurate.
-// The only foolproof way to learn the duration of a file is to scan it
-// completely and 
+// The most accurate way to learn the duration of a file is to use
+// GrooveDurationAnalyzer
 double groove_file_duration(GrooveFile *file);
 
 // get the audio format of the main audio stream of a file
@@ -195,14 +195,17 @@ void groove_playlist_set_volume(GroovePlaylist *playlist, double volume);
 
 typedef struct GrooveBuffer {
     // all fields read-only
-    // for interleaved audio, data[0] is the only thing you need.
+    // for interleaved audio, data[0] is the buffer.
     // for planar audio, each channel has a separate data pointer.
+    // for encoded audio, data[0] is the encoded buffer.
     uint8_t **data;
 
     GrooveAudioFormat format;
 
     // number of audio frames described by this buffer
+    // for encoded audio, this is unknown and set to 0.
     int frame_count;
+
     GroovePlaylistItem *item;
     double pos;
 
@@ -401,7 +404,7 @@ typedef struct GrooveEncoder {
     // read-only. set to the actual format you get when you attach to a
     // playlist. ideally will be the same as target_audio_format but might
     // not be.
-    int actual_audio_format;
+    GrooveAudioFormat actual_audio_format;
 
     void * internals; // private
 } GrooveEncoder;

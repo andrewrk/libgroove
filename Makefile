@@ -27,7 +27,7 @@ STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
 LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
-O_FILES = src/scan.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/global.o
+O_FILES = src/scan.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/buffer.o src/global.o
 
 # for compiling examples
 EX_CFLAGS = -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
@@ -54,6 +54,9 @@ src/encoder.o: src/encoder.c $(LIBAV_DEP)
 src/file.o: src/file.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/file.o -c src/file.c
 
+src/buffer.o: src/buffer.c $(LIBAV_DEP)
+	$(CC) $(CFLAGS) -o src/buffer.o -c src/buffer.c
+
 src/global.o: src/global.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/global.o -c src/global.c
 
@@ -66,7 +69,13 @@ src/scan.o: src/scan.c $(LIBAV_DEP)
 src/playlist.o: src/playlist.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/playlist.o -c src/playlist.c
 
-examples: example/playlist example/metadata example/replaygain
+examples: example/playlist example/metadata example/replaygain example/transcode
+
+example/transcode: example/transcode.o
+	$(CC) $(EX_LDFLAGS) -o example/transcode example/transcode.o $(EX_LDLIBS)
+
+example/transcode.o: example/transcode.c
+	$(CC) $(EX_CFLAGS) -o example/transcode.o -c example/transcode.c
 
 example/metadata: example/metadata.o
 	$(CC) $(EX_LDFLAGS) -o example/metadata example/metadata.o $(EX_LDLIBS)
@@ -98,6 +107,7 @@ clean:
 	rm -f example/playlist
 	rm -f example/metadata
 	rm -f example/replaygain
+	rm -f example/transcode
 
 distclean: clean
 	rm -rf $(LIBAV_PREFIX) $(EBUR128_PREFIX)
@@ -120,8 +130,10 @@ install-examples: examples
 	install -m 0755 example/replaygain $(PREFIX)/bin
 	install -m 0755 example/playlist $(PREFIX)/bin
 	install -m 0755 example/metadata $(PREFIX)/bin
+	install -m 0755 example/transcode $(PREFIX)/bin
 
 uninstall-examples:
 	rm -f $(PREFIX)/bin/replaygain
 	rm -f $(PREFIX)/bin/metadata
+	rm -f $(PREFIX)/bin/transcode
 	rm -f $(PREFIX)/bin/playlist

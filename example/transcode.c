@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 static int usage(char *arg0) {
-    fprintf(stderr, "Usage: %s inputfile outputfile [--bitrate 320]\n", arg0);
+    fprintf(stderr, "Usage: %s inputfile outputfile [--bitrate 320] [--format name] [--codec name] [--mime mimetype]\n", arg0);
     return 1;
 }
 
@@ -64,13 +64,16 @@ int main(int argc, char * argv[]) {
     GrooveEncoder *encoder = groove_encoder_create();
     encoder->bit_rate = bit_rate;
     encoder->format_short_name = format;
-    encoder->codec_short_name = format;
+    encoder->codec_short_name = codec;
     encoder->filename = output_file_name;
     encoder->mime_type = mime;
     groove_file_audio_format(file, &encoder->target_audio_format);
-    groove_encoder_attach(encoder, playlist);
+    if (groove_encoder_attach(encoder, playlist) < 0) {
+        fprintf(stderr, "error attaching encoder\n");
+        return 1;
+    }
 
-    GroovePlaylistItem *item = groove_playlist_insert(playlist, file, 1.0, NULL);
+    groove_playlist_insert(playlist, file, 1.0, NULL);
 
     FILE *f = fopen(output_file_name, "wb");
     if (!f) {

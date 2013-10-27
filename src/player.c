@@ -181,6 +181,10 @@ GroovePlayer * groove_player_create() {
         return NULL;
     }
 
+    p->sink->userdata = player;
+    p->sink->purge = sink_purge;
+    p->sink->flush = sink_flush;
+
     p->play_head_mutex = SDL_CreateMutex();
     if (!p->play_head_mutex) {
         groove_player_destroy(player);
@@ -265,10 +269,6 @@ int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist) {
     }
 
     p->play_pos = -1.0;
-
-    p->sink->userdata = player;
-    p->sink->purge = sink_purge;
-    p->sink->flush = sink_flush;
 
     groove_queue_reset(p->eventq);
 

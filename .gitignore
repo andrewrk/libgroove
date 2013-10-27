@@ -4,6 +4,7 @@
 /example/playlist
 /example/metadata
 /example/replaygain
+/example/transcode
 /deps/libav/out
 /deps/ebur128/build
 
