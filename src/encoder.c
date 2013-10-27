@@ -237,19 +237,111 @@ void groove_encoder_destroy(GrooveEncoder *encoder) {
     av_free(encoder);
 }
 
-static enum GrooveSampleFormat closest_supported_sample_fmt(AVCodec *codec, enum GrooveSampleFormat target) {
-    // TODO actually check
-    return target;
+static int abs_diff(int a, int b) {
+    int n = a - b;
+    return n >= 0 ? n : -n;
+}
+
+static int codec_supports_fmt(AVCodec *codec, enum GrooveSampleFormat fmt) {
+    const enum GrooveSampleFormat *p = (enum GrooveSampleFormat*) codec->sample_fmts;
+
+    while (*p != GROOVE_SAMPLE_FMT_NONE) {
+        if (*p == fmt)
+            return 1;
+        p += 1;
+    }
+
+    return 0;
+}
+
+static enum GrooveSampleFormat closest_supported_sample_fmt(AVCodec *codec,
+        enum GrooveSampleFormat target)
+{
+    // if we can, return exact match. otherwise, return the format with the
+    // next highest sample byte count
+
+    if (!codec->sample_fmts)
+        return target;
+
+    int target_size = av_get_bytes_per_sample(target);
+    const enum GrooveSampleFormat *p = (enum GrooveSampleFormat*) codec->sample_fmts;
+    enum GrooveSampleFormat best = *p;
+    int best_size = av_get_bytes_per_sample(best);
+    while (*p != GROOVE_SAMPLE_FMT_NONE) {
+        if (*p == target)
+            return target;
+
+        int size = av_get_bytes_per_sample(*p);
+        if ((best_size < target_size && size > best_size) ||
+            (size >= target_size &&
+             abs_diff(target_size, size) < abs_diff(target_size, best_size)))
+        {
+            best_size = size;
+            best = *p;
+        }
+
+        p += 1;
+    }
+
+    // prefer interleaved format
+    enum GrooveSampleFormat packed_best = av_get_packed_sample_fmt(best);
+    return codec_supports_fmt(codec, packed_best) ? packed_best : best;
 }
 
 static int closest_supported_sample_rate(AVCodec *codec, int target) {
-    // TODO actually check
-    return target;
+    // if we can, return exact match. otherwise, return the minimum sample
+    // rate >= target
+
+    if (!codec->supported_samplerates)
+        return target;
+
+    const int *p = codec->supported_samplerates;
+    int best = *p;
+
+    while (*p) {
+        if (*p == target)
+            return target;
+
+        if ((best < target && *p > best) || (*p >= target &&
+                    abs_diff(target, *p) < abs_diff(target, best)))
+        {
+            best = *p;
+        }
+
+        p += 1;
+    }
+
+    return best;
 }
 
 static uint64_t closest_supported_channel_layout(AVCodec *codec, uint64_t target) {
-    // TODO actually check
-    return target;
+    // if we can, return exact match. otherwise, return the layout with the
+    // minimum number of channels >= target
+
+    if (!codec->channel_layouts)
+        return target;
+
+    int target_count = av_get_channel_layout_nb_channels(target);
+    const uint64_t *p = codec->channel_layouts;
+    uint64_t best = *p;
+    int best_count = av_get_channel_layout_nb_channels(best);
+    while (*p) {
+        if (*p == target)
+            return target;
+
+        int count = av_get_channel_layout_nb_channels(*p);
+        if ((best_count < target_count && count > best_count) ||
+            (count >= target_count &&
+             abs_diff(target_count, count) < abs_diff(target_count, best_count)))
+        {
+            best_count = count;
+            best = *p;
+        }
+
+        p += 1;
+    }
+
+    return best;
 }
 
 int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
