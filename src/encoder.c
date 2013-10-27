@@ -93,7 +93,7 @@ static int encode_buffer(GrooveEncoder *encoder, GrooveBuffer *src_buf) {
     if (!got_packet)
         return -1;
 
-    e->dest_buf->data[0] = e->pkt->data;
+    e->dest_buf->data = &e->pkt->data;
     e->dest_buf->size = e->pkt->size;
 
     GrooveBufferPrivate *dest_b = e->dest_buf->internals;
@@ -344,6 +344,15 @@ static uint64_t closest_supported_channel_layout(AVCodec *codec, uint64_t target
     return best;
 }
 
+void log_audio_fmt(const GrooveAudioFormat *fmt) {
+    const int buf_size = 128;
+    char buf[buf_size];
+
+    av_get_channel_layout_string(buf, buf_size, 0, fmt->channel_layout);
+    av_log(NULL, AV_LOG_INFO, "encoding audio format: %s, %d Hz, %s\n", av_get_sample_fmt_name(fmt->sample_fmt),
+            fmt->sample_rate, buf);
+}
+
 int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
     GrooveEncoderPrivate *e = encoder->internals;
 
@@ -369,6 +378,8 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
     encoder->actual_audio_format.channel_layout = closest_supported_channel_layout(
             codec, encoder->target_audio_format.channel_layout);
 
+    log_audio_fmt(&encoder->actual_audio_format);
+
     e->codec_ctx = avcodec_alloc_context3(codec);
     e->codec_ctx->bit_rate = encoder->bit_rate;
     e->codec_ctx->sample_fmt = encoder->actual_audio_format.sample_fmt;
@@ -381,6 +392,8 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
         av_log(NULL, AV_LOG_ERROR, "unable to open codec\n");
         return -1;
     }
+
+    e->sink->audio_format = encoder->actual_audio_format;
 
     if (groove_sink_attach(e->sink, playlist) < 0) {
         groove_encoder_detach(encoder);
