@@ -25,12 +25,14 @@
 #include <stdlib.h>
 
 #include "libavutil/avstring.h"
+#include "libavutil/base64.h"
 #include "libavutil/bswap.h"
 #include "libavutil/dict.h"
 #include "libavcodec/bytestream.h"
 #include "libavcodec/get_bits.h"
 #include "libavcodec/vorbis_parser.h"
 #include "avformat.h"
+#include "flac_picture.h"
 #include "internal.h"
 #include "oggdec.h"
 #include "vorbiscomment.h"
@@ -40,10 +42,10 @@ static int ogm_chapter(AVFormatContext *as, uint8_t *key, uint8_t *val)
     int i, cnum, h, m, s, ms, keylen = strlen(key);
     AVChapter *chapter = NULL;
 
-    if (keylen < 9 || sscanf(key, "CHAPTER%02d", &cnum) != 1)
+    if (keylen < 9 || sscanf(key, "CHAPTER%03d", &cnum) != 1)
         return 0;
 
-    if (keylen == 9) {
+    if (keylen <= 10) {
         if (sscanf(val, "%02d:%02d:%02d.%03d", &h, &m, &s, &ms) < 4)
             return 0;
 
@@ -51,7 +53,7 @@ static int ogm_chapter(AVFormatContext *as, uint8_t *key, uint8_t *val)
                            ms + 1000 * (s + 60 * (m + 60 * h)),
                            AV_NOPTS_VALUE, NULL);
         av_free(val);
-    } else if (!strcmp(key + 9, "NAME")) {
+    } else if (!strcmp(key + keylen - 4, "NAME")) {
         for (i = 0; i < as->nb_chapters; i++)
             if (as->chapters[i]->id == cnum) {
                 chapter = as->chapters[i];
@@ -118,9 +120,7 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
             if (!tt || !ct) {
                 av_freep(&tt);
                 av_freep(&ct);
-                av_log(as, AV_LOG_WARNING,
-                       "out-of-memory error. skipping VorbisComment tag.\n");
-                continue;
+                return AVERROR(ENOMEM);
             }
 
             for (j = 0; j < tl; j++)
@@ -130,7 +130,31 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
             memcpy(ct, v, vl);
             ct[vl] = 0;
 
-            if (!ogm_chapter(as, tt, ct))
+            /* The format in which the pictures are stored is the FLAC format.
+             * Xiph says: "The binary FLAC picture structure is base64 encoded
+             * and placed within a VorbisComment with the tag name
+             * 'METADATA_BLOCK_PICTURE'. This is the preferred and
+             * recommended way of embedding cover art within VorbisComments."
+             */
+            if (!strcmp(tt, "METADATA_BLOCK_PICTURE")) {
+                int ret;
+                char *pict = av_malloc(vl);
+
+                if (!pict) {
+                    av_freep(&tt);
+                    av_freep(&ct);
+                    return AVERROR(ENOMEM);
+                }
+                if ((ret = av_base64_decode(pict, ct, vl)) > 0)
+                    ret = ff_flac_parse_picture(as, pict, ret);
+                av_freep(&tt);
+                av_freep(&ct);
+                av_freep(&pict);
+                if (ret < 0) {
+                    av_log(as, AV_LOG_WARNING, "Failed to parse cover art block.\n");
+                    continue;
+                }
+            } else if (!ogm_chapter(as, tt, ct))
                 av_dict_set(m, tt, ct,
                             AV_DICT_DONT_STRDUP_KEY |
                             AV_DICT_DONT_STRDUP_VAL);
@@ -172,15 +196,17 @@ struct oggvorbis_private {
     int final_duration;
 };
 
-static unsigned int fixup_vorbis_headers(AVFormatContext *as,
-                                         struct oggvorbis_private *priv,
-                                         uint8_t **buf)
+static int fixup_vorbis_headers(AVFormatContext *as,
+                                struct oggvorbis_private *priv,
+                                uint8_t **buf)
 {
     int i, offset, len, err;
     unsigned char *ptr;
 
     len = priv->len[0] + priv->len[1] + priv->len[2];
     ptr = *buf = av_mallocz(len + len / 255 + 64);
+    if (!ptr)
+        return AVERROR(ENOMEM);
 
     ptr[0]  = 2;
     offset  = 1;
@@ -236,6 +262,8 @@ static int vorbis_header(AVFormatContext *s, int idx)
 
     priv->len[pkt_type >> 1]    = os->psize;
     priv->packet[pkt_type >> 1] = av_mallocz(os->psize);
+    if (!priv->packet[pkt_type >> 1])
+        return AVERROR(ENOMEM);
     memcpy(priv->packet[pkt_type >> 1], os->buf + os->pstart, os->psize);
     if (os->buf[os->pstart] == 1) {
         const uint8_t *p = os->buf + os->pstart + 7; /* skip "\001vorbis" tag */

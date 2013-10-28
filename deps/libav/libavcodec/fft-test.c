@@ -37,6 +37,7 @@
 #if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -489,5 +490,8 @@ int main(int argc, char **argv)
     av_free(tab_ref);
     av_free(exptab);
 
-    return err;
+    if (err)
+        printf("Error: %d.\n", err);
+
+    return !!err;
 }
