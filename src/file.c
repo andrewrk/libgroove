@@ -64,13 +64,13 @@ GrooveFile * groove_file_open(char* filename) {
 
     if (f->audio_stream_index < 0) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", f->ic->filename);
+        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", filename);
         return NULL;
     }
 
     if (!f->decoder) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", f->ic->filename);
+        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", filename);
         return NULL;
     }
 
