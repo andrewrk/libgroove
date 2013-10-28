@@ -212,8 +212,7 @@ typedef struct GrooveBuffer {
     GroovePlaylistItem *item;
     double pos;
 
-    // for convenience the total number of bytes contained in this buffer
-    // are provided.
+    // total number of bytes contained in this buffer
     int size;
 
     void *internals;
