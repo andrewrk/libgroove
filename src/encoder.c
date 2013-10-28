@@ -14,7 +14,6 @@
 typedef struct GrooveEncoderPrivate {
     GrooveQueue *audioq;
     GrooveSink *sink;
-    AVCodecContext *codec_ctx;
     AVFormatContext *fmt_ctx;
     AVStream *stream;
     AVPacket pkt;
@@ -53,7 +52,7 @@ static int encode_buffer(GrooveEncoder *encoder, GrooveBuffer *buffer) {
     }
 
     int got_packet = 0;
-    int errcode = avcodec_encode_audio2(e->codec_ctx, &e->pkt, frame, &got_packet);
+    int errcode = avcodec_encode_audio2(e->stream->codec, &e->pkt, frame, &got_packet);
     if (errcode < 0) {
         av_log(NULL, AV_LOG_ERROR, "error encoding audio frame\n");
         return -1;
@@ -73,14 +72,6 @@ static int encode_thread(void *arg) {
 
     GrooveBuffer *buffer;
     for (;;) {
-        if (!e->sent_header) {
-            av_log(NULL, AV_LOG_INFO, "encoder: writing header\n");
-            if (avformat_write_header(e->fmt_ctx, NULL) < 0) {
-                av_log(NULL, AV_LOG_ERROR, "could not write header\n");
-            }
-            e->sent_header = 1;
-        }
-
         int result = groove_sink_get_buffer(e->sink, &buffer, 1);
 
         if (result == GROOVE_BUFFER_END) {
@@ -106,6 +97,14 @@ static int encode_thread(void *arg) {
 
         if (result != GROOVE_BUFFER_YES)
             break;
+
+        if (!e->sent_header) {
+            av_log(NULL, AV_LOG_INFO, "encoder: writing header\n");
+            if (avformat_write_header(e->fmt_ctx, NULL) < 0) {
+                av_log(NULL, AV_LOG_ERROR, "could not write header\n");
+            }
+            e->sent_header = 1;
+        }
 
         SDL_LockMutex(e->encode_head_mutex);
         encode_buffer(encoder, buffer);
@@ -138,7 +137,7 @@ static void sink_flush(GrooveSink *sink) {
 
     SDL_LockMutex(e->encode_head_mutex);
     groove_queue_flush(e->audioq);
-    avcodec_flush_buffers(e->codec_ctx);
+    avcodec_flush_buffers(e->stream->codec);
     SDL_UnlockMutex(e->encode_head_mutex);
 }
 
@@ -184,7 +183,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     buffer->format = e->encode_format;
 
     b->is_packet = 1;
-    b->data = av_malloc(sizeof(buf_size));
+    b->data = av_malloc(buf_size);
     if (!b->data) {
         av_free(buffer);
         av_free(b);
@@ -446,19 +445,16 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
 
     log_audio_fmt(&encoder->actual_audio_format);
 
-    e->codec_ctx = avcodec_alloc_context3(codec);
-    if (!e->codec_ctx) {
-        groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate context\n");
-        return -1;
-    }
-    e->codec_ctx->bit_rate = encoder->bit_rate;
-    e->codec_ctx->sample_fmt = encoder->actual_audio_format.sample_fmt;
-    e->codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
-    e->codec_ctx->channel_layout = encoder->actual_audio_format.channel_layout;
-    e->codec_ctx->channels = av_get_channel_layout_nb_channels(encoder->actual_audio_format.channel_layout);
+    AVCodecContext *codec_ctx = e->stream->codec;
+    codec_ctx->bit_rate = encoder->bit_rate;
+    codec_ctx->sample_fmt = encoder->actual_audio_format.sample_fmt;
+    codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
+    codec_ctx->channel_layout = encoder->actual_audio_format.channel_layout;
+    codec_ctx->channels = av_get_channel_layout_nb_channels(encoder->actual_audio_format.channel_layout);
 
-    if (avcodec_open2(e->codec_ctx, codec, NULL) < 0) {
+    e->stream->codec = codec_ctx;
+
+    if (avcodec_open2(codec_ctx, codec, NULL) < 0) {
         groove_encoder_detach(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to open codec\n");
         return -1;
@@ -491,12 +487,6 @@ int groove_encoder_detach(GrooveEncoder *encoder) {
     groove_queue_abort(e->audioq);
     SDL_WaitThread(e->thread_id, NULL);
     e->thread_id = NULL;
-
-    if (e->codec_ctx) {
-        avcodec_close(e->codec_ctx);
-        av_free(e->codec_ctx);
-        e->codec_ctx = NULL;
-    }
 
     if (e->stream) {
         // stream is freed by freeing the AVFormatContext
