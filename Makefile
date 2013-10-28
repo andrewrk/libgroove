@@ -96,7 +96,7 @@ example/replaygain.o: example/replaygain.c
 	$(CC) $(EX_CFLAGS) -o example/replaygain.o -c example/replaygain.c
 
 $(LIBAV_DEP): $(LIBAV_SRC)/configure
-	rm -rf $(LIBAV_PREFIX) && cd $(LIBAV_SRC) && ./configure --prefix=$(LIBAV_PREFIX) --enable-pic && $(MAKE) && $(MAKE) install
+	rm -rf $(LIBAV_PREFIX) && cd $(LIBAV_SRC) && ./configure --prefix=$(LIBAV_PREFIX) --enable-pic --enable-gpl && $(MAKE) && $(MAKE) install
 
 $(EBUR128_DEP): $(EBUR128_SRC)/CMakeLists.txt
 	rm -rf $(EBUR128_PREFIX) && mkdir -p $(EBUR128_PREFIX) && cd $(EBUR128_PREFIX) && cmake ../ && $(MAKE)
