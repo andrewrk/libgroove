@@ -32,6 +32,7 @@ typedef struct GrooveEncoderPrivate {
     unsigned char *avio_buf;
 
     int sent_header;
+    char strbuf[512];
 } GrooveEncoderPrivate;
 
 static GrooveBuffer *end_of_q_sentinel = NULL;
@@ -399,7 +400,7 @@ void log_audio_fmt(const GrooveAudioFormat *fmt) {
     char buf[buf_size];
 
     av_get_channel_layout_string(buf, buf_size, 0, fmt->channel_layout);
-    av_log(NULL, AV_LOG_INFO, "encoding audio format: %s, %d Hz, %s\n", av_get_sample_fmt_name(fmt->sample_fmt),
+    av_log(NULL, AV_LOG_INFO, "encoder: using audio format: %s, %d Hz, %s\n", av_get_sample_fmt_name(fmt->sample_fmt),
             fmt->sample_rate, buf);
 }
 
@@ -419,14 +420,36 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
 
     e->fmt_ctx->oformat = av_guess_format(encoder->format_short_name,
             encoder->filename, encoder->mime_type);
-    enum AVCodecID codec_id = av_guess_codec(e->fmt_ctx->oformat,
-            encoder->codec_short_name, encoder->filename, encoder->mime_type,
-            AVMEDIA_TYPE_AUDIO);
-    AVCodec *codec = avcodec_find_encoder(codec_id);
-    if (!codec) {
+    if (!e->fmt_ctx->oformat) {
         groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to find encoder\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to determine format\n");
         return -1;
+    }
+    // av_guess_codec ignores mime_type, filename, and codec_short_name. see
+    // https://bugzilla.libav.org/show_bug.cgi?id=580
+    // because of this we do a workaround to return the correct codec based on
+    // the codec_short_name.
+    AVCodec *codec = NULL;
+    if (encoder->codec_short_name) {
+        codec = avcodec_find_encoder_by_name(encoder->codec_short_name);
+        if (!codec) {
+            const AVCodecDescriptor *desc =
+                avcodec_descriptor_get_by_name(encoder->codec_short_name);
+            if (desc) {
+                codec = avcodec_find_encoder(desc->id);
+            }
+        }
+    }
+    if (!codec) {
+        enum AVCodecID codec_id = av_guess_codec(e->fmt_ctx->oformat,
+                encoder->codec_short_name, encoder->filename, encoder->mime_type,
+                AVMEDIA_TYPE_AUDIO);
+        codec = avcodec_find_encoder(codec_id);
+        if (!codec) {
+            groove_encoder_detach(encoder);
+            av_log(NULL, AV_LOG_ERROR, "unable to find encoder\n");
+            return -1;
+        }
     }
     av_log(NULL, AV_LOG_INFO, "encoder: using codec: %s\n", codec->long_name);
 
@@ -452,12 +475,15 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
     codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
     codec_ctx->channel_layout = encoder->actual_audio_format.channel_layout;
     codec_ctx->channels = av_get_channel_layout_nb_channels(encoder->actual_audio_format.channel_layout);
+    codec_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
 
     e->stream->codec = codec_ctx;
 
-    if (avcodec_open2(codec_ctx, codec, NULL) < 0) {
+    int errcode = avcodec_open2(codec_ctx, codec, NULL);
+    if (errcode < 0) {
         groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to open codec\n");
+        av_strerror(errcode, e->strbuf, sizeof(e->strbuf));
+        av_log(NULL, AV_LOG_ERROR, "unable to open codec: %s\n", e->strbuf);
         return -1;
     }
 
