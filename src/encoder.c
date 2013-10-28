@@ -197,6 +197,8 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     buffer->data = &b->data;
     buffer->size = buf_size;
 
+    b->ref_count = 1;
+
     groove_queue_put(e->audioq, buffer);
 
     return 0;

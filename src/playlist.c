@@ -192,15 +192,20 @@ static int audio_decode_frame(GroovePlaylist *playlist, GrooveFile *file) {
             for (;;) {
                 AVFrame *oframe = av_frame_alloc();
                 int err = av_buffersink_get_frame(map_item->abuffersink_ctx, oframe);
-                if (err == AVERROR_EOF || err == AVERROR(EAGAIN))
+                if (err == AVERROR_EOF || err == AVERROR(EAGAIN)) {
+                    av_frame_free(&oframe);
                     break;
+                }
                 if (err < 0) {
+                    av_frame_free(&oframe);
                     av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
                     return -1;
                 }
                 GrooveBuffer *buffer = frame_to_groove_buffer(playlist, example_sink, oframe);
-                if (!buffer)
+                if (!buffer) {
+                    av_frame_free(&oframe);
                     return -1;
+                }
                 data_size += buffer->size;
                 SinkStack *stack_item = map_item->stack_head;
                 while (stack_item) {
@@ -977,8 +982,9 @@ void groove_playlist_clear(GroovePlaylist *playlist) {
     GroovePlaylistItem * node = playlist->head;
     if (!node) return;
     while (node) {
+        GroovePlaylistItem *next = node->next;
         groove_playlist_remove(playlist, node);
-        node = node->next;
+        node = next;
     }
 }
 
