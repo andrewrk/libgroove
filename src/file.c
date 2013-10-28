@@ -64,7 +64,7 @@ GrooveFile * groove_file_open(char* filename) {
 
     if (f->audio_stream_index < 0) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "%s: no audio stream found\n", filename);
+        av_log(NULL, AV_LOG_INFO, "%s: no audio stream found\n", filename);
         return NULL;
     }
 
