@@ -94,5 +94,7 @@ int main(int argc, char * argv[]) {
     groove_encoder_destroy(encoder);
     groove_playlist_destroy(playlist);
 
+    groove_file_close(file);
+
     return 0;
 }

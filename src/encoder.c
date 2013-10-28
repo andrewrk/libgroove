@@ -518,6 +518,7 @@ int groove_encoder_detach(GrooveEncoder *encoder) {
     e->thread_id = NULL;
 
     if (e->stream) {
+        avcodec_close(e->stream->codec);
         // stream is freed by freeing the AVFormatContext
         e->stream = NULL;
     }
