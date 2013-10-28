@@ -18,7 +18,6 @@
 
 typedef struct GrooveSinkPrivate {
     GrooveQueue *audioq;
-    int audioq_buf_count;
     int audioq_size; // in bytes
     int min_audioq_size; // in bytes
 } GrooveSinkPrivate;
@@ -536,31 +535,28 @@ static int decode_one_frame(GroovePlaylist *playlist, GrooveFile *file) {
 
 static void audioq_put(GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
-    GrooveSink *sink = queue->context;
-    GrooveSinkPrivate *s = sink->internals;
     if (buffer == end_of_q_sentinel)
         return;
-    s->audioq_buf_count += 1;
+    GrooveSink *sink = queue->context;
+    GrooveSinkPrivate *s = sink->internals;
     s->audioq_size += buffer->size;
 }
 
 static void audioq_get(GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
-    GrooveSink *sink = queue->context;
-    GrooveSinkPrivate *s = sink->internals;
     if (buffer == end_of_q_sentinel)
         return;
-    s->audioq_buf_count -= 1;
+    GrooveSink *sink = queue->context;
+    GrooveSinkPrivate *s = sink->internals;
     s->audioq_size -= buffer->size;
 }
 
 static void audioq_cleanup(GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
-    GrooveSink *sink = queue->context;
-    GrooveSinkPrivate *s = sink->internals;
     if (buffer == end_of_q_sentinel)
         return;
-    s->audioq_buf_count -= 1;
+    GrooveSink *sink = queue->context;
+    GrooveSinkPrivate *s = sink->internals;
     s->audioq_size -= buffer->size;
     groove_buffer_unref(buffer);
 }

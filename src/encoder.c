@@ -8,6 +8,7 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavformat/avio.h>
+#include <SDL2/SDL.h>
 #include <SDL2/SDL_mutex.h>
 #include <string.h>
 
@@ -17,6 +18,7 @@ typedef struct GrooveEncoderPrivate {
     AVFormatContext *fmt_ctx;
     AVStream *stream;
     AVPacket pkt;
+    int audioq_size; // in bytes
 
     // set temporarily
     GroovePlaylistItem *purge_item;
@@ -74,6 +76,12 @@ static int encode_thread(void *arg) {
 
     GrooveBuffer *buffer;
     for (;;) {
+        if (e->audioq_size >= encoder->encoded_buffer_size) {
+            // this should ideally be done with mutex cond and signals instead
+            // of a delay. https://github.com/superjoe30/libgroove/issues/24
+            SDL_Delay(5);
+            continue;
+        }
         int result = groove_sink_get_buffer(e->sink, &buffer, 1);
 
         if (result == GROOVE_BUFFER_END) {
@@ -154,7 +162,30 @@ static int audioq_purge(GrooveQueue* queue, void *obj) {
 
 static void audioq_cleanup(GrooveQueue* queue, void *obj) {
     GrooveBuffer *buffer = obj;
+    if (buffer == end_of_q_sentinel)
+        return;
+    GrooveEncoder *encoder = queue->context;
+    GrooveEncoderPrivate *e = encoder->internals;
+    e->audioq_size -= buffer->size;
     groove_buffer_unref(buffer);
+}
+
+static void audioq_put(GrooveQueue *queue, void *obj) {
+    GrooveBuffer *buffer = obj;
+    if (buffer == end_of_q_sentinel)
+        return;
+    GrooveEncoder *encoder = queue->context;
+    GrooveEncoderPrivate *e = encoder->internals;
+    e->audioq_size += buffer->size;
+}
+
+static void audioq_get(GrooveQueue *queue, void *obj) {
+    GrooveBuffer *buffer = obj;
+    if (buffer == end_of_q_sentinel)
+        return;
+    GrooveEncoder *encoder = queue->context;
+    GrooveEncoderPrivate *e = encoder->internals;
+    e->audioq_size -= buffer->size;
 }
 
 static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
@@ -250,6 +281,8 @@ GrooveEncoder * groove_encoder_create() {
     }
     e->audioq->context = encoder;
     e->audioq->cleanup = audioq_cleanup;
+    e->audioq->put = audioq_put;
+    e->audioq->get = audioq_get;
     e->audioq->purge = audioq_purge;
 
     e->sink = groove_sink_create();
@@ -267,6 +300,8 @@ GrooveEncoder * groove_encoder_create() {
     encoder->target_audio_format.sample_rate = 44100;
     encoder->target_audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
     encoder->target_audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
+    encoder->sink_buffer_size = e->sink->buffer_size;
+    encoder->encoded_buffer_size = 16 * 1024;
 
     return encoder;
 }
@@ -493,6 +528,7 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
     }
 
     e->sink->audio_format = encoder->actual_audio_format;
+    e->sink->buffer_size = encoder->sink_buffer_size;
 
     if (groove_sink_attach(e->sink, playlist) < 0) {
         groove_encoder_detach(encoder);

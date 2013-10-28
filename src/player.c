@@ -205,7 +205,7 @@ GroovePlayer * groove_player_create() {
     player->target_audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
     // small because there is no way to clear the buffer.
     player->device_buffer_size = 1024;
-    player->memory_buffer_size = 8192;
+    player->sink_buffer_size = 8192;
 
     return player;
 }
@@ -252,7 +252,7 @@ int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist) {
     player->actual_audio_format.sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
 
     // based on spec that we got, attach a sink with those properties
-    p->sink->buffer_size = player->memory_buffer_size;
+    p->sink->buffer_size = player->sink_buffer_size;
     p->sink->audio_format = player->actual_audio_format;
 
     if (p->sink->audio_format.sample_fmt == GROOVE_SAMPLE_FMT_NONE) {

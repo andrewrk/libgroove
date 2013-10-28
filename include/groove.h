@@ -309,7 +309,7 @@ typedef struct GroovePlayer {
 
     // how big the memory buffer should be, in sample frames.
     // groove_player_create defaults this to 8192
-    int memory_buffer_size;
+    int sink_buffer_size;
 
     // read-only. set when you call groove_player_attach and cleared when
     // you call groove_player_detach
@@ -399,6 +399,14 @@ typedef struct GrooveEncoder {
     // optional - provide a mime type string
     // to help libgroove guess which format/codec to use
     char * mime_type;
+
+    // how big the sink buffer should be, in sample frames.
+    // groove_encoder_create defaults this to 8192
+    int sink_buffer_size;
+
+    // how big the encoded audio buffer should be, in bytes
+    // groove_encoder_create defaults this to 16384
+    int encoded_buffer_size;
 
     // read-only. set when attached and cleared when you detached
     GroovePlaylist *playlist;
