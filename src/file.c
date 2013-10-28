@@ -44,7 +44,7 @@ GrooveFile * groove_file_open(char* filename) {
     int err = avformat_open_input(&f->ic, filename, NULL, NULL);
     if (err < 0) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "error opening %s\n", filename);
+        av_log(NULL, AV_LOG_INFO, "%s: unrecognized format\n", filename);
         return NULL;
     }
 
