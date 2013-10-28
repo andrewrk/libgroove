@@ -83,18 +83,10 @@ int main(int argc, char * argv[]) {
 
     GrooveBuffer *buffer;
 
-    //groove_encoder_get_header(encoder, &buffer);
-    //fwrite(buffer->data[0], 1, buffer->size, f);
-    //groove_buffer_unref(buffer);
-
     while (groove_encoder_get_buffer(encoder, &buffer, 1) == GROOVE_BUFFER_YES) {
         fwrite(buffer->data[0], 1, buffer->size, f);
         groove_buffer_unref(buffer);
     }
-
-    //groove_encoder_get_trailer(encoder, &buffer);
-    //fwrite(buffer->data[0], 1, buffer->size, f);
-    //groove_buffer_unref(buffer);
 
     fclose(f);
 

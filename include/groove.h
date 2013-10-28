@@ -206,6 +206,9 @@ typedef struct GrooveBuffer {
     // for encoded audio, this is unknown and set to 0.
     int frame_count;
 
+    // when encoding, if item is NULL, this is a format header or trailer. otherwise,
+    // this is encoded audio for the item specified.
+    // when decoding, item is never NULL.
     GroovePlaylistItem *item;
     double pos;
 
@@ -414,26 +417,17 @@ GrooveEncoder * groove_encoder_create();
 void groove_encoder_destroy(GrooveEncoder *encoder);
 
 // once you attach, you must detach before destroying the playlist
+// at playlist begin, format headers are generated. when end of playlist is
+// reached, format tailers are generated.
 int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist);
 int groove_encoder_detach(GrooveEncoder *encoder);
 
 // returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer
 // ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
 // on end of playlist.
-// buffer is always set to either a valid GrooveBuffer or NULL
+// buffer is always set to either a valid GrooveBuffer or NULL.
 int groove_encoder_get_buffer(GrooveEncoder *encoder, GrooveBuffer **buffer,
         int block);
-
-// provides a buffer of data which is the format header
-// returns < 0 on error, 0 on success.
-// buffer is always set to either a valid GrooveBuffer or NULL
-int groove_encoder_get_header(GrooveEncoder *encoder, GrooveBuffer **buffer);
-
-// provides a buffer of data which is the format trailer
-// returns < 0 on error, 0 on success.
-// buffer is always set to either a valid GrooveBuffer or NULL
-int groove_encoder_get_trailer(GrooveEncoder *encoder, GrooveBuffer **buffer);
-
 
 /************* GrooveReplayGainScan *************/
 typedef struct GrooveReplayGainScan {

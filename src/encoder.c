@@ -7,14 +7,17 @@
 #include <libavutil/channel_layout.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavformat/avio.h>
 #include <SDL2/SDL_mutex.h>
+#include <string.h>
 
 typedef struct GrooveEncoderPrivate {
     GrooveQueue *audioq;
     GrooveSink *sink;
     AVCodecContext *codec_ctx;
-    AVPacket *pkt;
-    GrooveBuffer *dest_buf;
+    AVFormatContext *fmt_ctx;
+    AVStream *stream;
+    AVPacket pkt;
 
     // set temporarily
     GroovePlaylistItem *purge_item;
@@ -25,67 +28,32 @@ typedef struct GrooveEncoderPrivate {
     GrooveAudioFormat encode_format;
 
     SDL_Thread *thread_id;
+
+    AVIOContext *avio;
+    unsigned char *avio_buf;
+
+    int sent_header;
 } GrooveEncoderPrivate;
 
 static GrooveBuffer *end_of_q_sentinel = NULL;
 
-static int encode_buffer(GrooveEncoder *encoder, GrooveBuffer *src_buf) {
+static int encode_buffer(GrooveEncoder *encoder, GrooveBuffer *buffer) {
     GrooveEncoderPrivate *e = encoder->internals;
 
-    if (!e->pkt) {
-        e->pkt = av_mallocz(sizeof(AVPacket));
-        if (!e->pkt) {
-            av_log(NULL, AV_LOG_ERROR, "unable to allocate packet\n");
-            return -1;
-        }
-        av_init_packet(e->pkt);
-    }
-
-    if (src_buf) {
-        e->encode_head = src_buf->item;
-        e->encode_pos = src_buf->pos;
-        e->encode_format = src_buf->format;
-    }
-
-    if (!e->dest_buf) {
-        GrooveBuffer *dest_buf = av_mallocz(sizeof(GrooveBuffer));
-        GrooveBufferPrivate *dest_b = av_mallocz(sizeof(GrooveBufferPrivate));
-
-        if (!dest_buf || !dest_b) {
-            av_free(dest_buf);
-            av_free(dest_b);
-            av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer\n");
-            return -1;
-        }
-
-        dest_buf->internals = dest_b;
-
-        dest_b->mutex = SDL_CreateMutex();
-
-        if (!dest_b->mutex) {
-            av_free(dest_buf);
-            av_free(dest_b);
-            av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
-            return -1;
-        }
-
-        dest_b->is_packet = 1;
-
-        dest_buf->item = e->encode_head;
-        dest_buf->pos = e->encode_pos;
-        dest_buf->format = e->encode_format;
-
-        e->dest_buf = dest_buf;
-    }
+    av_init_packet(&e->pkt);
 
     AVFrame *frame = NULL;
-    if (src_buf) {
-        GrooveBufferPrivate *src_b = src_buf->internals;
-        frame = src_b->frame;
+    if (buffer) {
+        e->encode_head = buffer->item;
+        e->encode_pos = buffer->pos;
+        e->encode_format = buffer->format;
+
+        GrooveBufferPrivate *b = buffer->internals;
+        frame = b->frame;
     }
 
     int got_packet = 0;
-    int errcode = avcodec_encode_audio2(e->codec_ctx, e->pkt, frame, &got_packet);
+    int errcode = avcodec_encode_audio2(e->codec_ctx, &e->pkt, frame, &got_packet);
     if (errcode < 0) {
         av_log(NULL, AV_LOG_ERROR, "error encoding audio frame\n");
         return -1;
@@ -93,15 +61,8 @@ static int encode_buffer(GrooveEncoder *encoder, GrooveBuffer *src_buf) {
     if (!got_packet)
         return -1;
 
-    e->dest_buf->data = &e->pkt->data;
-    e->dest_buf->size = e->pkt->size;
-
-    GrooveBufferPrivate *dest_b = e->dest_buf->internals;
-    dest_b->packet = e->pkt;
-    e->pkt = NULL;
-
-    groove_queue_put(e->audioq, e->dest_buf);
-    e->dest_buf = NULL;
+    av_write_frame(e->fmt_ctx, &e->pkt);
+    av_free_packet(&e->pkt);
 
     return 0;
 }
@@ -112,14 +73,34 @@ static int encode_thread(void *arg) {
 
     GrooveBuffer *buffer;
     for (;;) {
+        if (!e->sent_header) {
+            av_log(NULL, AV_LOG_INFO, "encoder: writing header\n");
+            if (avformat_write_header(e->fmt_ctx, NULL) < 0) {
+                av_log(NULL, AV_LOG_ERROR, "could not write header\n");
+            }
+            e->sent_header = 1;
+        }
+
         int result = groove_sink_get_buffer(e->sink, &buffer, 1);
 
         if (result == GROOVE_BUFFER_END) {
-            // flush encoder with empty packets
             SDL_LockMutex(e->encode_head_mutex);
+            // flush encoder with empty packets
             while (encode_buffer(encoder, NULL) >= 0) {}
+            // then flush format context with empty packets
+            while (av_write_frame(e->fmt_ctx, NULL) == 0) {}
             groove_queue_put(e->audioq, end_of_q_sentinel);
+            e->encode_head = NULL;
+            e->encode_pos = -1.0;
             SDL_UnlockMutex(e->encode_head_mutex);
+
+            // send trailer
+            e->sent_header = 0;
+            av_log(NULL, AV_LOG_INFO, "encoder: writing trailer\n");
+            if (av_write_trailer(e->fmt_ctx) < 0) {
+                av_log(NULL, AV_LOG_ERROR, "could not write trailer\n");
+            }
+
             continue;
         }
 
@@ -173,6 +154,54 @@ static void audioq_cleanup(GrooveQueue* queue, void *obj) {
     groove_buffer_unref(buffer);
 }
 
+static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
+    GrooveEncoder *encoder = opaque;
+    GrooveEncoderPrivate *e = encoder->internals;
+
+    GrooveBuffer *buffer = av_mallocz(sizeof(GrooveBuffer));
+    GrooveBufferPrivate *b = av_mallocz(sizeof(GrooveBufferPrivate));
+
+    if (!buffer || !b) {
+        av_free(buffer);
+        av_free(b);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer\n");
+        return -1;
+    }
+
+    buffer->internals = b;
+
+    b->mutex = SDL_CreateMutex();
+
+    if (!b->mutex) {
+        av_free(buffer);
+        av_free(b);
+        av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
+        return -1;
+    }
+
+    buffer->item = e->encode_head;
+    buffer->pos = e->encode_pos;
+    buffer->format = e->encode_format;
+
+    b->is_packet = 1;
+    b->data = av_malloc(sizeof(buf_size));
+    if (!b->data) {
+        av_free(buffer);
+        av_free(b);
+        SDL_DestroyMutex(b->mutex);
+        av_log(NULL, AV_LOG_ERROR, "unable to create data buffer\n");
+        return -1;
+    }
+    memcpy(b->data, buf, buf_size);
+
+    buffer->data = &b->data;
+    buffer->size = buf_size;
+
+    groove_queue_put(e->audioq, buffer);
+
+    return 0;
+}
+
 GrooveEncoder * groove_encoder_create() {
     GrooveEncoder *encoder = av_mallocz(sizeof(GrooveEncoder));
     GrooveEncoderPrivate *e = av_mallocz(sizeof(GrooveEncoderPrivate));
@@ -184,6 +213,22 @@ GrooveEncoder * groove_encoder_create() {
         return NULL;
     }
     encoder->internals = e;
+
+    const int buffer_size = 4 * 1024;
+    e->avio_buf = av_malloc(buffer_size);
+    if (!e->avio_buf) {
+        groove_encoder_destroy(encoder);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate avio buffer\n");
+        return NULL;
+    }
+
+    e->avio = avio_alloc_context(e->avio_buf, buffer_size, 1, encoder, NULL,
+            encoder_write_packet, NULL);
+    if (!e->avio) {
+        groove_encoder_destroy(encoder);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate avio context\n");
+        return NULL;
+    }
 
     e->encode_head_mutex = SDL_CreateMutex();
     if (!e->encode_head_mutex) {
@@ -232,6 +277,12 @@ void groove_encoder_destroy(GrooveEncoder *encoder) {
 
     if (e->encode_head_mutex)
         SDL_DestroyMutex(e->encode_head_mutex);
+
+    if (e->avio)
+        av_free(e->avio);
+
+    if (e->avio_buf)
+        av_free(e->avio_buf);
 
     av_free(e);
     av_free(encoder);
@@ -359,15 +410,30 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
     encoder->playlist = playlist;
     groove_queue_reset(e->audioq);
 
-    AVOutputFormat *output_fmt = av_guess_format(encoder->format_short_name,
+    e->fmt_ctx = avformat_alloc_context();
+    if (!e->fmt_ctx) {
+        groove_encoder_detach(encoder);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate format context\n");
+        return -1;
+    }
+    e->fmt_ctx->pb = e->avio;
+
+    e->fmt_ctx->oformat = av_guess_format(encoder->format_short_name,
             encoder->filename, encoder->mime_type);
-    enum AVCodecID codec_id = av_guess_codec(output_fmt,
+    enum AVCodecID codec_id = av_guess_codec(e->fmt_ctx->oformat,
             encoder->codec_short_name, encoder->filename, encoder->mime_type,
             AVMEDIA_TYPE_AUDIO);
     AVCodec *codec = avcodec_find_encoder(codec_id);
     if (!codec) {
         groove_encoder_detach(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to find encoder\n");
+        return -1;
+    }
+
+    e->stream = avformat_new_stream(e->fmt_ctx, codec);
+    if (!e->stream) {
+        groove_encoder_detach(encoder);
+        av_log(NULL, AV_LOG_ERROR, "unable to create output stream\n");
         return -1;
     }
 
@@ -381,6 +447,11 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
     log_audio_fmt(&encoder->actual_audio_format);
 
     e->codec_ctx = avcodec_alloc_context3(codec);
+    if (!e->codec_ctx) {
+        groove_encoder_detach(encoder);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate context\n");
+        return -1;
+    }
     e->codec_ctx->bit_rate = encoder->bit_rate;
     e->codec_ctx->sample_fmt = encoder->actual_audio_format.sample_fmt;
     e->codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
@@ -427,16 +498,17 @@ int groove_encoder_detach(GrooveEncoder *encoder) {
         e->codec_ctx = NULL;
     }
 
-    if (e->pkt) {
-        av_free_packet(e->pkt);
-        av_free(e->pkt);
-        e->pkt = NULL;
+    if (e->stream) {
+        // stream is freed by freeing the AVFormatContext
+        e->stream = NULL;
     }
 
-    if (e->dest_buf) {
-        groove_buffer_unref(e->dest_buf);
-        e->dest_buf = NULL;
-    }
+    if (e->fmt_ctx)
+        avformat_free_context(e->fmt_ctx);
+
+    e->encode_head = NULL;
+    e->encode_pos = -1.0;
+    e->sent_header = 0;
 
     encoder->playlist = NULL;
     return 0;
@@ -458,14 +530,4 @@ int groove_encoder_get_buffer(GrooveEncoder *encoder, GrooveBuffer **buffer,
         *buffer = NULL;
         return GROOVE_BUFFER_NO;
     }
-}
-
-int groove_encoder_get_header(GrooveEncoder *encoder, GrooveBuffer **buffer) {
-    // TODO implement
-    return -1;
-}
-
-int groove_encoder_get_trailer(GrooveEncoder *encoder, GrooveBuffer **buffer) {
-    // TODO implement
-    return -1;
 }

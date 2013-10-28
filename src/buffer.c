@@ -23,14 +23,12 @@ void groove_buffer_unref(GrooveBuffer *buffer) {
 
     if (free) {
         SDL_DestroyMutex(b->mutex);
-        if (b->is_packet && b->packet) {
-            av_free_packet(b->packet);
-            av_free(b->packet);
+        if (b->is_packet && b->data) {
+            av_free(b->data);
         } else if (b->frame) {
             av_frame_free(&b->frame);
         }
         av_free(b);
         av_free(buffer);
     }
-
 }
