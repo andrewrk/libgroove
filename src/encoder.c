@@ -297,6 +297,7 @@ GrooveEncoder * groove_encoder_create() {
     e->sink->flush = sink_flush;
 
     // set some defaults
+    encoder->bit_rate = 256 * 1000;
     encoder->target_audio_format.sample_rate = 44100;
     encoder->target_audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
     encoder->target_audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;

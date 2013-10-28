@@ -383,6 +383,7 @@ typedef struct GrooveEncoder {
     // second. Note that typically you see this expressed in "kbps", such
     // as 320kbps or 128kbps. Surprisingly, in this circumstance 1 kbps is
     // 1000 bps, *not* 1024 bps as you would expect.
+    // groove_encoder_create defaults this to 256000
     int bit_rate;
 
     // optional - choose a short name for the format
