@@ -566,11 +566,13 @@ static void audioq_cleanup(GrooveQueue *queue, void *obj) {
 }
 
 static int audioq_purge(GrooveQueue *queue, void *obj) {
+    GrooveBuffer *buffer = obj;
+    if (buffer == end_of_q_sentinel)
+        return 0;
     GrooveSink *sink = queue->context;
     GroovePlaylist *playlist = sink->playlist;
     GroovePlaylistPrivate *p = playlist->internals;
     GroovePlaylistItem *item = p->purge_item;
-    GrooveBuffer *buffer = obj;
     return buffer->item == item;
 }
 

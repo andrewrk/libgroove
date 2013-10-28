@@ -55,7 +55,8 @@ static int encode_buffer(GrooveEncoder *encoder, GrooveBuffer *buffer) {
     int got_packet = 0;
     int errcode = avcodec_encode_audio2(e->stream->codec, &e->pkt, frame, &got_packet);
     if (errcode < 0) {
-        av_log(NULL, AV_LOG_ERROR, "error encoding audio frame\n");
+        av_strerror(errcode, e->strbuf, sizeof(e->strbuf));
+        av_log(NULL, AV_LOG_ERROR, "error encoding audio frame: %s\n", e->strbuf);
         return -1;
     }
     if (!got_packet)
@@ -143,9 +144,11 @@ static void sink_flush(GrooveSink *sink) {
 }
 
 static int audioq_purge(GrooveQueue* queue, void *obj) {
+    GrooveBuffer *buffer = obj;
+    if (buffer == end_of_q_sentinel)
+        return 0;
     GrooveEncoder *encoder = queue->context;
     GrooveEncoderPrivate *e = encoder->internals;
-    GrooveBuffer *buffer = obj;
     return buffer->item == e->purge_item;
 }
 
