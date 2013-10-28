@@ -428,6 +428,7 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
         av_log(NULL, AV_LOG_ERROR, "unable to find encoder\n");
         return -1;
     }
+    av_log(NULL, AV_LOG_INFO, "encoder: using codec: %s\n", codec->long_name);
 
     e->stream = avformat_new_stream(e->fmt_ctx, codec);
     if (!e->stream) {

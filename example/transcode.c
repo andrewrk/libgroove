@@ -27,13 +27,13 @@ int main(int argc, char * argv[]) {
             if (i + 1 >= argc) {
                 return usage(argv[0]);
             } else if (strcmp(arg, "bitrate") == 0) {
-                bit_rate_k = atoi(argv[i++]);
+                bit_rate_k = atoi(argv[++i]);
             } else if (strcmp(arg, "format") == 0) {
-                format = argv[i++];
+                format = argv[++i];
             } else if (strcmp(arg, "codec") == 0) {
-                codec = argv[i++];
+                codec = argv[++i];
             } else if (strcmp(arg, "mime") == 0) {
-                mime = argv[i++];
+                mime = argv[++i];
             } else {
                 return usage(argv[0]);
             }
