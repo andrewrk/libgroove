@@ -245,8 +245,13 @@ typedef struct GrooveSink {
     // Set this flag to ignore audio_format. If you set this flag, the
     // buffers you pull from this sink could have any audio format.
     int disable_resample;
+    // If you leave this to its default of 0, frames pulled from the sink
+    // will have sample count determined by efficiency.
+    // If you set this to a positive number, frames pulled from the sink
+    // will always have this number of samples.
+    int buffer_sample_count;
 
-    // how big the buffer should be, in sample frames.
+    // how big the buffer queue should be, in sample frames.
     // groove_sink_create defaults this to 8192
     int buffer_size;
 

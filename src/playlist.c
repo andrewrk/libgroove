@@ -190,7 +190,9 @@ static int audio_decode_frame(GroovePlaylist *playlist, GrooveFile *file) {
             int data_size = 0;
             for (;;) {
                 AVFrame *oframe = av_frame_alloc();
-                int err = av_buffersink_get_frame(map_item->abuffersink_ctx, oframe);
+                int err = example_sink->buffer_sample_count == 0 ?
+                    av_buffersink_get_frame(map_item->abuffersink_ctx, oframe) :
+                    av_buffersink_get_samples(map_item->abuffersink_ctx, oframe, example_sink->buffer_sample_count);
                 if (err == AVERROR_EOF || err == AVERROR(EAGAIN)) {
                     av_frame_free(&oframe);
                     break;
@@ -624,6 +626,8 @@ static int decode_thread(void *arg) {
 }
 
 static int sink_formats_equal(const GrooveSink *a, const GrooveSink *b) {
+    if (a->buffer_sample_count != b->buffer_sample_count)
+        return 0;
     if (a->disable_resample) {
         return b->disable_resample;
     } else {

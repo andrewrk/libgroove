@@ -530,6 +530,8 @@ int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist) {
 
     e->sink->audio_format = encoder->actual_audio_format;
     e->sink->buffer_size = encoder->sink_buffer_size;
+    e->sink->buffer_sample_count = (codec->capabilities & CODEC_CAP_VARIABLE_FRAME_SIZE) ?
+        0 : codec_ctx->frame_size;
 
     if (groove_sink_attach(e->sink, playlist) < 0) {
         groove_encoder_detach(encoder);
