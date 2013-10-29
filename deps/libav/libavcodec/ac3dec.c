@@ -1330,6 +1330,8 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data,
             if (av_crc(av_crc_get_table(AV_CRC_16_ANSI), 0, &buf[2],
                        s->frame_size - 2)) {
                 av_log(avctx, AV_LOG_ERROR, "frame CRC mismatch\n");
+                if (avctx->err_recognition & AV_EF_EXPLODE)
+                    return AVERROR_INVALIDDATA;
                 err = AAC_AC3_PARSE_ERROR_CRC;
             }
         }
@@ -1398,7 +1400,7 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data,
                 memcpy(s->outptr[channel_map[ch]], output[ch], sizeof(**output) * AC3_BLOCK_SIZE);
         for (ch = 0; ch < s->out_channels; ch++)
             output[ch] = s->outptr[channel_map[ch]];
-        for (ch = 0; ch < s->channels; ch++)
+        for (ch = 0; ch < s->out_channels; ch++)
             s->outptr[ch] += AC3_BLOCK_SIZE;
     }
 

@@ -272,9 +272,12 @@ int ff_poll_frame(AVFilterLink *link)
 
 static AVFilter *first_filter;
 
+#if !FF_API_NOCONST_GET_NAME
+const
+#endif
 AVFilter *avfilter_get_by_name(const char *name)
 {
-    AVFilter *f = NULL;
+    const AVFilter *f = NULL;
 
     if (!name)
         return NULL;
@@ -340,7 +343,7 @@ static void *filter_child_next(void *obj, void *prev)
 
 static const AVClass *filter_child_class_next(const AVClass *prev)
 {
-    AVFilter *f = NULL;
+    const AVFilter *f = NULL;
 
     while (prev && (f = avfilter_next(f)))
         if (f->priv_class == prev)
