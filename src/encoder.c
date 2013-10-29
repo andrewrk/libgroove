@@ -90,17 +90,21 @@ static int encode_thread(void *arg) {
             while (encode_buffer(encoder, NULL) >= 0) {}
             // then flush format context with empty packets
             while (av_write_frame(e->fmt_ctx, NULL) == 0) {}
-            groove_queue_put(e->audioq, end_of_q_sentinel);
-            e->encode_head = NULL;
-            e->encode_pos = -1.0;
-            SDL_UnlockMutex(e->encode_head_mutex);
 
             // send trailer
+            avio_flush(e->avio);
             e->sent_header = 0;
+            e->encode_head = NULL;
+            e->encode_pos = -1.0;
             av_log(NULL, AV_LOG_INFO, "encoder: writing trailer\n");
             if (av_write_trailer(e->fmt_ctx) < 0) {
                 av_log(NULL, AV_LOG_ERROR, "could not write trailer\n");
             }
+            avio_flush(e->avio);
+
+            groove_queue_put(e->audioq, end_of_q_sentinel);
+
+            SDL_UnlockMutex(e->encode_head_mutex);
 
             continue;
         }
@@ -108,15 +112,17 @@ static int encode_thread(void *arg) {
         if (result != GROOVE_BUFFER_YES)
             break;
 
+        SDL_LockMutex(e->encode_head_mutex);
         if (!e->sent_header) {
+            avio_flush(e->avio);
             av_log(NULL, AV_LOG_INFO, "encoder: writing header\n");
             if (avformat_write_header(e->fmt_ctx, NULL) < 0) {
                 av_log(NULL, AV_LOG_ERROR, "could not write header\n");
             }
+            avio_flush(e->avio);
             e->sent_header = 1;
         }
 
-        SDL_LockMutex(e->encode_head_mutex);
         encode_buffer(encoder, buffer);
         SDL_UnlockMutex(e->encode_head_mutex);
         groove_buffer_unref(buffer);
