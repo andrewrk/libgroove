@@ -1,4 +1,4 @@
-/* transcode a file */
+/* transcode one or more files into one output file */
 
 #include "groove.h"
 #include <stdio.h>
@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 static int usage(char *arg0) {
-    fprintf(stderr, "Usage: %s inputfile outputfile [--bitrate 320] [--format name] [--codec name] [--mime mimetype]\n", arg0);
+    fprintf(stderr, "Usage: %s file1 [file2 ...] --output outputfile [--bitrate 320] [--format name] [--codec name] [--mime mimetype]\n", arg0);
     return 1;
 }
 
@@ -17,8 +17,11 @@ int main(int argc, char * argv[]) {
     char *codec = NULL;
     char *mime = NULL;
 
-    char *input_file_name = NULL;
     char *output_file_name = NULL;
+
+    groove_init();
+    groove_set_logging(GROOVE_LOG_INFO);
+    GroovePlaylist *playlist = groove_playlist_create();
 
     for (int i = 1; i < argc; i += 1) {
         char *arg = argv[i];
@@ -34,46 +37,36 @@ int main(int argc, char * argv[]) {
                 codec = argv[++i];
             } else if (strcmp(arg, "mime") == 0) {
                 mime = argv[++i];
+            } else if (strcmp(arg, "output") == 0) {
+                output_file_name = argv[++i];
             } else {
                 return usage(argv[0]);
             }
-        } else if (!input_file_name) {
-            input_file_name = arg;
-        } else if (!output_file_name) {
-            output_file_name = arg;
         } else {
-            return usage(argv[0]);
+            GrooveFile * file = groove_file_open(arg);
+            if (!file) {
+                fprintf(stderr, "Error opening input file %s\n", arg);
+                return 1;
+            }
+            groove_playlist_insert(playlist, file, 1.0, NULL);
         }
     }
-    if (!input_file_name || !output_file_name)
+    if (!output_file_name)
         return usage(argv[0]);
 
-    // args are parsed. let's begin
-    int bit_rate = bit_rate_k * 1000;
-
-    groove_init();
-    groove_set_logging(GROOVE_LOG_INFO);
-
-    GrooveFile * file = groove_file_open(input_file_name);
-    if (!file) {
-        fprintf(stderr, "Error opening input file %s\n", input_file_name);
-        return 1;
-    }
-
-    GroovePlaylist *playlist = groove_playlist_create();
     GrooveEncoder *encoder = groove_encoder_create();
-    encoder->bit_rate = bit_rate;
+    encoder->bit_rate = bit_rate_k * 1000;
     encoder->format_short_name = format;
     encoder->codec_short_name = codec;
     encoder->filename = output_file_name;
     encoder->mime_type = mime;
-    groove_file_audio_format(file, &encoder->target_audio_format);
+    if (groove_playlist_count(playlist) == 1)
+        groove_file_audio_format(playlist->head->file, &encoder->target_audio_format);
+
     if (groove_encoder_attach(encoder, playlist) < 0) {
         fprintf(stderr, "error attaching encoder\n");
         return 1;
     }
-
-    groove_playlist_insert(playlist, file, 1.0, NULL);
 
     FILE *f = fopen(output_file_name, "wb");
     if (!f) {
@@ -92,9 +85,16 @@ int main(int argc, char * argv[]) {
 
     groove_encoder_detach(encoder);
     groove_encoder_destroy(encoder);
-    groove_playlist_destroy(playlist);
 
-    groove_file_close(file);
+    GroovePlaylistItem *item = playlist->head;
+    while (item) {
+        GrooveFile *file = item->file;
+        GroovePlaylistItem *next = item->next;
+        groove_playlist_remove(playlist, item);
+        groove_file_close(file);
+        item = next;
+    }
+    groove_playlist_destroy(playlist);
 
     return 0;
 }

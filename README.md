@@ -64,6 +64,7 @@ dependencies and instead make our own debian upstream release.
     * `playlist` - play a series of songs with gapless playback
     * `metadata` - read or update song metadata
     * `replaygain` - report the suggested replaygain for a set of files
+    * `transcode` - transcode one or more files into one output file
 
 ## Projects Using libgroove
 
