@@ -37,6 +37,7 @@ distribution's package manager.
  * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
  * [libsdl2-dev](http://www.libsdl.org/)
+ * [libmp3lame-dev](http://lame.sourceforge.net/)
 
 ### Bundled Dependencies
 

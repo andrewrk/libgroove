@@ -24,7 +24,7 @@ GROOVE_A_DEST = $(PREFIX)/lib/libgroove.a
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
 CFLAGS := -I$(LIBAV_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -g -O0 -fPIC -D_REENTRANT
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
-LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2
+LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2 -lmp3lame
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
 O_FILES = src/scan.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/buffer.o src/global.o
@@ -96,7 +96,7 @@ example/replaygain.o: example/replaygain.c
 	$(CC) $(EX_CFLAGS) -o example/replaygain.o -c example/replaygain.c
 
 $(LIBAV_DEP): $(LIBAV_SRC)/configure
-	rm -rf $(LIBAV_PREFIX) && cd $(LIBAV_SRC) && ./configure --prefix=$(LIBAV_PREFIX) --enable-pic --enable-gpl && $(MAKE) && $(MAKE) install
+	rm -rf $(LIBAV_PREFIX) && cd $(LIBAV_SRC) && ./configure --prefix=$(LIBAV_PREFIX) --enable-pic --enable-gpl --enable-libmp3lame && $(MAKE) && $(MAKE) install
 
 $(EBUR128_DEP): $(EBUR128_SRC)/CMakeLists.txt
 	rm -rf $(EBUR128_PREFIX) && mkdir -p $(EBUR128_PREFIX) && cd $(EBUR128_PREFIX) && cmake ../ && $(MAKE)
