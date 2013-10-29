@@ -64,6 +64,7 @@ static int encode_buffer(GrooveEncoder *encoder, GrooveBuffer *buffer) {
     if (!got_packet)
         return -1;
 
+    e->pkt.pts = e->pkt.dts = e->stream->nb_frames;
     av_write_frame(e->fmt_ctx, &e->pkt);
     av_free_packet(&e->pkt);
 
