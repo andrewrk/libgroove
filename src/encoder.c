@@ -167,6 +167,7 @@ static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
         e->encode_head = NULL;
         e->encode_pos = -1.0;
     }
+    SDL_CondSignal(e->drain_cond);
     SDL_UnlockMutex(e->encode_head_mutex);
 }
 
@@ -177,6 +178,7 @@ static void sink_flush(GrooveSink *sink) {
     SDL_LockMutex(e->encode_head_mutex);
     groove_queue_flush(e->audioq);
     avcodec_flush_buffers(e->stream->codec);
+    SDL_CondSignal(e->drain_cond);
     SDL_UnlockMutex(e->encode_head_mutex);
 }
 

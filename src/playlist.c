@@ -1004,6 +1004,7 @@ void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item) 
     every_sink(playlist, purge_sink, 0);
     p->purge_item = NULL;
 
+    SDL_CondSignal(p->sink_drain_cond);
     SDL_UnlockMutex(p->decode_head_mutex);
 
     av_free(item);
