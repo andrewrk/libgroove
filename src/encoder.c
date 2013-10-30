@@ -5,6 +5,7 @@
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/dict.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavformat/avio.h>
@@ -38,6 +39,8 @@ typedef struct GrooveEncoderPrivate {
 
     int sent_header;
     char strbuf[512];
+
+    AVDictionary *metadata;
 } GrooveEncoderPrivate;
 
 static GrooveBuffer *end_of_q_sentinel = NULL;
@@ -119,6 +122,14 @@ static int encode_thread(void *arg) {
 
         if (!e->sent_header) {
             avio_flush(e->avio);
+
+            // copy metadata to format context
+            av_dict_free(&e->fmt_ctx->metadata);
+            AVDictionaryEntry *tag = NULL;
+            while((tag = av_dict_get(e->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
+                av_dict_set(&e->fmt_ctx->metadata, tag->key, tag->value, AV_DICT_IGNORE_SUFFIX);
+            }
+
             av_log(NULL, AV_LOG_INFO, "encoder: writing header\n");
             if (avformat_write_header(e->fmt_ctx, NULL) < 0) {
                 av_log(NULL, AV_LOG_ERROR, "could not write header\n");
@@ -347,6 +358,9 @@ void groove_encoder_destroy(GrooveEncoder *encoder) {
 
     if (e->avio_buf)
         av_free(e->avio_buf);
+
+    if (e->metadata)
+        av_dict_free(&e->metadata);
 
     av_free(e);
     av_free(encoder);
@@ -616,4 +630,19 @@ int groove_encoder_get_buffer(GrooveEncoder *encoder, GrooveBuffer **buffer,
         *buffer = NULL;
         return GROOVE_BUFFER_NO;
     }
+}
+
+GrooveTag *groove_encoder_metadata_get(GrooveEncoder *encoder, const char *key,
+        const GrooveTag *prev, int flags)
+{
+    GrooveEncoderPrivate *e = encoder->internals;
+    const AVDictionaryEntry *entry = prev;
+    return av_dict_get(e->metadata, key, entry, flags|AV_DICT_IGNORE_SUFFIX);
+}
+
+int groove_encoder_metadata_set(GrooveEncoder *encoder, const char *key,
+        const char *value, int flags)
+{
+    GrooveEncoderPrivate *e = encoder->internals;
+    return av_dict_set(&e->metadata, key, value, flags|AV_DICT_IGNORE_SUFFIX);
 }

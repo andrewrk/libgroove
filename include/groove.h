@@ -431,7 +431,7 @@ void groove_encoder_destroy(GrooveEncoder *encoder);
 
 // once you attach, you must detach before destroying the playlist
 // at playlist begin, format headers are generated. when end of playlist is
-// reached, format tailers are generated.
+// reached, format trailers are generated.
 int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist);
 int groove_encoder_detach(GrooveEncoder *encoder);
 
@@ -441,6 +441,13 @@ int groove_encoder_detach(GrooveEncoder *encoder);
 // buffer is always set to either a valid GrooveBuffer or NULL.
 int groove_encoder_get_buffer(GrooveEncoder *encoder, GrooveBuffer **buffer,
         int block);
+
+// see docs for groove_file_metadata_get
+GrooveTag *groove_encoder_metadata_get(GrooveEncoder *encoder, const char *key,
+        const GrooveTag *prev, int flags);
+// see docs for groove_file_metadata_set
+int groove_encoder_metadata_set(GrooveEncoder *encoder, const char *key,
+        const char *value, int flags);
 
 /************* GrooveReplayGainScan *************/
 typedef struct GrooveReplayGainScan {

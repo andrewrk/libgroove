@@ -60,8 +60,15 @@ int main(int argc, char * argv[]) {
     encoder->codec_short_name = codec;
     encoder->filename = output_file_name;
     encoder->mime_type = mime;
-    if (groove_playlist_count(playlist) == 1)
+    if (groove_playlist_count(playlist) == 1) {
         groove_file_audio_format(playlist->head->file, &encoder->target_audio_format);
+
+        // copy metadata
+        GrooveTag *tag = NULL;
+        while((tag = groove_file_metadata_get(playlist->head->file, "", tag, 0))) {
+            groove_encoder_metadata_set(encoder, groove_tag_key(tag), groove_tag_value(tag), 0);
+        }
+    }
 
     if (groove_encoder_attach(encoder, playlist) < 0) {
         fprintf(stderr, "error attaching encoder\n");
