@@ -90,7 +90,15 @@ static int encode_thread(void *arg) {
             SDL_UnlockMutex(e->encode_head_mutex);
             continue;
         }
+
+        // we definitely want to unlock the mutex while we wait for the
+        // next buffer. Otherwise there will be a deadlock when sink_flush or
+        // sink_purge is called.
+        SDL_UnlockMutex(e->encode_head_mutex);
+
         int result = groove_sink_get_buffer(e->sink, &buffer, 1);
+
+        SDL_LockMutex(e->encode_head_mutex);
 
         if (result == GROOVE_BUFFER_END) {
             // flush encoder with empty packets
