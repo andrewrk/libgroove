@@ -54,6 +54,9 @@ typedef struct GroovePlaylistPrivate {
     SDL_mutex *decode_head_mutex;
     // decode_thread waits on this cond when the decode_head is NULL
     SDL_cond *decode_head_cond;
+    // decode_thread waits on this cond when every sink is full
+    // should also signal when the first sink is attached.
+    SDL_cond *sink_drain_cond;
     // pointer to current playlist item being decoded
     GroovePlaylistItem *decode_head;
     // desired volume for the volume filter
@@ -549,6 +552,11 @@ static void audioq_get(GrooveQueue *queue, void *obj) {
     GrooveSink *sink = queue->context;
     GrooveSinkPrivate *s = sink->internals;
     s->audioq_size -= buffer->size;
+
+    GroovePlaylist *playlist = sink->playlist;
+    GroovePlaylistPrivate *p = playlist->internals;
+    if (s->audioq_size < s->min_audioq_size)
+        SDL_CondSignal(p->sink_drain_cond);
 }
 
 static void audioq_cleanup(GrooveQueue *queue, void *obj) {
@@ -595,8 +603,8 @@ static int decode_thread(void *arg) {
 
         // if all sinks are filled up, no need to read more
         if (every_sink_full(playlist)) {
+            SDL_CondWait(p->sink_drain_cond, p->decode_head_mutex);
             SDL_UnlockMutex(p->decode_head_mutex);
-            SDL_Delay(5);
             continue;
         }
 
@@ -757,6 +765,7 @@ int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist) {
 
     SDL_LockMutex(p->decode_head_mutex);
     int err = add_sink_to_map(playlist, sink);
+    SDL_CondSignal(p->sink_drain_cond);
     SDL_UnlockMutex(p->decode_head_mutex);
 
     if (err < 0) {
@@ -814,7 +823,14 @@ GroovePlaylist * groove_playlist_create() {
     p->decode_head_cond = SDL_CreateCond();
     if (!p->decode_head_cond) {
         groove_playlist_destroy(playlist);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate mutex condition\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate decode head mutex condition\n");
+        return NULL;
+    }
+
+    p->sink_drain_cond = SDL_CreateCond();
+    if (!p->sink_drain_cond) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate sink drain mutex condition\n");
         return NULL;
     }
 
@@ -845,6 +861,7 @@ void groove_playlist_destroy(GroovePlaylist *playlist) {
     // wait for decode thread to finish
     p->abort_request = 1;
     SDL_CondSignal(p->decode_head_cond);
+    SDL_CondSignal(p->sink_drain_cond);
     SDL_WaitThread(p->thread_id, NULL);
 
     every_sink(playlist, groove_sink_detach, 0);
