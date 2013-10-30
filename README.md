@@ -1,8 +1,9 @@
 # libgroove
 
-Music player backend library.
+Generic music player backend library.
 
-For documentation, see include/groove.h and the examples. Join us in #libgroove on Freenode.
+For documentation, see include/groove.h and the examples. Live chat is
+available in the #libgroove channel of irc.freenode.org.
 
 ## Features
 
@@ -10,22 +11,21 @@ For documentation, see include/groove.h and the examples. Join us in #libgroove 
    - [list of supported formats](http://www.libav.org/general.html#Supported-File-Formats-and-Codecs)
  * Add and remove entries on a playlist for gapless playback.
  * Supports idempotent pause, play, and seek.
+ * Per-playlist-item gain adjustment so you can implement loudness compensation
+   without audio glitches.
  * Read and write metadata tags.
- * Audio scanning to find out extra metadata.
-   - [EBU R 128](http://tech.ebu.ch/loudness) loudness scanning which outputs
+ * Extensible sink-based interface. A sink provides resampling
+   and keeps its buffer full. Types of sinks:
+   * **raw sink** - provides reference-counted raw audio buffers you can do
+     whatever you like with. For example a real-time audio visualization.
+   * **player sink** - sends frames to a sound device.
+   * **encoder sink** - provides encoded audio buffers. For example you could
+     use this to create an HTTP audio stream.
+   * **loudness scanner sink** - uses the [EBU R 128](http://tech.ebu.ch/loudness)
+     standard to provide
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification)-compatible values.
-   - progress callbacks at a configurable interval
-   - (on the roadmap) perfectly accurate duration
-   - (on the roadmap) accoustid fingerprint
- * Per-playlist item gain adjustment so you can implement
-   loudness compensation without audio glitches.
- * Generic audio routing.
-   - You can create multiple player instances.
-   - You can attach multiple raw audio sinks to a player instance.
-     This could be used for live audio visualization, for example.
-   - You can attach multiple playback devices to a player instance.
-   - You can attach multiple realtime encoders to a player instance.
-     This could be used to create an http audio stream, for example.
+   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/23)) accoustid fingerprint
+   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) perfect duration analyzer
  * Thread-safe.
 
 ## Dependencies
