@@ -1,5 +1,5 @@
-#ifndef __GROOVE_H__
-#define __GROOVE_H__
+#ifndef GROOVE_H_INCLUDED
+#define GROOVE_H_INCLUDED
 
 #ifdef __cplusplus
 extern "C"
@@ -489,4 +489,4 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
 }
 #endif /* __cplusplus */
 
-#endif /* __GROOVE_H__ */
+#endif /* GROOVE_H_INCLUDED */

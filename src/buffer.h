@@ -1,5 +1,5 @@
-#ifndef __BUFFER_H__
-#define __BUFFER_H__
+#ifndef GROOVE_BUFFER_H_INCLUDED
+#define GROOVE_BUFFER_H_INCLUDED
 
 #include "groove.h"
 
@@ -17,4 +17,4 @@ typedef struct GrooveBufferPrivate {
     uint8_t *data;
 } GrooveBufferPrivate;
 
-#endif /* __BUFFER_H__ */
+#endif /* GROOVE_BUFFER_H_INCLUDED */

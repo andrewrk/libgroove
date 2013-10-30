@@ -1,3 +1,6 @@
+#ifndef GROOVE_QUEUE_H_INCLUDED
+#define GROOVE_QUEUE_H_INCLUDED
+
 typedef struct GrooveQueue {
     void *context;
     // defaults to groove_queue_cleanup_default
@@ -28,3 +31,4 @@ void groove_queue_purge(GrooveQueue *queue);
 
 void groove_queue_cleanup_default(GrooveQueue *queue, void *obj);
 
+#endif /* GROOVE_QUEUE_H_INCLUDED */

@@ -1,5 +1,5 @@
-#ifndef __FILE_H__
-#define __FILE_H__
+#ifndef GROOVE_FILE_H_INCLUDED
+#define GROOVE_FILE_H_INCLUDED
 
 #include "groove.h"
 
@@ -29,4 +29,4 @@ typedef struct GrooveFilePrivate {
 } GrooveFilePrivate;
 
 
-#endif /* __FILE_H__ */
+#endif /* GROOVE_FILE_H_INCLUDED */

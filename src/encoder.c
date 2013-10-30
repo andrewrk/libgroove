@@ -24,12 +24,14 @@ typedef struct GrooveEncoderPrivate {
     // set temporarily
     GroovePlaylistItem *purge_item;
 
+    // encode_head_mutex applies to variables inside this block.
     SDL_mutex *encode_head_mutex;
     // encode_thread waits on this when the encoded audio buffer queue
     // is full.
     SDL_cond *drain_cond;
     GroovePlaylistItem *encode_head;
     double encode_pos;
+
     GrooveAudioFormat encode_format;
 
     SDL_Thread *thread_id;
