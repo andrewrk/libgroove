@@ -12,10 +12,6 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_thread.h>
 
-// How many ms to wait to check whether anything is added to the playlist yet.
-// also when the buffers are full
-#define NOOP_DELAY 5
-
 typedef struct GrooveSinkPrivate {
     GrooveQueue *audioq;
     int audioq_size; // in bytes
@@ -56,6 +52,8 @@ typedef struct GroovePlaylistPrivate {
 
     // this mutex applies to the variables in this block
     SDL_mutex *decode_head_mutex;
+    // decode_thread waits on this cond when the decode_head is NULL
+    SDL_cond *decode_head_cond;
     // pointer to current playlist item being decoded
     GroovePlaylistItem *decode_head;
     // desired volume for the volume filter
@@ -589,8 +587,8 @@ static int decode_thread(void *arg) {
                 every_sink_signal_end(playlist);
                 p->sent_end_of_q = 1;
             }
+            SDL_CondWait(p->decode_head_cond, p->decode_head_mutex);
             SDL_UnlockMutex(p->decode_head_mutex);
-            SDL_Delay(NOOP_DELAY);
             continue;
         }
         p->sent_end_of_q = 0;
@@ -598,7 +596,7 @@ static int decode_thread(void *arg) {
         // if all sinks are filled up, no need to read more
         if (every_sink_full(playlist)) {
             SDL_UnlockMutex(p->decode_head_mutex);
-            SDL_Delay(NOOP_DELAY);
+            SDL_Delay(5);
             continue;
         }
 
@@ -796,7 +794,7 @@ GroovePlaylist * groove_playlist_create() {
     if (!playlist || !p) {
         av_free(p);
         av_free(playlist);
-        av_log(NULL, AV_LOG_ERROR, "Could not create playlist - out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate playlist\n");
         return NULL;
     }
     playlist->internals = p;
@@ -809,7 +807,14 @@ GroovePlaylist * groove_playlist_create() {
     p->decode_head_mutex = SDL_CreateMutex();
     if (!p->decode_head_mutex) {
         groove_playlist_destroy(playlist);
-        av_log(NULL, AV_LOG_WARNING, "unable to create playlist: out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate mutex\n");
+        return NULL;
+    }
+
+    p->decode_head_cond = SDL_CreateCond();
+    if (!p->decode_head_cond) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate mutex condition\n");
         return NULL;
     }
 
@@ -817,7 +822,7 @@ GroovePlaylist * groove_playlist_create() {
 
     if (!p->in_frame) {
         groove_playlist_destroy(playlist);
-        av_log(NULL, AV_LOG_ERROR, "unable to alloc frame: out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate frame\n");
         return NULL;
     }
 
@@ -825,7 +830,7 @@ GroovePlaylist * groove_playlist_create() {
 
     if (!p->thread_id) {
         groove_playlist_destroy(playlist);
-        av_log(NULL, AV_LOG_ERROR, "Error creating playlist thread: Out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to create playlist thread\n");
         return NULL;
     }
 
@@ -839,6 +844,7 @@ void groove_playlist_destroy(GroovePlaylist *playlist) {
 
     // wait for decode thread to finish
     p->abort_request = 1;
+    SDL_CondSignal(p->decode_head_cond);
     SDL_WaitThread(p->thread_id, NULL);
 
     every_sink(playlist, groove_sink_detach, 0);
@@ -848,6 +854,9 @@ void groove_playlist_destroy(GroovePlaylist *playlist) {
 
     if (p->decode_head_mutex)
         SDL_DestroyMutex(p->decode_head_mutex);
+
+    if (p->decode_head_cond)
+        SDL_DestroyCond(p->decode_head_cond);
 
     av_free(p);
     av_free(playlist);
@@ -880,9 +889,11 @@ void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, do
 
     f->seek_pos = ts;
     f->seek_flush = 1;
-    p->decode_head = item;
 
     SDL_UnlockMutex(f->seek_mutex);
+
+    p->decode_head = item;
+    SDL_CondSignal(p->decode_head_cond);
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
@@ -916,12 +927,13 @@ GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, GrooveFile
         playlist->head = item;
         playlist->tail = item;
 
-        p->decode_head = playlist->head;
-
         SDL_LockMutex(f->seek_mutex);
         f->seek_pos = 0;
         f->seek_flush = 0;
         SDL_UnlockMutex(f->seek_mutex);
+
+        p->decode_head = playlist->head;
+        SDL_CondSignal(p->decode_head_cond);
     } else {
         item->prev = playlist->tail;
         playlist->tail->next = item;
