@@ -28,6 +28,7 @@ struct GrooveEncoderPrivate {
     AVStream *stream;
     AVPacket pkt;
     int audioq_size; // in bytes
+    int abort_request;
 
     // set temporarily
     struct GroovePlaylistItem *purge_item;
@@ -92,7 +93,7 @@ static int encode_thread(void *arg) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     struct GrooveBuffer *buffer;
-    for (;;) {
+    while (!e->abort_request) {
         SDL_LockMutex(e->encode_head_mutex);
 
         if (e->audioq_size >= encoder->encoded_buffer_size) {
@@ -597,6 +598,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
 int groove_encoder_detach(struct GrooveEncoder *encoder) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
+    e->abort_request = 1;
     groove_sink_detach(e->sink);
     groove_queue_flush(e->audioq);
     groove_queue_abort(e->audioq);
@@ -616,6 +618,7 @@ int groove_encoder_detach(struct GrooveEncoder *encoder) {
     e->encode_head = NULL;
     e->encode_pos = -1.0;
     e->sent_header = 0;
+    e->abort_request = 0;
 
     encoder->playlist = NULL;
     return 0;
