@@ -17,7 +17,7 @@ struct GrooveQueue {
     int (*purge)(struct GrooveQueue*, void *obj);
 };
 
-struct GrooveQueue *groove_queue_create();
+struct GrooveQueue *groove_queue_create(void);
 
 void groove_queue_flush(struct GrooveQueue *queue);
 

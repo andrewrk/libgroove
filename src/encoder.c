@@ -273,7 +273,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     return 0;
 }
 
-struct GrooveEncoder *groove_encoder_create() {
+struct GrooveEncoder *groove_encoder_create(void) {
     struct GrooveEncoderPrivate *e = av_mallocz(sizeof(struct GrooveEncoderPrivate));
 
     if (!e) {
@@ -480,7 +480,7 @@ static uint64_t closest_supported_channel_layout(AVCodec *codec, uint64_t target
     return best;
 }
 
-void log_audio_fmt(const struct GrooveAudioFormat *fmt) {
+static void log_audio_fmt(const struct GrooveAudioFormat *fmt) {
     const int buf_size = 128;
     char buf[buf_size];
 

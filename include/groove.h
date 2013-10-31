@@ -16,8 +16,8 @@ extern "C"
 #include <stdint.h>
 
 /************* global *************/
-// call once at the beginning of your program
-int groove_init();
+// call once at the beginning of your program from the main thread
+int groove_init(void);
 
 // enable/disable logging of errors
 #define GROOVE_LOG_QUIET    -8
@@ -140,7 +140,7 @@ struct GroovePlaylist {
 
 // a playlist manages keeping an audio buffer full
 // to send the buffer to your speakers, use groove_player_create
-struct GroovePlaylist *groove_playlist_create();
+struct GroovePlaylist *groove_playlist_create(void);
 // this will not call groove_file_close on any files
 // it will remove all playlist items and sinks from the playlist
 void groove_playlist_destroy(struct GroovePlaylist *playlist);
@@ -264,7 +264,7 @@ struct GrooveSink {
     int bytes_per_sec;
 };
 
-struct GrooveSink *groove_sink_create();
+struct GrooveSink *groove_sink_create(void);
 void groove_sink_destroy(struct GrooveSink *sink);
 
 // before calling this, set audio_format
@@ -335,7 +335,7 @@ struct GroovePlayer {
 // This function may trigger a complete redetect of available hardware. It
 // should not be called for each iteration of a loop, but rather once at the
 // start of a loop.
-int groove_device_count();
+int groove_device_count(void);
 
 // Returns the name of the audio device at the requested index, or NULL on error
 // The string returned by this function is UTF-8 encoded, read-only, and
@@ -343,7 +343,7 @@ int groove_device_count();
 // for any length of time, you should make your own copy of it.
 const char *groove_device_name(int index);
 
-struct GroovePlayer *groove_player_create();
+struct GroovePlayer *groove_player_create(void);
 void groove_player_destroy(struct GroovePlayer *player);
 
 // Attaches the player to the playlist instance and opens the device to
@@ -424,7 +424,7 @@ struct GrooveEncoder {
     struct GrooveAudioFormat actual_audio_format;
 };
 
-struct GrooveEncoder *groove_encoder_create();
+struct GrooveEncoder *groove_encoder_create(void);
 // detach before destroying
 void groove_encoder_destroy(struct GrooveEncoder *encoder);
 
@@ -467,7 +467,7 @@ struct GrooveReplayGainScan {
 
 // after you create a GrooveReplayGainScan you may set the callbacks and call
 // groove_replaygainscan_add
-struct GrooveReplayGainScan *groove_replaygainscan_create();
+struct GrooveReplayGainScan *groove_replaygainscan_create(void);
 
 // userdata will be passed back in callbacks
 int groove_replaygainscan_add(struct GrooveReplayGainScan *scan,

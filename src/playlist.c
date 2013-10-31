@@ -804,7 +804,7 @@ int groove_sink_get_buffer(struct GrooveSink *sink, struct GrooveBuffer **buffer
     }
 }
 
-struct GroovePlaylist * groove_playlist_create() {
+struct GroovePlaylist * groove_playlist_create(void) {
     struct GroovePlaylistPrivate *p = av_mallocz(sizeof(struct GroovePlaylistPrivate));
     if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate playlist\n");
@@ -1077,7 +1077,7 @@ int groove_playlist_playing(struct GroovePlaylist *playlist) {
     return !p->paused;
 }
 
-struct GrooveSink * groove_sink_create() {
+struct GrooveSink * groove_sink_create(void) {
     struct GrooveSinkPrivate *s = av_mallocz(sizeof(struct GrooveSinkPrivate));
 
     if (!s) {

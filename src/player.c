@@ -166,7 +166,7 @@ static void sink_flush(struct GrooveSink *sink) {
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
-struct GroovePlayer *groove_player_create() {
+struct GroovePlayer *groove_player_create(void) {
     struct GroovePlayerPrivate *p = av_mallocz(sizeof(struct GroovePlayerPrivate));
 
     if (!p) {
@@ -299,7 +299,7 @@ int groove_player_detach(struct GroovePlayer *player) {
     return 0;
 }
 
-int groove_device_count() {
+int groove_device_count(void) {
     return SDL_GetNumAudioDevices(0);
 }
 

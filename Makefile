@@ -22,7 +22,7 @@ GROOVE_A_DEST = $(PREFIX)/lib/libgroove.a
 
 # for compiling groove
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
-CFLAGS := -I$(LIBAV_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -g -O0 -fPIC -D_REENTRANT
+CFLAGS := -I$(LIBAV_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -g -O0 -fPIC -D_REENTRANT
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
 LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2 -lmp3lame
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic

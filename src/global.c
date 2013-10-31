@@ -12,7 +12,7 @@
 #include <libavutil/channel_layout.h>
 #include <SDL2/SDL.h>
 
-static void deinit_network() {
+static void deinit_network(void) {
     avformat_network_deinit();
 }
 
@@ -36,7 +36,7 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
     return 0;
 }
 
-int groove_init() {
+int groove_init(void) {
     av_lockmgr_register(&my_lockmgr_cb);
 
     srand(time(NULL));

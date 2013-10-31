@@ -24,7 +24,7 @@ struct GrooveQueuePrivate {
     int abort_request;
 };
 
-struct GrooveQueue *groove_queue_create() {
+struct GrooveQueue *groove_queue_create(void) {
     struct GrooveQueuePrivate *q = av_mallocz(sizeof(struct GrooveQueuePrivate));
     if (!q)
         return NULL;

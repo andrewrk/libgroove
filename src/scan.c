@@ -65,7 +65,7 @@ static void cleanup_ebur(struct GrooveReplayGainScan *scan) {
     av_freep(&s->ebur_states);
 }
 
-struct GrooveReplayGainScan *groove_replaygainscan_create() {
+struct GrooveReplayGainScan *groove_replaygainscan_create(void) {
     struct GrooveReplayGainScanPrivate *s = av_mallocz(sizeof(struct GrooveReplayGainScanPrivate));
     if (!s) {
         av_log(NULL, AV_LOG_ERROR, "error creating replaygain scan: out of memory\n");
