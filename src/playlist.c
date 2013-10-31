@@ -879,6 +879,9 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
     if (p->decode_head_cond)
         SDL_DestroyCond(p->decode_head_cond);
 
+    if (p->sink_drain_cond)
+        SDL_DestroyCond(p->sink_drain_cond);
+
     av_free(p);
 }
 
