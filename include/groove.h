@@ -71,18 +71,18 @@ struct GrooveFile {
 // delimiter is added, the strings are simply concatenated.
 #define GROOVE_TAG_APPEND         32
 
-typedef void GrooveTag;
+struct GrooveTag;
 
-const char *groove_tag_key(GrooveTag *tag);
-const char *groove_tag_value(GrooveTag *tag);
+const char *groove_tag_key(struct GrooveTag *tag);
+const char *groove_tag_value(struct GrooveTag *tag);
 
 // you are always responsible for calling groove_file_close on the
 // returned GrooveFile.
 struct GrooveFile *groove_file_open(char *filename);
 void groove_file_close(struct GrooveFile *file);
 
-GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
-        const GrooveTag *prev, int flags);
+struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file,
+        const char *key, const struct GrooveTag *prev, int flags);
 // key entry to add to metadata. will be strdup'd
 // value entry to add to metadata. will be strdup'd
 //    passing NULL causes existing entry to be deleted.
@@ -438,8 +438,8 @@ int groove_encoder_get_buffer(struct GrooveEncoder *encoder,
         struct GrooveBuffer **buffer, int block);
 
 // see docs for groove_file_metadata_get
-GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,
-        const char *key, const GrooveTag *prev, int flags);
+struct GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,
+        const char *key, const struct GrooveTag *prev, int flags);
 // see docs for groove_file_metadata_set
 int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
         const char *value, int flags);

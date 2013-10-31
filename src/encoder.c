@@ -632,12 +632,12 @@ int groove_encoder_get_buffer(struct GrooveEncoder *encoder,
     }
 }
 
-GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder, const char *key,
-        const GrooveTag *prev, int flags)
+struct GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder, const char *key,
+        const struct GrooveTag *prev, int flags)
 {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
-    const AVDictionaryEntry *entry = prev;
-    return av_dict_get(e->metadata, key, entry, flags|AV_DICT_IGNORE_SUFFIX);
+    const AVDictionaryEntry *entry = (const AVDictionaryEntry *) prev;
+    return (struct GrooveTag *) av_dict_get(e->metadata, key, entry, flags|AV_DICT_IGNORE_SUFFIX);
 }
 
 int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,

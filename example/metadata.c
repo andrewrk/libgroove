@@ -50,7 +50,7 @@ int main(int argc, char * argv[]) {
             return usage(exe);
         }
     }
-    GrooveTag *tag = NULL;
+    struct GrooveTag *tag = NULL;
     printf("duration=%f\n", groove_file_duration(file));
     while ((tag = groove_file_metadata_get(file, "", tag, 0)))
         printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));

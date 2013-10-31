@@ -149,12 +149,12 @@ void groove_file_audio_format(struct GrooveFile *file, struct GrooveAudioFormat 
     audio_format->sample_fmt = codec_ctx->sample_fmt;
 }
 
-GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
-        const GrooveTag *prev, int flags)
+struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
+        const struct GrooveTag *prev, int flags)
 {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
-    const AVDictionaryEntry *e = prev;
-    return av_dict_get(f->ic->metadata, key, e, flags|AV_DICT_IGNORE_SUFFIX);
+    const AVDictionaryEntry *e = (const AVDictionaryEntry *) prev;
+    return (struct GrooveTag *) av_dict_get(f->ic->metadata, key, e, flags|AV_DICT_IGNORE_SUFFIX);
 }
 
 int groove_file_metadata_set(struct GrooveFile *file, const char *key,
@@ -165,13 +165,13 @@ int groove_file_metadata_set(struct GrooveFile *file, const char *key,
     return av_dict_set(&f->ic->metadata, key, value, flags|AV_DICT_IGNORE_SUFFIX);
 }
 
-const char * groove_tag_key(GrooveTag *tag) {
-    AVDictionaryEntry *e = tag;
+const char *groove_tag_key(struct GrooveTag *tag) {
+    AVDictionaryEntry *e = (AVDictionaryEntry *) tag;
     return e->key;
 }
 
-const char * groove_tag_value(GrooveTag *tag) {
-    AVDictionaryEntry *e = tag;
+const char *groove_tag_value(struct GrooveTag *tag) {
+    AVDictionaryEntry *e = (AVDictionaryEntry *) tag;
     return e->value;
 }
 
