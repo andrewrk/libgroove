@@ -14,13 +14,13 @@ struct GroovePlayerPrivate {
     // this mutex applies to the variables in this block
     SDL_mutex *play_head_mutex;
     // pointer to current item where the buffered audio is reaching the device
-    GroovePlaylistItem *play_head;
+    struct GroovePlaylistItem *play_head;
     // number of seconds into the play_head song where the buffered audio
     // is reaching the device
     double play_pos;
 
     SDL_AudioDeviceID device_id;
-    GrooveSink *sink;
+    struct GrooveSink *sink;
 
     // only touched by sdl_audio_callback, tells whether we have reached end
     // of audio queue naturally rather than a buffer underrun
@@ -76,8 +76,8 @@ static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType typ
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     struct GroovePlayerPrivate *p = opaque;
 
-    GrooveSink *sink = p->sink;
-    GroovePlaylist *playlist = sink->playlist;
+    struct GrooveSink *sink = p->sink;
+    struct GroovePlaylist *playlist = sink->playlist;
 
     double bytes_per_sec = sink->bytes_per_sec;
     int paused = !groove_playlist_playing(playlist);
@@ -128,7 +128,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
-static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
+static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
     struct GroovePlayerPrivate *p = sink->userdata;
 
     SDL_LockMutex(p->play_head_mutex);
@@ -146,7 +146,7 @@ static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
-static void sink_flush(GrooveSink *sink) {
+static void sink_flush(struct GrooveSink *sink) {
     struct GroovePlayerPrivate *p = sink->userdata;
 
     SDL_LockMutex(p->play_head_mutex);
@@ -222,7 +222,7 @@ void groove_player_destroy(struct GroovePlayer *player) {
     av_free(p);
 }
 
-int groove_player_attach(struct GroovePlayer *player, GroovePlaylist *playlist) {
+int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *playlist) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
     SDL_AudioSpec wanted_spec, spec;
@@ -301,7 +301,7 @@ const char * groove_device_name(int index) {
 }
 
 void groove_player_position(struct GroovePlayer *player,
-        GroovePlaylistItem **item, double *seconds)
+        struct GroovePlaylistItem **item, double *seconds)
 {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 

@@ -140,7 +140,7 @@ double groove_file_duration(struct GrooveFile *file) {
     return time_base * f->audio_st->duration;
 }
 
-void groove_file_audio_format(struct GrooveFile *file, GrooveAudioFormat *audio_format) {
+void groove_file_audio_format(struct GrooveFile *file, struct GrooveAudioFormat *audio_format) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     AVCodecContext *codec_ctx = f->audio_st->codec;

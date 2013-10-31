@@ -17,8 +17,8 @@ typedef struct GrooveReplayGainScanPrivate {
     int file_count;
     int current_index;
     ebur128_state **ebur_states;
-    GroovePlaylist *playlist;
-    GrooveSink *sink;
+    struct GroovePlaylist *playlist;
+    struct GrooveSink *sink;
 } GrooveReplayGainScanPrivate;
 
 static void filestack_push(FileStackItem **stack, FileStackItem *item) {
@@ -124,7 +124,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
         av_freep(&node);
 
         groove_playlist_clear(s->playlist);
-        GroovePlaylistItem *item = groove_playlist_insert(s->playlist, file, 1.0, NULL);
+        struct GroovePlaylistItem *item = groove_playlist_insert(s->playlist, file, 1.0, NULL);
         groove_playlist_seek(s->playlist, item, 0);
         double seconds_passed = 0;
         double prev_clock = 0;

@@ -16,24 +16,24 @@
 struct GrooveEncoderPrivate {
     struct GrooveEncoder externals;
     struct GrooveQueue *audioq;
-    GrooveSink *sink;
+    struct GrooveSink *sink;
     AVFormatContext *fmt_ctx;
     AVStream *stream;
     AVPacket pkt;
     int audioq_size; // in bytes
 
     // set temporarily
-    GroovePlaylistItem *purge_item;
+    struct GroovePlaylistItem *purge_item;
 
     // encode_head_mutex applies to variables inside this block.
     SDL_mutex *encode_head_mutex;
     // encode_thread waits on this when the encoded audio buffer queue
     // is full.
     SDL_cond *drain_cond;
-    GroovePlaylistItem *encode_head;
+    struct GroovePlaylistItem *encode_head;
     double encode_pos;
 
-    GrooveAudioFormat encode_format;
+    struct GrooveAudioFormat encode_format;
 
     SDL_Thread *thread_id;
 
@@ -157,7 +157,7 @@ static int encode_thread(void *arg) {
     return 0;
 }
 
-static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
+static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
     struct GrooveEncoder *encoder = sink->userdata;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
@@ -174,7 +174,7 @@ static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
     SDL_UnlockMutex(e->encode_head_mutex);
 }
 
-static void sink_flush(GrooveSink *sink) {
+static void sink_flush(struct GrooveSink *sink) {
     struct GrooveEncoderPrivate *e = sink->userdata;
 
     SDL_LockMutex(e->encode_head_mutex);
@@ -473,7 +473,7 @@ static uint64_t closest_supported_channel_layout(AVCodec *codec, uint64_t target
     return best;
 }
 
-void log_audio_fmt(const GrooveAudioFormat *fmt) {
+void log_audio_fmt(const struct GrooveAudioFormat *fmt) {
     const int buf_size = 128;
     char buf[buf_size];
 
@@ -482,7 +482,7 @@ void log_audio_fmt(const GrooveAudioFormat *fmt) {
             fmt->sample_rate, buf);
 }
 
-int groove_encoder_attach(struct GrooveEncoder *encoder, GroovePlaylist *playlist) {
+int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *playlist) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     encoder->playlist = playlist;

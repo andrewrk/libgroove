@@ -49,11 +49,11 @@ enum GrooveSampleFormat {
     GROOVE_SAMPLE_FMT_DBLP,        ///< double (64 bits), planar
 };
 
-typedef struct GrooveAudioFormat {
+struct GrooveAudioFormat {
     int sample_rate;
     uint64_t channel_layout;
     enum GrooveSampleFormat sample_fmt;
-} GrooveAudioFormat;
+};
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
@@ -107,10 +107,10 @@ double groove_file_duration(struct GrooveFile *file);
 
 // get the audio format of the main audio stream of a file
 void groove_file_audio_format(struct GrooveFile *file,
-        GrooveAudioFormat *audio_format);
+        struct GrooveAudioFormat *audio_format);
 
 /************* GroovePlaylist *************/
-typedef struct GroovePlaylistItem {
+struct GroovePlaylistItem {
     // all fields are read-only. modify with methods below.
     struct GroovePlaylistItem *prev;
     struct GrooveFile *file;
@@ -119,45 +119,45 @@ typedef struct GroovePlaylistItem {
     // To convert from dB to float, use exp(log(10) * 0.05 * dB_value)
     double gain;
     struct GroovePlaylistItem *next;
-} GroovePlaylistItem;
+};
 
-typedef struct GroovePlaylist {
+struct GroovePlaylist {
     // all fields are read-only. modify using methods below.
     // doubly linked list which is the playlist
-    GroovePlaylistItem *head;
-    GroovePlaylistItem *tail;
+    struct GroovePlaylistItem *head;
+    struct GroovePlaylistItem *tail;
 
     // in float format, defaults to 1.0
     double volume;
-
-    void *internals; // don't touch this
-} GroovePlaylist;
+};
 
 // a playlist manages keeping an audio buffer full
 // to send the buffer to your speakers, use groove_player_create
-GroovePlaylist *groove_playlist_create();
+struct GroovePlaylist *groove_playlist_create();
 // this will not call groove_file_close on any files
 // it will remove all playlist items and sinks from the playlist
-void groove_playlist_destroy(GroovePlaylist *playlist);
+void groove_playlist_destroy(struct GroovePlaylist *playlist);
 
 
-void groove_playlist_play(GroovePlaylist *playlist);
-void groove_playlist_pause(GroovePlaylist *playlist);
+void groove_playlist_play(struct GroovePlaylist *playlist);
+void groove_playlist_pause(struct GroovePlaylist *playlist);
 
-void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item,
-        double seconds);
+void groove_playlist_seek(struct GroovePlaylist *playlist,
+        struct GroovePlaylistItem *item, double seconds);
 
 // once you add a file to the playlist, you must not destroy it until you first
 // remove it from the playlist.
 // next: the item to insert before. if NULL, you will append to the playlist.
 // gain: see GroovePlaylistItem structure. use 0 for no adjustment.
 // returns the newly created playlist item.
-GroovePlaylistItem *groove_playlist_insert(GroovePlaylist *playlist,
-        struct GrooveFile *file, double gain, GroovePlaylistItem *next);
+struct GroovePlaylistItem *groove_playlist_insert(
+        struct GroovePlaylist *playlist, struct GrooveFile *file, double gain,
+        struct GroovePlaylistItem *next);
 
 // this will not call groove_file_close on item->file !
 // item is destroyed and the address it points to is no longer valid
-void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item);
+void groove_playlist_remove(struct GroovePlaylist *playlist,
+        struct GroovePlaylistItem *item);
 
 // get the position of the decode head
 // both the current playlist item and the position in seconds in the playlist
@@ -166,24 +166,24 @@ void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item);
 // Note that typically you are more interested in the position of the play
 // head, not the decode head. For example, if you have a GroovePlayer attached,
 // groove_player_position will give you the position of the play head.
-void groove_playlist_position(GroovePlaylist *playlist,
-        GroovePlaylistItem **item, double *seconds);
+void groove_playlist_position(struct GroovePlaylist *playlist,
+        struct GroovePlaylistItem **item, double *seconds);
 
 // return 1 if the playlist is playing; 0 if it is not.
-int groove_playlist_playing(GroovePlaylist *playlist);
+int groove_playlist_playing(struct GroovePlaylist *playlist);
 
 
 // remove all playlist items
-void groove_playlist_clear(GroovePlaylist *playlist);
+void groove_playlist_clear(struct GroovePlaylist *playlist);
 
 // return the count of playlist items
-int groove_playlist_count(GroovePlaylist *playlist);
+int groove_playlist_count(struct GroovePlaylist *playlist);
 
-void groove_playlist_set_gain(GroovePlaylist *playlist,
-        GroovePlaylistItem *item, double gain);
+void groove_playlist_set_gain(struct GroovePlaylist *playlist,
+        struct GroovePlaylistItem *item, double gain);
 
 // value is in float format. defaults to 1.0
-void groove_playlist_set_volume(GroovePlaylist *playlist, double volume);
+void groove_playlist_set_volume(struct GroovePlaylist *playlist, double volume);
 
 /************ GrooveBuffer ****************/
 
@@ -198,7 +198,7 @@ struct GrooveBuffer {
     // for encoded audio, data[0] is the encoded buffer.
     uint8_t **data;
 
-    GrooveAudioFormat format;
+    struct GrooveAudioFormat format;
 
     // number of audio frames described by this buffer
     // for encoded audio, this is unknown and set to 0.
@@ -207,7 +207,7 @@ struct GrooveBuffer {
     // when encoding, if item is NULL, this is a format header or trailer. otherwise,
     // this is encoded audio for the item specified.
     // when decoding, item is never NULL.
-    GroovePlaylistItem *item;
+    struct GroovePlaylistItem *item;
     double pos;
 
     // total number of bytes contained in this buffer
@@ -225,9 +225,9 @@ void groove_buffer_unref(struct GrooveBuffer *buffer);
 // for example you could use it to draw a waveform or other visualization
 // GroovePlayer uses this internally to get the audio buffer for playback
 
-typedef struct GrooveSink {
+struct GrooveSink {
     // set this to the audio format you want the sink to output
-    GrooveAudioFormat audio_format;
+    struct GrooveAudioFormat audio_format;
     // Set this flag to ignore audio_format. If you set this flag, the
     // buffers you pull from this sink could have any audio format.
     int disable_resample;
@@ -248,33 +248,31 @@ typedef struct GrooveSink {
     void (*flush)(struct GrooveSink *);
     // called when a playlist item is deleted. Take this opportunity to remove
     // all your references to the GroovePlaylistItem.
-    void (*purge)(struct GrooveSink *, GroovePlaylistItem *);
+    void (*purge)(struct GrooveSink *, struct GroovePlaylistItem *);
 
     // read-only. set when you call groove_sink_attach. cleared when you call
     // groove_sink_detach
-    GroovePlaylist *playlist;
+    struct GroovePlaylist *playlist;
 
     // read-only. automatically computed from audio_format when you call
     // groove_sink_attach
     int bytes_per_sec;
+};
 
-    void *internals; // private
-} GrooveSink;
-
-GrooveSink *groove_sink_create();
-void groove_sink_destroy(GrooveSink *sink);
+struct GrooveSink *groove_sink_create();
+void groove_sink_destroy(struct GrooveSink *sink);
 
 // before calling this, set audio_format
 // returns 0 on success, < 0 on error
-int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist);
+int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist);
 // returns 0 on success, < 0 on error
-int groove_sink_detach(GrooveSink *sink);
+int groove_sink_detach(struct GrooveSink *sink);
 
 // returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer
 // ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
 // on end of playlist.
 // buffer is always set to either a valid GrooveBuffer or NULL
-int groove_sink_get_buffer(GrooveSink *sink, struct GrooveBuffer **buffer,
+int groove_sink_get_buffer(struct GrooveSink *sink, struct GrooveBuffer **buffer,
         int block);
 
 
@@ -304,7 +302,7 @@ struct GroovePlayer {
     // signed 16-bit int, stereo.
     // These are preferences; if a setting cannot be used, a substitute will be
     // used instead. actual_audio_format is set to the actual values.
-    GrooveAudioFormat target_audio_format;
+    struct GrooveAudioFormat target_audio_format;
 
     // how big the device buffer should be, in sample frames.
     // must be a power of 2.
@@ -317,11 +315,11 @@ struct GroovePlayer {
 
     // read-only. set when you call groove_player_attach and cleared when
     // you call groove_player_detach
-    GroovePlaylist *playlist;
+    struct GroovePlaylist *playlist;
 
     // read-only. set to the actual format you get when you open the device.
     // ideally will be the same as target_audio_format but might not be.
-    GrooveAudioFormat actual_audio_format;
+    struct GrooveAudioFormat actual_audio_format;
 };
 
 // Returns the number of available devices exposed by the current driver or -1
@@ -349,7 +347,8 @@ void groove_player_destroy(struct GroovePlayer *player);
 // you must detach a player before destroying it or the playlist it is
 // attached to
 // returns 0 on success, < 0 on error
-int groove_player_attach(struct GroovePlayer *player, GroovePlaylist *playlist);
+int groove_player_attach(struct GroovePlayer *player,
+        struct GroovePlaylist *playlist);
 // returns 0 on success, < 0 on error
 int groove_player_detach(struct GroovePlayer *player);
 
@@ -358,7 +357,7 @@ int groove_player_detach(struct GroovePlayer *player);
 // item are given. item will be set to NULL if the playlist is empty
 // you may pass NULL for item or seconds
 void groove_player_position(struct GroovePlayer *player,
-        GroovePlaylistItem **item, double *seconds);
+        struct GroovePlaylistItem **item, double *seconds);
 
 // returns < 0 on error, 0 on no event ready, 1 on got event
 int groove_player_event_get(struct GroovePlayer *player,
@@ -379,7 +378,7 @@ struct GrooveEncoder {
     // signed 16-bit int, stereo.
     // These are preferences; if a setting cannot be used, a substitute will be
     // used instead. actual_audio_format is set to the actual values.
-    GrooveAudioFormat target_audio_format;
+    struct GrooveAudioFormat target_audio_format;
 
     // Select encoding quality by choosing a target bit rate in bits per
     // second. Note that typically you see this expressed in "kbps", such
@@ -412,12 +411,12 @@ struct GrooveEncoder {
     int encoded_buffer_size;
 
     // read-only. set when attached and cleared when you detached
-    GroovePlaylist *playlist;
+    struct GroovePlaylist *playlist;
 
     // read-only. set to the actual format you get when you attach to a
     // playlist. ideally will be the same as target_audio_format but might
     // not be.
-    GrooveAudioFormat actual_audio_format;
+    struct GrooveAudioFormat actual_audio_format;
 };
 
 struct GrooveEncoder *groove_encoder_create();
@@ -427,7 +426,8 @@ void groove_encoder_destroy(struct GrooveEncoder *encoder);
 // once you attach, you must detach before destroying the playlist
 // at playlist begin, format headers are generated. when end of playlist is
 // reached, format trailers are generated.
-int groove_encoder_attach(struct GrooveEncoder *encoder, GroovePlaylist *playlist);
+int groove_encoder_attach(struct GrooveEncoder *encoder,
+        struct GroovePlaylist *playlist);
 int groove_encoder_detach(struct GrooveEncoder *encoder);
 
 // returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer

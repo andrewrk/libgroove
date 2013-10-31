@@ -21,7 +21,7 @@ int main(int argc, char * argv[]) {
 
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
-    GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create();
 
     for (int i = 1; i < argc; i += 1) {
         char *arg = argv[i];
@@ -64,7 +64,7 @@ int main(int argc, char * argv[]) {
         groove_file_audio_format(playlist->head->file, &encoder->target_audio_format);
 
         // copy metadata
-        GrooveTag *tag = NULL;
+        struct GrooveTag *tag = NULL;
         while((tag = groove_file_metadata_get(playlist->head->file, "", tag, 0))) {
             groove_encoder_metadata_set(encoder, groove_tag_key(tag), groove_tag_value(tag), 0);
         }
@@ -93,10 +93,10 @@ int main(int argc, char * argv[]) {
     groove_encoder_detach(encoder);
     groove_encoder_destroy(encoder);
 
-    GroovePlaylistItem *item = playlist->head;
+    struct GroovePlaylistItem *item = playlist->head;
     while (item) {
         struct GrooveFile *file = item->file;
-        GroovePlaylistItem *next = item->next;
+        struct GroovePlaylistItem *next = item->next;
         groove_playlist_remove(playlist, item);
         groove_file_close(file);
         item = next;

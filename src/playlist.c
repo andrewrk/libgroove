@@ -12,25 +12,27 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_thread.h>
 
-typedef struct GrooveSinkPrivate {
+struct GrooveSinkPrivate {
+    struct GrooveSink externals;
     struct GrooveQueue *audioq;
     int audioq_size; // in bytes
     int min_audioq_size; // in bytes
-} GrooveSinkPrivate;
+};
 
-typedef struct SinkStack {
-    GrooveSink *sink;
+struct SinkStack {
+    struct GrooveSink *sink;
     struct SinkStack *next;
-} SinkStack;
+};
 
-typedef struct SinkMap {
-    SinkStack *stack_head;
+struct SinkMap {
+    struct SinkStack *stack_head;
     AVFilterContext *aformat_ctx;
     AVFilterContext *abuffersink_ctx;
     struct SinkMap *next;
-} SinkMap;
+};
 
-typedef struct GroovePlaylistPrivate {
+struct GroovePlaylistPrivate {
+    struct GroovePlaylist externals;
     SDL_Thread *thread_id;
     int abort_request;
 
@@ -58,7 +60,7 @@ typedef struct GroovePlaylistPrivate {
     // should also signal when the first sink is attached.
     SDL_cond *sink_drain_cond;
     // pointer to current playlist item being decoded
-    GroovePlaylistItem *decode_head;
+    struct GroovePlaylistItem *decode_head;
     // desired volume for the volume filter
     double volume;
     // set to 1 to trigger a rebuild
@@ -66,7 +68,7 @@ typedef struct GroovePlaylistPrivate {
     // map audio format to list of sinks
     // for each map entry, use the first sink in the stack as the example
     // of the audio format in that stack
-    SinkMap *sink_map;
+    struct SinkMap *sink_map;
     int sink_map_count;
 
     // the value for volume that was used to construct the filter graph
@@ -75,8 +77,8 @@ typedef struct GroovePlaylistPrivate {
     // only touched by decode_thread, tells whether we have sent the end_of_q_sentinel
     int sent_end_of_q;
 
-    GroovePlaylistItem *purge_item; // set temporarily
-} GroovePlaylistPrivate;
+    struct GroovePlaylistItem *purge_item; // set temporarily
+};
 
 // this is used to tell the difference between a buffer underrun
 // and the end of the playlist.
@@ -88,7 +90,9 @@ static int frame_size(const AVFrame *frame) {
         frame->nb_samples;
 }
 
-static struct GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSink *sink, AVFrame *frame) {
+static struct GrooveBuffer * frame_to_groove_buffer(struct GroovePlaylist *playlist,
+        struct GrooveSink *sink, AVFrame *frame)
+{
     struct GrooveBufferPrivate *b = av_mallocz(sizeof(struct GrooveBufferPrivate));
 
     if (!b) {
@@ -106,7 +110,7 @@ static struct GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, Gr
         return NULL;
     }
 
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFile *file = p->decode_head->file;
 
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
@@ -128,8 +132,8 @@ static struct GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, Gr
 
 
 // decode one audio packet and return its uncompressed size
-static int audio_decode_frame(GroovePlaylist *playlist, struct GrooveFile *file) {
-    GroovePlaylistPrivate * p = playlist->internals;
+static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile *file) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     AVPacket *pkt = &f->audio_pkt;
@@ -181,10 +185,10 @@ static int audio_decode_frame(GroovePlaylist *playlist, struct GrooveFile *file)
         // for each data format in the sink map, pull filtered audio from its
         // buffersink, turn it into a GrooveBuffer and then increment the ref
         // count for each sink in that stack.
-        SinkMap *map_item = p->sink_map;
+        struct SinkMap *map_item = p->sink_map;
         double clock_adjustment = 0;
         while (map_item) {
-            GrooveSink *example_sink = map_item->stack_head->sink;
+            struct GrooveSink *example_sink = map_item->stack_head->sink;
             int data_size = 0;
             for (;;) {
                 AVFrame *oframe = av_frame_alloc();
@@ -206,10 +210,10 @@ static int audio_decode_frame(GroovePlaylist *playlist, struct GrooveFile *file)
                     return -1;
                 }
                 data_size += buffer->size;
-                SinkStack *stack_item = map_item->stack_head;
+                struct SinkStack *stack_item = map_item->stack_head;
                 while (stack_item) {
-                    GrooveSink *sink = stack_item->sink;
-                    GrooveSinkPrivate *s = sink->internals;
+                    struct GrooveSink *sink = stack_item->sink;
+                    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
                     if (groove_queue_put(s->audioq, buffer) < 0) {
                         av_log(NULL, AV_LOG_ERROR, "unable to put buffer in queue\n");
                     } else {
@@ -238,8 +242,8 @@ static int audio_decode_frame(GroovePlaylist *playlist, struct GrooveFile *file)
 
 // abuffer -> volume -> asplit for each audio format
 //                     -> aformat -> abuffersink
-static int init_filter_graph(GroovePlaylist *playlist, struct GrooveFile *file) {
-    GroovePlaylistPrivate *p = playlist->internals;
+static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile *file) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     // destruct old graph
@@ -330,11 +334,11 @@ static int init_filter_graph(GroovePlaylist *playlist, struct GrooveFile *file) 
     }
 
     // for each audio format, create aformat and abuffersink filters
-    SinkMap *map_item = p->sink_map;
+    struct SinkMap *map_item = p->sink_map;
     int pad_index = 0;
     while (map_item) {
-        GrooveSink *example_sink = map_item->stack_head->sink;
-        GrooveAudioFormat *audio_format = &example_sink->audio_format;
+        struct GrooveSink *example_sink = map_item->stack_head->sink;
+        struct GrooveAudioFormat *audio_format = &example_sink->audio_format;
 
         AVFilterContext *inner_audio_src_ctx = audio_src_ctx;
         if (example_sink->disable_resample) {
@@ -390,8 +394,8 @@ static int init_filter_graph(GroovePlaylist *playlist, struct GrooveFile *file) 
     return 0;
 }
 
-static int maybe_init_filter_graph(GroovePlaylist *playlist, struct GrooveFile *file) {
-    GroovePlaylistPrivate *p = playlist->internals;
+static int maybe_init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile *file) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     AVCodecContext *avctx = f->audio_st->codec;
     AVRational time_base = f->audio_st->time_base;
@@ -411,13 +415,13 @@ static int maybe_init_filter_graph(GroovePlaylist *playlist, struct GrooveFile *
     return 0;
 }
 
-static int every_sink(GroovePlaylist *playlist, int (*func)(GrooveSink *), int default_value) {
-    GroovePlaylistPrivate *p = playlist->internals;
-    SinkMap *map_item = p->sink_map;
+static int every_sink(struct GroovePlaylist *playlist, int (*func)(struct GrooveSink *), int default_value) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+    struct SinkMap *map_item = p->sink_map;
     while (map_item) {
-        SinkStack *stack_item = map_item->stack_head;
+        struct SinkStack *stack_item = map_item->stack_head;
         while (stack_item) {
-            GrooveSink *sink = stack_item->sink;
+            struct GrooveSink *sink = stack_item->sink;
             int value = func(sink);
             if (value != default_value)
                 return value;
@@ -428,27 +432,27 @@ static int every_sink(GroovePlaylist *playlist, int (*func)(GrooveSink *), int d
     return default_value;
 }
 
-static int sink_is_full(GrooveSink *sink) {
-    GrooveSinkPrivate *s = sink->internals;
+static int sink_is_full(struct GrooveSink *sink) {
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     return s->audioq_size >= s->min_audioq_size;
 }
 
-static int every_sink_full(GroovePlaylist *playlist) {
+static int every_sink_full(struct GroovePlaylist *playlist) {
     return every_sink(playlist, sink_is_full, 1);
 }
 
-static int sink_signal_end(GrooveSink *sink) {
-    GrooveSinkPrivate *s = sink->internals;
+static int sink_signal_end(struct GrooveSink *sink) {
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     groove_queue_put(s->audioq, end_of_q_sentinel);
     return 0;
 }
 
-static void every_sink_signal_end(GroovePlaylist *playlist) {
+static void every_sink_signal_end(struct GroovePlaylist *playlist) {
     every_sink(playlist, sink_signal_end, 0);
 }
 
-static int sink_flush(GrooveSink *sink) {
-    GrooveSinkPrivate *s = sink->internals;
+static int sink_flush(struct GrooveSink *sink) {
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     groove_queue_flush(s->audioq);
     if (sink->flush)
@@ -457,12 +461,12 @@ static int sink_flush(GrooveSink *sink) {
     return 0;
 }
 
-static void every_sink_flush(GroovePlaylist *playlist) {
+static void every_sink_flush(struct GroovePlaylist *playlist) {
     every_sink(playlist, sink_flush, 0);
 }
 
-static int decode_one_frame(GroovePlaylist *playlist, struct GrooveFile *file) {
-    GroovePlaylistPrivate *p = playlist->internals;
+static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *file) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     AVPacket *pkt = &f->audio_pkt;
 
@@ -537,8 +541,7 @@ static void audioq_put(struct GrooveQueue *queue, void *obj) {
     struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
-    GrooveSink *sink = queue->context;
-    GrooveSinkPrivate *s = sink->internals;
+    struct GrooveSinkPrivate *s = queue->context;
     s->audioq_size += buffer->size;
 }
 
@@ -546,12 +549,12 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
     struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
-    GrooveSink *sink = queue->context;
-    GrooveSinkPrivate *s = sink->internals;
+    struct GrooveSink *sink = queue->context;
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     s->audioq_size -= buffer->size;
 
-    GroovePlaylist *playlist = sink->playlist;
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylist *playlist = sink->playlist;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     if (s->audioq_size < s->min_audioq_size)
         SDL_CondSignal(p->sink_drain_cond);
 }
@@ -560,8 +563,8 @@ static void audioq_cleanup(struct GrooveQueue *queue, void *obj) {
     struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
-    GrooveSink *sink = queue->context;
-    GrooveSinkPrivate *s = sink->internals;
+    struct GrooveSink *sink = queue->context;
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     s->audioq_size -= buffer->size;
     groove_buffer_unref(buffer);
 }
@@ -570,18 +573,18 @@ static int audioq_purge(struct GrooveQueue *queue, void *obj) {
     struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return 0;
-    GrooveSink *sink = queue->context;
-    GroovePlaylist *playlist = sink->playlist;
-    GroovePlaylistPrivate *p = playlist->internals;
-    GroovePlaylistItem *item = p->purge_item;
+    struct GrooveSink *sink = queue->context;
+    struct GroovePlaylist *playlist = sink->playlist;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+    struct GroovePlaylistItem *item = p->purge_item;
     return buffer->item == item;
 }
 
 // this thread is responsible for decoding and inserting buffers of decoded
 // audio into each sink
 static int decode_thread(void *arg) {
-    GroovePlaylist *playlist = arg;
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = arg;
+    struct GroovePlaylist *playlist = &p->externals;
 
     while (!p->abort_request) {
         SDL_LockMutex(p->decode_head_mutex);
@@ -628,7 +631,7 @@ static int decode_thread(void *arg) {
     return 0;
 }
 
-static int sink_formats_equal(const GrooveSink *a, const GrooveSink *b) {
+static int sink_formats_equal(const struct GrooveSink *a, const struct GrooveSink *b) {
     if (a->buffer_sample_count != b->buffer_sample_count)
         return 0;
     if (a->disable_resample) {
@@ -641,19 +644,19 @@ static int sink_formats_equal(const GrooveSink *a, const GrooveSink *b) {
     }
 }
 
-static int remove_sink_from_map(GrooveSink *sink) {
-    GroovePlaylist *playlist = sink->playlist;
-    GroovePlaylistPrivate *p = playlist->internals;
+static int remove_sink_from_map(struct GrooveSink *sink) {
+    struct GroovePlaylist *playlist = sink->playlist;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SinkMap *map_item = p->sink_map;
-    SinkMap *prev_map_item = NULL;
+    struct SinkMap *map_item = p->sink_map;
+    struct SinkMap *prev_map_item = NULL;
     while (map_item) {
-        SinkMap *next_map_item = map_item->next;
-        SinkStack *stack_item = map_item->stack_head;
-        SinkStack *prev_stack_item = NULL;
+        struct SinkMap *next_map_item = map_item->next;
+        struct SinkStack *stack_item = map_item->stack_head;
+        struct SinkStack *prev_stack_item = NULL;
         while (stack_item) {
-            SinkStack *next_stack_item = stack_item->next;
-            GrooveSink *item_sink = stack_item->sink;
+            struct SinkStack *next_stack_item = stack_item->next;
+            struct GrooveSink *item_sink = stack_item->sink;
             if (item_sink == sink) {
                 av_free(stack_item);
                 if (prev_stack_item) {
@@ -683,20 +686,20 @@ static int remove_sink_from_map(GrooveSink *sink) {
     return -1;
 }
 
-static int add_sink_to_map(GroovePlaylist *playlist, GrooveSink *sink) {
-    GroovePlaylistPrivate *p = playlist->internals;
+static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *sink) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SinkStack *stack_entry = av_mallocz(sizeof(SinkStack));
+    struct SinkStack *stack_entry = av_mallocz(sizeof(struct SinkStack));
     stack_entry->sink = sink;
 
     if (!stack_entry)
         return -1;
 
-    SinkMap *map_item = p->sink_map;
+    struct SinkMap *map_item = p->sink_map;
     while (map_item) {
         // if our sink matches the example sink from this map entry,
         // push our sink onto the stack and we're done
-        GrooveSink *example_sink = map_item->stack_head->sink;
+        struct GrooveSink *example_sink = map_item->stack_head->sink;
         if (sink_formats_equal(example_sink, sink)) {
             stack_entry->next = map_item->stack_head;
             map_item->stack_head = stack_entry;
@@ -705,7 +708,7 @@ static int add_sink_to_map(GroovePlaylist *playlist, GrooveSink *sink) {
         map_item = map_item->next;
     }
     // we did not find somewhere to put it, so push it onto the stack.
-    SinkMap *map_entry = av_mallocz(sizeof(SinkMap));
+    struct SinkMap *map_entry = av_mallocz(sizeof(struct SinkMap));
     map_entry->stack_head = stack_entry;
     if (!map_entry) {
         av_free(stack_entry);
@@ -721,20 +724,20 @@ static int add_sink_to_map(GroovePlaylist *playlist, GrooveSink *sink) {
     return 0;
 }
 
-int groove_sink_detach(GrooveSink *sink) {
-    GroovePlaylist *playlist = sink->playlist;
+int groove_sink_detach(struct GrooveSink *sink) {
+    struct GroovePlaylist *playlist = sink->playlist;
 
     if (!playlist)
         return -1;
 
-    GrooveSinkPrivate *s = sink->internals;
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     if (s->audioq) {
         groove_queue_abort(s->audioq);
         groove_queue_flush(s->audioq);
     }
 
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
     int err = remove_sink_from_map(sink);
@@ -745,8 +748,8 @@ int groove_sink_detach(GrooveSink *sink) {
     return err;
 }
 
-int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist) {
-    GrooveSinkPrivate *s = sink->internals;
+int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist) {
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     // cache computed audio format stuff
     int channel_count = av_get_channel_layout_nb_channels(sink->audio_format.channel_layout);
@@ -758,7 +761,7 @@ int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist) {
     av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
 
     // add the sink to the entry that matches its audio format
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
     int err = add_sink_to_map(playlist, sink);
@@ -778,8 +781,8 @@ int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist) {
     return 0;
 }
 
-int groove_sink_get_buffer(GrooveSink *sink, struct GrooveBuffer **buffer, int block) {
-    GrooveSinkPrivate *s = sink->internals;
+int groove_sink_get_buffer(struct GrooveSink *sink, struct GrooveBuffer **buffer, int block) {
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     if (groove_queue_get(s->audioq, (void**)buffer, block) == 1) {
         if (*buffer == end_of_q_sentinel) {
@@ -794,16 +797,13 @@ int groove_sink_get_buffer(GrooveSink *sink, struct GrooveBuffer **buffer, int b
     }
 }
 
-GroovePlaylist * groove_playlist_create() {
-    GroovePlaylist * playlist = av_mallocz(sizeof(GroovePlaylist));
-    GroovePlaylistPrivate * p = av_mallocz(sizeof(GroovePlaylistPrivate));
-    if (!playlist || !p) {
-        av_free(p);
-        av_free(playlist);
+struct GroovePlaylist * groove_playlist_create() {
+    struct GroovePlaylistPrivate *p = av_mallocz(sizeof(struct GroovePlaylistPrivate));
+    if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate playlist\n");
         return NULL;
     }
-    playlist->internals = p;
+    struct GroovePlaylist *playlist = &p->externals;
 
     // the one that the playlist can read
     playlist->volume = 1.0;
@@ -850,10 +850,10 @@ GroovePlaylist * groove_playlist_create() {
     return playlist;
 }
 
-void groove_playlist_destroy(GroovePlaylist *playlist) {
+void groove_playlist_destroy(struct GroovePlaylist *playlist) {
     groove_playlist_clear(playlist);
 
-    GroovePlaylistPrivate * p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     // wait for decode thread to finish
     p->abort_request = 1;
@@ -873,22 +873,21 @@ void groove_playlist_destroy(GroovePlaylist *playlist) {
         SDL_DestroyCond(p->decode_head_cond);
 
     av_free(p);
-    av_free(playlist);
 }
 
-void groove_playlist_play(GroovePlaylist *playlist) {
-    GroovePlaylistPrivate * p = playlist->internals;
+void groove_playlist_play(struct GroovePlaylist *playlist) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     // no mutex needed for this boolean flag
     p->paused = 0;
 }
 
-void groove_playlist_pause(GroovePlaylist *playlist) {
-    GroovePlaylistPrivate * p = playlist->internals;
+void groove_playlist_pause(struct GroovePlaylist *playlist) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     // no mutex needed for this boolean flag
     p->paused = 1;
 }
 
-void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, double seconds) {
+void groove_playlist_seek(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item, double seconds) {
     struct GrooveFile * file = item->file;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
@@ -896,7 +895,7 @@ void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, do
     if (f->ic->start_time != AV_NOPTS_VALUE)
         ts += f->ic->start_time;
 
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
     SDL_LockMutex(f->seek_mutex);
@@ -911,10 +910,10 @@ void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, do
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, struct GrooveFile *file,
-        double gain, GroovePlaylistItem *next)
+struct GroovePlaylistItem * groove_playlist_insert(struct GroovePlaylist *playlist, struct GrooveFile *file,
+        double gain, struct GroovePlaylistItem *next)
 {
-    GroovePlaylistItem * item = av_mallocz(sizeof(GroovePlaylistItem));
+    struct GroovePlaylistItem * item = av_mallocz(sizeof(struct GroovePlaylistItem));
     if (!item)
         return NULL;
 
@@ -922,7 +921,7 @@ GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, struct Gro
     item->next = next;
     item->gain = gain;
 
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     // lock decode_head_mutex so that decode_head cannot point to a new item
@@ -958,14 +957,14 @@ GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, struct Gro
     return item;
 }
 
-static int purge_sink(GrooveSink *sink) {
-    GrooveSinkPrivate *s = sink->internals;
+static int purge_sink(struct GrooveSink *sink) {
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     groove_queue_purge(s->audioq);
 
-    GroovePlaylist *playlist = sink->playlist;
-    GroovePlaylistPrivate *p = playlist->internals;
-    GroovePlaylistItem *item = p->purge_item;
+    struct GroovePlaylist *playlist = sink->playlist;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+    struct GroovePlaylistItem *item = p->purge_item;
 
     if (sink->purge)
         sink->purge(sink, item);
@@ -973,8 +972,8 @@ static int purge_sink(GrooveSink *sink) {
     return 0;
 }
 
-void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item) {
-    GroovePlaylistPrivate *p = playlist->internals;
+void groove_playlist_remove(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
 
@@ -1007,18 +1006,18 @@ void groove_playlist_remove(GroovePlaylist *playlist, GroovePlaylistItem *item) 
     av_free(item);
 }
 
-void groove_playlist_clear(GroovePlaylist *playlist) {
-    GroovePlaylistItem * node = playlist->head;
+void groove_playlist_clear(struct GroovePlaylist *playlist) {
+    struct GroovePlaylistItem * node = playlist->head;
     if (!node) return;
     while (node) {
-        GroovePlaylistItem *next = node->next;
+        struct GroovePlaylistItem *next = node->next;
         groove_playlist_remove(playlist, node);
         node = next;
     }
 }
 
-int groove_playlist_count(GroovePlaylist *playlist) {
-    GroovePlaylistItem * node = playlist->head;
+int groove_playlist_count(struct GroovePlaylist *playlist) {
+    struct GroovePlaylistItem * node = playlist->head;
     int count = 0;
     while (node) {
         count += 1;
@@ -1027,10 +1026,10 @@ int groove_playlist_count(GroovePlaylist *playlist) {
     return count;
 }
 
-void groove_playlist_set_gain(GroovePlaylist *playlist, GroovePlaylistItem *item,
+void groove_playlist_set_gain(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
         double gain)
 {
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
     item->gain = gain;
@@ -1040,10 +1039,10 @@ void groove_playlist_set_gain(GroovePlaylist *playlist, GroovePlaylistItem *item
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **item,
+void groove_playlist_position(struct GroovePlaylist *playlist, struct GroovePlaylistItem **item,
         double *seconds)
 {
-    GroovePlaylistPrivate *p = playlist->internals;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
     if (item)
@@ -1057,8 +1056,8 @@ void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **ite
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-void groove_playlist_set_volume(GroovePlaylist *playlist, double volume) {
-    GroovePlaylistPrivate *p = playlist->internals;
+void groove_playlist_set_volume(struct GroovePlaylist *playlist, double volume) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
     playlist->volume = volume;
@@ -1066,23 +1065,21 @@ void groove_playlist_set_volume(GroovePlaylist *playlist, double volume) {
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-int groove_playlist_playing(GroovePlaylist *playlist) {
-    GroovePlaylistPrivate *p = playlist->internals;
+int groove_playlist_playing(struct GroovePlaylist *playlist) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     return !p->paused;
 }
 
-GrooveSink * groove_sink_create() {
-    GrooveSink *sink = av_mallocz(sizeof(GrooveSink));
-    GrooveSinkPrivate *s = av_mallocz(sizeof(GrooveSinkPrivate));
+struct GrooveSink * groove_sink_create() {
+    struct GrooveSinkPrivate *s = av_mallocz(sizeof(struct GrooveSinkPrivate));
 
-    if (!sink || !s) {
-        av_free(sink);
-        av_free(s);
+    if (!s) {
         av_log(NULL, AV_LOG_ERROR, "could not create sink: out of memory\n");
         return NULL;
     }
 
-    sink->internals = s;
+    struct GrooveSink *sink = &s->externals;
+
     sink->buffer_size = 8192;
 
     s->audioq = groove_queue_create();
@@ -1102,15 +1099,14 @@ GrooveSink * groove_sink_create() {
     return sink;
 }
 
-void groove_sink_destroy(GrooveSink *sink) {
+void groove_sink_destroy(struct GrooveSink *sink) {
     if (!sink)
         return;
 
-    GrooveSinkPrivate *s = sink->internals;
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     if (s->audioq)
         groove_queue_destroy(s->audioq);
 
     av_free(s);
-    av_free(sink);
 }
