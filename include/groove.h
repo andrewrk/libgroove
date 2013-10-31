@@ -212,8 +212,6 @@ struct GrooveBuffer {
 
     // total number of bytes contained in this buffer
     int size;
-
-    void *internals;
 };
 
 void groove_buffer_ref(struct GrooveBuffer *buffer);
@@ -445,7 +443,7 @@ int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
         const char *value, int flags);
 
 /************* GrooveReplayGainScan *************/
-typedef struct GrooveReplayGainScan {
+struct GrooveReplayGainScan {
     // userdata: the same value you passed to groove_replaygainscan_add
     // amount: value between 0 and 1 representing progress
     // optional callback
@@ -458,26 +456,24 @@ typedef struct GrooveReplayGainScan {
     void (*file_complete)(void *userdata, double gain, double peak);
     // set this to 1 during a callback if you want to abort the scan
     int abort_request;
-    // hands off
-    void *internals;
-} GrooveReplayGainScan;
+};
 
 // after you create a GrooveReplayGainScan you may set the callbacks and call
 // groove_replaygainscan_add
-GrooveReplayGainScan *groove_replaygainscan_create();
+struct GrooveReplayGainScan *groove_replaygainscan_create();
 
 // userdata will be passed back in callbacks
-int groove_replaygainscan_add(GrooveReplayGainScan *scan,
+int groove_replaygainscan_add(struct GrooveReplayGainScan *scan,
         struct GrooveFile *file, void *userdata);
 
 // starts replaygain scanning. blocks until scanning is complete.
 // gain: recommended gain adjustment of all files in scan, in float format
 // peak: peak amplitude of all files in scan, in float format
-int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *gain,
+int groove_replaygainscan_exec(struct GrooveReplayGainScan *scan, double *gain,
         double *peak);
 
 // must be called to cleanup. May not be called during a callback.
-void groove_replaygainscan_destroy(GrooveReplayGainScan *scan);
+void groove_replaygainscan_destroy(struct GrooveReplayGainScan *scan);
 
 
 #ifdef __cplusplus

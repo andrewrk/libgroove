@@ -5,29 +5,30 @@
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
 
-typedef struct FileStackItem {
+struct FileStackItem {
     void *userdata;
     struct GrooveFile *file;
     struct FileStackItem *next;
-} FileStackItem;
+};
 
-typedef struct GrooveReplayGainScanPrivate {
+struct GrooveReplayGainScanPrivate {
+    struct GrooveReplayGainScan externals;
     // the stack of files to be processed
-    FileStackItem *file_item;
+    struct FileStackItem *file_item;
     int file_count;
     int current_index;
     ebur128_state **ebur_states;
     struct GroovePlaylist *playlist;
     struct GrooveSink *sink;
-} GrooveReplayGainScanPrivate;
+};
 
-static void filestack_push(FileStackItem **stack, FileStackItem *item) {
+static void filestack_push(struct FileStackItem **stack, struct FileStackItem *item) {
     item->next = *stack;
     *stack = item;
 }
 
-static FileStackItem * filestack_pop(FileStackItem **stack) {
-    FileStackItem *popped = *stack;
+static struct FileStackItem * filestack_pop(struct FileStackItem **stack) {
+    struct FileStackItem *popped = *stack;
     *stack = (*stack)->next;
     return popped;
 }
@@ -47,8 +48,8 @@ static double loudness_to_replaygain(double loudness) {
     return clamp_rg(-18.0 - loudness);
 }
 
-static void cleanup_ebur(GrooveReplayGainScan *scan) {
-    GrooveReplayGainScanPrivate *s = scan->internals;
+static void cleanup_ebur(struct GrooveReplayGainScan *scan) {
+    struct GrooveReplayGainScanPrivate *s = (struct GrooveReplayGainScanPrivate *) scan;
     if (!s->ebur_states) return;
     for (int i = 0; i < s->file_count; i += 1) {
         if (s->ebur_states[i])
@@ -57,23 +58,19 @@ static void cleanup_ebur(GrooveReplayGainScan *scan) {
     av_freep(&s->ebur_states);
 }
 
-GrooveReplayGainScan * groove_replaygainscan_create() {
-    GrooveReplayGainScan * scan = av_mallocz(sizeof(GrooveReplayGainScan));
-    GrooveReplayGainScanPrivate * s = av_mallocz(sizeof(GrooveReplayGainScanPrivate));
-    if (!scan || !s) {
-        av_free(scan);
-        av_free(s);
+struct GrooveReplayGainScan *groove_replaygainscan_create() {
+    struct GrooveReplayGainScanPrivate *s = av_mallocz(sizeof(struct GrooveReplayGainScanPrivate));
+    if (!s) {
         av_log(NULL, AV_LOG_ERROR, "error creating replaygain scan: out of memory\n");
         return NULL;
     }
-    scan->internals = s;
-    return scan;
+    return &s->externals;
 }
 
-int groove_replaygainscan_add(GrooveReplayGainScan *scan, struct GrooveFile *file, void *userdata) {
-    GrooveReplayGainScanPrivate *s = scan->internals;
+int groove_replaygainscan_add(struct GrooveReplayGainScan *scan, struct GrooveFile *file, void *userdata) {
+    struct GrooveReplayGainScanPrivate *s = (struct GrooveReplayGainScanPrivate *) scan;
 
-    FileStackItem *item = av_mallocz(sizeof(FileStackItem));
+    struct FileStackItem *item = av_mallocz(sizeof(struct FileStackItem));
     if (!item) {
         av_log(NULL, AV_LOG_ERROR, "error adding file to replaygain scan: out of memory\n");
         return -1;
@@ -85,10 +82,10 @@ int groove_replaygainscan_add(GrooveReplayGainScan *scan, struct GrooveFile *fil
     return 0;
 }
 
-int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
+int groove_replaygainscan_exec(struct GrooveReplayGainScan *scan, double *scan_gain,
         double *scan_peak)
 {
-    GrooveReplayGainScanPrivate *s = scan->internals;
+    struct GrooveReplayGainScanPrivate *s = (struct GrooveReplayGainScanPrivate *) scan;
 
     s->playlist = groove_playlist_create();
     s->sink = groove_sink_create();
@@ -114,7 +111,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
         return -1;
     }
 
-    FileStackItem *node = NULL;
+    struct FileStackItem *node = NULL;
     double album_peak = 0;
     double progress_interval = scan->progress_interval;
     while (s->file_item) {
@@ -180,18 +177,18 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
     return 0;
 }
 
-static void filestack_cleanup(FileStackItem **stack) {
+static void filestack_cleanup(struct FileStackItem **stack) {
     while (*stack) {
-        FileStackItem *node = filestack_pop(stack);
+        struct FileStackItem *node = filestack_pop(stack);
         av_free(node);
     }
     *stack = NULL;
 }
 
-void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
+void groove_replaygainscan_destroy(struct GrooveReplayGainScan *scan) {
     if (!scan)
         return;
-    GrooveReplayGainScanPrivate *s = scan->internals;
+    struct GrooveReplayGainScanPrivate *s = (struct GrooveReplayGainScanPrivate *) scan;
 
     cleanup_ebur(scan);
     groove_sink_detach(s->sink);
@@ -199,5 +196,4 @@ void groove_replaygainscan_destroy(GrooveReplayGainScan *scan) {
     groove_playlist_destroy(s->playlist);
     filestack_cleanup(&s->file_item);
     av_free(s);
-    av_free(scan);
 }
