@@ -5,7 +5,8 @@
 #include <libavutil/log.h>
 #include <SDL2/SDL_audio.h>
 
-typedef struct GroovePlayerPrivate {
+struct GroovePlayerPrivate {
+    struct GroovePlayer externals;
     struct GrooveBuffer *audio_buf;
     size_t audio_buf_size; // in bytes
     size_t audio_buf_index; // in bytes
@@ -26,7 +27,7 @@ typedef struct GroovePlayerPrivate {
     int end_of_q;
 
     struct GrooveQueue *eventq;
-} GroovePlayerPrivate;
+};
 
 static Uint16 groove_fmt_to_sdl_fmt(enum GrooveSampleFormat fmt) {
     switch (fmt) {
@@ -60,8 +61,8 @@ static enum GrooveSampleFormat sdl_fmt_to_groove_fmt(Uint16 sdl_format) {
     }
 }
 
-static void emit_event(struct GrooveQueue *queue, enum GrooveEventType type) {
-    GrooveEvent *evt = av_malloc(sizeof(GrooveEvent));
+static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType type) {
+    union GroovePlayerEvent *evt = av_malloc(sizeof(union GroovePlayerEvent));
     if (!evt) {
         av_log(NULL, AV_LOG_ERROR, "unable to create event: out of memory\n");
         return;
@@ -73,8 +74,7 @@ static void emit_event(struct GrooveQueue *queue, enum GrooveEventType type) {
 
 
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
-    GroovePlayer *player = opaque;
-    GroovePlayerPrivate *p = player->internals;
+    struct GroovePlayerPrivate *p = opaque;
 
     GrooveSink *sink = p->sink;
     GroovePlaylist *playlist = sink->playlist;
@@ -129,8 +129,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
 }
 
 static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
-    GroovePlayer *player = sink->userdata;
-    GroovePlayerPrivate *p = player->internals;
+    struct GroovePlayerPrivate *p = sink->userdata;
 
     SDL_LockMutex(p->play_head_mutex);
 
@@ -148,8 +147,7 @@ static void sink_purge(GrooveSink *sink, GroovePlaylistItem *item) {
 }
 
 static void sink_flush(GrooveSink *sink) {
-    GroovePlayer *player = sink->userdata;
-    GroovePlayerPrivate *p = player->internals;
+    struct GroovePlayerPrivate *p = sink->userdata;
 
     SDL_LockMutex(p->play_head_mutex);
 
@@ -161,18 +159,15 @@ static void sink_flush(GrooveSink *sink) {
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
-GroovePlayer * groove_player_create() {
-    GroovePlayer *player = av_mallocz(sizeof(GroovePlayer));
-    GroovePlayerPrivate *p = av_mallocz(sizeof(GroovePlayerPrivate));
+struct GroovePlayer *groove_player_create() {
+    struct GroovePlayerPrivate *p = av_mallocz(sizeof(struct GroovePlayerPrivate));
 
-    if (!player || !p) {
-        av_free(player);
-        av_free(p);
+    if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to create player: out of memory\n");
         return NULL;
     }
 
-    player->internals = p;
+    struct GroovePlayer *player = &p->externals;
 
     p->sink = groove_sink_create();
     if (!p->sink) {
@@ -210,11 +205,11 @@ GroovePlayer * groove_player_create() {
     return player;
 }
 
-void groove_player_destroy(GroovePlayer *player) {
+void groove_player_destroy(struct GroovePlayer *player) {
     if (!player)
         return;
 
-    GroovePlayerPrivate *p = player->internals;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
     if (p->play_head_mutex)
         SDL_DestroyMutex(p->play_head_mutex);
@@ -225,11 +220,10 @@ void groove_player_destroy(GroovePlayer *player) {
     groove_sink_destroy(p->sink);
 
     av_free(p);
-    av_free(player);
 }
 
-int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist) {
-    GroovePlayerPrivate *p = player->internals;
+int groove_player_attach(struct GroovePlayer *player, GroovePlaylist *playlist) {
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
     SDL_AudioSpec wanted_spec, spec;
     wanted_spec.format = groove_fmt_to_sdl_fmt(player->target_audio_format.sample_fmt);
@@ -277,8 +271,8 @@ int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist) {
     return 0;
 }
 
-int groove_player_detach(GroovePlayer *player) {
-    GroovePlayerPrivate *p = player->internals;
+int groove_player_detach(struct GroovePlayer *player) {
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
     if (p->eventq) {
         groove_queue_flush(p->eventq);
         groove_queue_abort(p->eventq);
@@ -306,10 +300,10 @@ const char * groove_device_name(int index) {
     return SDL_GetAudioDeviceName(index, 0);
 }
 
-void groove_player_position(GroovePlayer *player,
+void groove_player_position(struct GroovePlayer *player,
         GroovePlaylistItem **item, double *seconds)
 {
-    GroovePlayerPrivate *p = player->internals;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
     SDL_LockMutex(p->play_head_mutex);
 
@@ -322,11 +316,11 @@ void groove_player_position(GroovePlayer *player,
     SDL_UnlockMutex(p->play_head_mutex);
 }
 
-int groove_player_event_get(GroovePlayer *player, GrooveEvent *event,
-        int block)
+int groove_player_event_get(struct GroovePlayer *player,
+        union GroovePlayerEvent *event, int block)
 {
-    GroovePlayerPrivate *p = player->internals;
-    GrooveEvent *tmp;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    union GroovePlayerEvent *tmp;
     int err = groove_queue_get(p->eventq, (void **)&tmp, block);
     if (err > 0) {
         *event = *tmp;
@@ -335,7 +329,7 @@ int groove_player_event_get(GroovePlayer *player, GrooveEvent *event,
     return err;
 }
 
-int groove_player_event_peek(GroovePlayer *player, int block) {
-    GroovePlayerPrivate *p = player->internals;
+int groove_player_event_peek(struct GroovePlayer *player, int block) {
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
     return groove_queue_peek(p->eventq, block);
 }

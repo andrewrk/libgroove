@@ -225,18 +225,6 @@ void groove_buffer_unref(struct GrooveBuffer *buffer);
 // for example you could use it to draw a waveform or other visualization
 // GroovePlayer uses this internally to get the audio buffer for playback
 
-enum GrooveEventType {
-    // when the currently playing track changes.
-    GROOVE_EVENT_NOWPLAYING,
-
-    // when something tries to read from an empty buffer
-    GROOVE_EVENT_BUFFERUNDERRUN,
-};
-
-typedef union GrooveEvent {
-    enum GrooveEventType type;
-} GrooveEvent;
-
 typedef struct GrooveSink {
     // set this to the audio format you want the sink to output
     GrooveAudioFormat audio_format;
@@ -294,7 +282,19 @@ int groove_sink_get_buffer(GrooveSink *sink, struct GrooveBuffer **buffer,
 
 // use this to make a playlist utilize your speakers
 
-typedef struct GroovePlayer {
+enum GroovePlayerEventType {
+    // when the currently playing track changes.
+    GROOVE_EVENT_NOWPLAYING,
+
+    // when something tries to read from an empty buffer
+    GROOVE_EVENT_BUFFERUNDERRUN,
+};
+
+union GroovePlayerEvent {
+    enum GroovePlayerEventType type;
+};
+
+struct GroovePlayer {
     // set this to the device you want to open
     // NULL means default device
     char *device_name;
@@ -322,9 +322,7 @@ typedef struct GroovePlayer {
     // read-only. set to the actual format you get when you open the device.
     // ideally will be the same as target_audio_format but might not be.
     GrooveAudioFormat actual_audio_format;
-
-    void *internals;
-} GroovePlayer;
+};
 
 // Returns the number of available devices exposed by the current driver or -1
 // if an explicit list of devices can't be determined. A return value of -1
@@ -342,8 +340,8 @@ int groove_device_count();
 // for any length of time, you should make your own copy of it.
 const char *groove_device_name(int index);
 
-GroovePlayer *groove_player_create();
-void groove_player_destroy(GroovePlayer *player);
+struct GroovePlayer *groove_player_create();
+void groove_player_destroy(struct GroovePlayer *player);
 
 // Attaches the player to the playlist instance and opens the device to
 // begin playback.
@@ -351,23 +349,23 @@ void groove_player_destroy(GroovePlayer *player);
 // you must detach a player before destroying it or the playlist it is
 // attached to
 // returns 0 on success, < 0 on error
-int groove_player_attach(GroovePlayer *player, GroovePlaylist *playlist);
+int groove_player_attach(struct GroovePlayer *player, GroovePlaylist *playlist);
 // returns 0 on success, < 0 on error
-int groove_player_detach(GroovePlayer *player);
+int groove_player_detach(struct GroovePlayer *player);
 
 // get the position of the play head
 // both the current playlist item and the position in seconds in the playlist
 // item are given. item will be set to NULL if the playlist is empty
 // you may pass NULL for item or seconds
-void groove_player_position(GroovePlayer *player,
+void groove_player_position(struct GroovePlayer *player,
         GroovePlaylistItem **item, double *seconds);
 
 // returns < 0 on error, 0 on no event ready, 1 on got event
-int groove_player_event_get(GroovePlayer *player,
-        GrooveEvent *event, int block);
+int groove_player_event_get(struct GroovePlayer *player,
+        union GroovePlayerEvent *event, int block);
 // returns < 0 on error, 0 on no event ready, 1 on event ready
 // if block is 1, block until event is ready
-int groove_player_event_peek(GroovePlayer *player, int block);
+int groove_player_event_peek(struct GroovePlayer *player, int block);
 
 
 /************* GrooveEncoder ************/

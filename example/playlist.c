@@ -10,14 +10,14 @@ int main(int argc, char * argv[]) {
     }
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
-    GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create();
 
     if (!playlist) {
         fprintf(stderr, "Error creating playlist.\n");
         return 1;
     }
 
-    GroovePlayer *player = groove_player_create();
+    struct GroovePlayer *player = groove_player_create();
     groove_player_attach(player, playlist);
 
     for (int i = 1; i < argc; i += 1) {
@@ -31,8 +31,8 @@ int main(int argc, char * argv[]) {
     }
     groove_playlist_play(playlist);
 
-    GrooveEvent event;
-    GroovePlaylistItem *item;
+    union GroovePlayerEvent event;
+    struct GroovePlaylistItem *item;
     while (groove_player_event_get(player, &event, 1) >= 0) {
         switch (event.type) {
         case GROOVE_EVENT_BUFFERUNDERRUN:
@@ -45,7 +45,7 @@ int main(int argc, char * argv[]) {
                 item = playlist->head;
                 while (item) {
                     struct GrooveFile *file = item->file;
-                    GroovePlaylistItem *next = item->next;
+                    struct GroovePlaylistItem *next = item->next;
                     groove_playlist_remove(playlist, item);
                     groove_file_close(file);
                     item = next;
@@ -55,8 +55,8 @@ int main(int argc, char * argv[]) {
                 groove_playlist_destroy(playlist);
                 return 0;
             }
-            GrooveTag *artist_tag = groove_file_metadata_get(item->file, "artist", NULL, 0);
-            GrooveTag *title_tag = groove_file_metadata_get(item->file, "title", NULL, 0);
+            struct GrooveTag *artist_tag = groove_file_metadata_get(item->file, "artist", NULL, 0);
+            struct GrooveTag *title_tag = groove_file_metadata_get(item->file, "title", NULL, 0);
             if (artist_tag && title_tag) {
                 printf("Now playing: %s - %s\n", groove_tag_value(artist_tag),
                         groove_tag_value(title_tag));
