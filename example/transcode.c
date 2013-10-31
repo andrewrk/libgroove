@@ -20,6 +20,7 @@ int main(int argc, char * argv[]) {
     char *output_file_name = NULL;
 
     groove_init();
+    atexit(groove_finish);
     groove_set_logging(GROOVE_LOG_INFO);
     struct GroovePlaylist *playlist = groove_playlist_create();
 

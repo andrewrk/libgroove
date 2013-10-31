@@ -18,6 +18,9 @@ extern "C"
 /************* global *************/
 // call once at the beginning of your program from the main thread
 int groove_init(void);
+// call at the end of your program to clean up. after calling this
+// you may no longer use this API.
+void groove_finish(void);
 
 // enable/disable logging of errors
 #define GROOVE_LOG_QUIET    -8

@@ -3,6 +3,7 @@
 #include "groove.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 static int usage(char *exe) {
     fprintf(stderr, "Usage: %s <file> [--update key value] [--delete key]\n"
@@ -19,6 +20,7 @@ int main(int argc, char * argv[]) {
 
     char * filename = argv[1];
     groove_init();
+    atexit(groove_finish);
     groove_set_logging(GROOVE_LOG_INFO);
     struct GrooveFile * file = groove_file_open(filename);
     if (!file) {

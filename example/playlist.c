@@ -2,6 +2,7 @@
 
 #include "groove.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 int main(int argc, char * argv[]) {
     if (argc < 2) {
@@ -9,6 +10,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
     groove_init();
+    atexit(groove_finish);
     groove_set_logging(GROOVE_LOG_INFO);
     struct GroovePlaylist *playlist = groove_playlist_create();
 

@@ -2,6 +2,7 @@
 
 #include "groove.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 static void progress_cb(void *userdata, double amount) {
     int percent = amount * 100;
@@ -21,6 +22,7 @@ int main(int argc, char * argv[]) {
     }
 
     groove_init();
+    atexit(groove_finish);
     groove_set_logging(GROOVE_LOG_INFO);
 
     struct GrooveReplayGainScan * scan = groove_replaygainscan_create();

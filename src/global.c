@@ -12,9 +12,8 @@
 #include <libavutil/channel_layout.h>
 #include <SDL2/SDL.h>
 
-static void deinit_network(void) {
-    avformat_network_deinit();
-}
+static int should_sdl_quit = 0;
+static int should_deinit_network = 0;
 
 static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
     if (mutex == NULL)
@@ -47,16 +46,29 @@ int groove_init(void) {
     avformat_network_init();
     avfilter_register_all();
 
-    atexit(deinit_network);
+    should_deinit_network = 1;
 
     if (SDL_Init(SDL_INIT_AUDIO)) {
         av_log(NULL, AV_LOG_ERROR, "Could not initialize SDL - %s\n", SDL_GetError());
         return -1;
     }
-    atexit(SDL_Quit);
+
+    should_sdl_quit = 1;
 
     av_log_set_level(AV_LOG_QUIET);
     return 0;
+}
+
+void groove_finish(void) {
+    if (should_deinit_network) {
+        avformat_network_deinit();
+        should_deinit_network = 0;
+    }
+
+    if (should_sdl_quit) {
+        SDL_Quit();
+        should_sdl_quit = 0;
+    }
 }
 
 void groove_set_logging(int level) {
