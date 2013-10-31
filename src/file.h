@@ -6,7 +6,8 @@
 #include <libavformat/avformat.h>
 #include <SDL2/SDL_thread.h>
 
-typedef struct GrooveFilePrivate {
+struct GrooveFilePrivate {
+    GrooveFile externals;
     int audio_stream_index;
     int abort_request; // true when we're closing the file
     AVFormatContext *ic;
@@ -25,8 +26,6 @@ typedef struct GrooveFilePrivate {
     // state while saving
     AVFormatContext *oc;
     int tempfile_exists;
-
-} GrooveFilePrivate;
-
+};
 
 #endif /* GROOVE_FILE_H_INCLUDED */

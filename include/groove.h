@@ -61,8 +61,6 @@ int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 typedef struct GrooveFile {
     int dirty; // read-only
     char *filename; // read-only
-
-    void *internals; // hands off
 } GrooveFile;
 
 // flags to groove_file_metadata_*

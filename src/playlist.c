@@ -112,7 +112,8 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSin
 
     GroovePlaylistPrivate *p = playlist->internals;
     GrooveFile *file = p->decode_head->file;
-    GrooveFilePrivate *f = file->internals;
+
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     buffer->item = p->decode_head;
     buffer->pos = f->audio_clock;
@@ -133,7 +134,7 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSin
 // decode one audio packet and return its uncompressed size
 static int audio_decode_frame(GroovePlaylist *playlist, GrooveFile *file) {
     GroovePlaylistPrivate * p = playlist->internals;
-    GrooveFilePrivate * f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     AVPacket *pkt = &f->audio_pkt;
     AVCodecContext *dec = f->audio_st->codec;
@@ -243,7 +244,7 @@ static int audio_decode_frame(GroovePlaylist *playlist, GrooveFile *file) {
 //                     -> aformat -> abuffersink
 static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
     GroovePlaylistPrivate *p = playlist->internals;
-    GrooveFilePrivate *f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     // destruct old graph
     avfilter_graph_free(&p->filter_graph);
@@ -395,7 +396,7 @@ static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
 
 static int maybe_init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
     GroovePlaylistPrivate *p = playlist->internals;
-    GrooveFilePrivate *f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     AVCodecContext *avctx = f->audio_st->codec;
     AVRational time_base = f->audio_st->time_base;
 
@@ -466,7 +467,7 @@ static void every_sink_flush(GroovePlaylist *playlist) {
 
 static int decode_one_frame(GroovePlaylist *playlist, GrooveFile *file) {
     GroovePlaylistPrivate *p = playlist->internals;
-    GrooveFilePrivate * f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     AVPacket *pkt = &f->audio_pkt;
 
     // might need to rebuild the filter graph if certain things changed
@@ -617,7 +618,7 @@ static int decode_thread(void *arg) {
             // seek to beginning of next song
             if (p->decode_head) {
                 GrooveFile *next_file = p->decode_head->file;
-                GrooveFilePrivate *next_f = next_file->internals;
+                struct GrooveFilePrivate *next_f = (struct GrooveFilePrivate *) next_file;
                 SDL_LockMutex(next_f->seek_mutex);
                 next_f->seek_pos = 0;
                 next_f->seek_flush = 0;
@@ -893,7 +894,7 @@ void groove_playlist_pause(GroovePlaylist *playlist) {
 
 void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, double seconds) {
     GrooveFile * file = item->file;
-    GrooveFilePrivate * f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     int64_t ts = seconds * f->audio_st->time_base.den / f->audio_st->time_base.num;
     if (f->ic->start_time != AV_NOPTS_VALUE)
@@ -926,7 +927,7 @@ GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, GrooveFile
     item->gain = gain;
 
     GroovePlaylistPrivate *p = playlist->internals;
-    GrooveFilePrivate *f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     // lock decode_head_mutex so that decode_head cannot point to a new item
     // while we're screwing around with the queue
@@ -1054,7 +1055,7 @@ void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **ite
 
     if (seconds && p->decode_head) {
         GrooveFile *file = p->decode_head->file;
-        GrooveFilePrivate * f = file->internals;
+        struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
         *seconds = f->audio_clock;
     }
     SDL_UnlockMutex(p->decode_head_mutex);

@@ -4,23 +4,17 @@
 #include <libavutil/channel_layout.h>
 
 static int decode_interrupt_cb(void *ctx) {
-    GrooveFile *file = ctx;
-    if (!file)
-        return 0;
-    GrooveFilePrivate *f = file->internals;
-    return f->abort_request;
+    struct GrooveFilePrivate *f = ctx;
+    return f ? f->abort_request : 0;
 }
 
-GrooveFile * groove_file_open(char* filename) {
-    GrooveFile * file = av_mallocz(sizeof(GrooveFile));
-    GrooveFilePrivate * f = av_mallocz(sizeof(GrooveFilePrivate));
-    if (!file || !f) {
-        av_free(file);
-        av_free(f);
-        av_log(NULL, AV_LOG_ERROR, "Error opening file: Out of memory\n");
+GrooveFile *groove_file_open(char *filename) {
+    struct GrooveFilePrivate *f = av_mallocz(sizeof(struct GrooveFilePrivate));
+    if (!f) {
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate file context\n");
         return NULL;
     }
-    file->internals = f;
+    struct GrooveFile *file = &f->externals;
 
     f->audio_stream_index = -1;
     f->seek_pos = -1;
@@ -28,14 +22,14 @@ GrooveFile * groove_file_open(char* filename) {
     f->seek_mutex = SDL_CreateMutex();
     if (!f->seek_mutex) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "error creating seek mutex: out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to create seek mutex\n");
         return NULL;
     }
 
     f->ic = avformat_alloc_context();
     if (!f->ic) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "error creating format context: out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate format context\n");
         return NULL;
     }
     file->filename = f->ic->filename;
@@ -103,54 +97,51 @@ GrooveFile * groove_file_open(char* filename) {
 }
 
 // should be safe to call no matter what state the file is in
-void groove_file_close(GrooveFile * file) {
+void groove_file_close(GrooveFile *file) {
     if (!file)
         return;
 
-    GrooveFilePrivate * f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)file;
 
-    if (f) {
-        f->abort_request = 1;
+    f->abort_request = 1;
 
-        if (f->audio_stream_index >= 0) {
-            AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
+    if (f->audio_stream_index >= 0) {
+        AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
 
-            av_free_packet(&f->audio_pkt);
+        av_free_packet(&f->audio_pkt);
 
-            f->ic->streams[f->audio_stream_index]->discard = AVDISCARD_ALL;
-            avcodec_close(avctx);
-            f->audio_st = NULL;
-            f->audio_stream_index = -1;
-        }
-
-        // disable interrupting
-        f->abort_request = 0;
-
-        if (f->ic)
-            avformat_close_input(&f->ic);
-
-        if (f->seek_mutex)
-            SDL_DestroyMutex(f->seek_mutex);
-
-        av_free(f);
+        f->ic->streams[f->audio_stream_index]->discard = AVDISCARD_ALL;
+        avcodec_close(avctx);
+        f->audio_st = NULL;
+        f->audio_stream_index = -1;
     }
-    av_free(file);
+
+    // disable interrupting
+    f->abort_request = 0;
+
+    if (f->ic)
+        avformat_close_input(&f->ic);
+
+    if (f->seek_mutex)
+        SDL_DestroyMutex(f->seek_mutex);
+
+    av_free(f);
 }
 
 
-const char * groove_file_short_names(GrooveFile *file) {
-    GrooveFilePrivate * f = file->internals;
+const char *groove_file_short_names(GrooveFile *file) {
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     return f->ic->iformat->name;
 }
 
 double groove_file_duration(GrooveFile *file) {
-    GrooveFilePrivate * f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     double time_base = av_q2d(f->audio_st->time_base);
     return time_base * f->audio_st->duration;
 }
 
 void groove_file_audio_format(GrooveFile *file, GrooveAudioFormat *audio_format) {
-    GrooveFilePrivate * f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     AVCodecContext *codec_ctx = f->audio_st->codec;
     audio_format->sample_rate = codec_ctx->sample_rate;
@@ -161,7 +152,7 @@ void groove_file_audio_format(GrooveFile *file, GrooveAudioFormat *audio_format)
 GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags)
 {
-    GrooveFilePrivate *f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     const AVDictionaryEntry *e = prev;
     return av_dict_get(f->ic->metadata, key, e, flags|AV_DICT_IGNORE_SUFFIX);
 }
@@ -170,7 +161,7 @@ int groove_file_metadata_set(GrooveFile *file, const char *key,
         const char *value, int flags)
 {
     file->dirty = 1;
-    GrooveFilePrivate *f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     return av_dict_set(&f->ic->metadata, key, value, flags|AV_DICT_IGNORE_SUFFIX);
 }
 
@@ -184,8 +175,6 @@ const char * groove_tag_value(GrooveTag *tag) {
     return e->value;
 }
 
-// XXX this might break for some character encodings
-// would love some advice on what to do instead of this
 static int tempfileify(char * str, size_t max_len) {
     size_t len = strlen(str);
     if (len + 10 > max_len)
@@ -204,7 +193,7 @@ static int tempfileify(char * str, size_t max_len) {
 }
 
 static void cleanup_save(GrooveFile *file) {
-    GrooveFilePrivate *f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     av_free_packet(&f->audio_pkt);
     avio_closep(&f->oc->pb);
@@ -223,7 +212,7 @@ int groove_file_save(GrooveFile *file) {
     if (!file->dirty)
         return 0;
 
-    GrooveFilePrivate *f = file->internals;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     // detect output format
     AVOutputFormat *ofmt = av_guess_format(f->ic->iformat->name, f->ic->filename, NULL);
