@@ -13,7 +13,7 @@
 #include <SDL2/SDL_thread.h>
 
 typedef struct GrooveSinkPrivate {
-    GrooveQueue *audioq;
+    struct GrooveQueue *audioq;
     int audioq_size; // in bytes
     int min_audioq_size; // in bytes
 } GrooveSinkPrivate;
@@ -537,7 +537,7 @@ static int decode_one_frame(GroovePlaylist *playlist, GrooveFile *file) {
     return 0;
 }
 
-static void audioq_put(GrooveQueue *queue, void *obj) {
+static void audioq_put(struct GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
@@ -546,7 +546,7 @@ static void audioq_put(GrooveQueue *queue, void *obj) {
     s->audioq_size += buffer->size;
 }
 
-static void audioq_get(GrooveQueue *queue, void *obj) {
+static void audioq_get(struct GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
@@ -560,7 +560,7 @@ static void audioq_get(GrooveQueue *queue, void *obj) {
         SDL_CondSignal(p->sink_drain_cond);
 }
 
-static void audioq_cleanup(GrooveQueue *queue, void *obj) {
+static void audioq_cleanup(struct GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
@@ -570,7 +570,7 @@ static void audioq_cleanup(GrooveQueue *queue, void *obj) {
     groove_buffer_unref(buffer);
 }
 
-static int audioq_purge(GrooveQueue *queue, void *obj) {
+static int audioq_purge(struct GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return 0;

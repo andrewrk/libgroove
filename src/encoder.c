@@ -14,7 +14,7 @@
 #include <string.h>
 
 typedef struct GrooveEncoderPrivate {
-    GrooveQueue *audioq;
+    struct GrooveQueue *audioq;
     GrooveSink *sink;
     AVFormatContext *fmt_ctx;
     AVStream *stream;
@@ -184,7 +184,7 @@ static void sink_flush(GrooveSink *sink) {
     SDL_UnlockMutex(e->encode_head_mutex);
 }
 
-static int audioq_purge(GrooveQueue* queue, void *obj) {
+static int audioq_purge(struct GrooveQueue* queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return 0;
@@ -193,7 +193,7 @@ static int audioq_purge(GrooveQueue* queue, void *obj) {
     return buffer->item == e->purge_item;
 }
 
-static void audioq_cleanup(GrooveQueue* queue, void *obj) {
+static void audioq_cleanup(struct GrooveQueue* queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
@@ -203,7 +203,7 @@ static void audioq_cleanup(GrooveQueue* queue, void *obj) {
     groove_buffer_unref(buffer);
 }
 
-static void audioq_put(GrooveQueue *queue, void *obj) {
+static void audioq_put(struct GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
@@ -212,7 +212,7 @@ static void audioq_put(GrooveQueue *queue, void *obj) {
     e->audioq_size += buffer->size;
 }
 
-static void audioq_get(GrooveQueue *queue, void *obj) {
+static void audioq_get(struct GrooveQueue *queue, void *obj) {
     GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;

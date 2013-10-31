@@ -25,7 +25,7 @@ typedef struct GroovePlayerPrivate {
     // of audio queue naturally rather than a buffer underrun
     int end_of_q;
 
-    GrooveQueue *eventq;
+    struct GrooveQueue *eventq;
 } GroovePlayerPrivate;
 
 static Uint16 groove_fmt_to_sdl_fmt(enum GrooveSampleFormat fmt) {
@@ -60,7 +60,7 @@ static enum GrooveSampleFormat sdl_fmt_to_groove_fmt(Uint16 sdl_format) {
     }
 }
 
-static void emit_event(GrooveQueue *queue, enum GrooveEventType type) {
+static void emit_event(struct GrooveQueue *queue, enum GrooveEventType type) {
     GrooveEvent *evt = av_malloc(sizeof(GrooveEvent));
     if (!evt) {
         av_log(NULL, AV_LOG_ERROR, "unable to create event: out of memory\n");

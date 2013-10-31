@@ -3,52 +3,48 @@
 #include <libavutil/mem.h>
 #include <SDL2/SDL_thread.h>
 
-typedef struct ItemList {
+struct ItemList {
     void *obj;
     struct ItemList *next;
-} ItemList;
+};
 
-typedef struct GrooveQueuePrivate {
-    ItemList *first;
-    ItemList *last;
+struct GrooveQueuePrivate {
+    struct GrooveQueue externals;
+    struct ItemList *first;
+    struct ItemList *last;
     SDL_mutex *mutex;
     SDL_cond *cond;
     int abort_request;
-} GrooveQueuePrivate;
+};
 
-GrooveQueue * groove_queue_create() {
-    GrooveQueuePrivate *q = av_mallocz(sizeof(GrooveQueuePrivate));
-    GrooveQueue *queue = av_mallocz(sizeof(GrooveQueue));
-    if (!q || !queue) {
-        av_free(q);
-        av_free(queue);
+struct GrooveQueue *groove_queue_create() {
+    struct GrooveQueuePrivate *q = av_mallocz(sizeof(struct GrooveQueuePrivate));
+    if (!q)
         return NULL;
-    }
-    queue->internals = q;
+
     q->mutex = SDL_CreateMutex();
     if (!q->mutex) {
         av_free(q);
-        av_free(queue);
         return NULL;
     }
     q->cond = SDL_CreateCond();
     if (!q->cond) {
         av_free(q);
-        av_free(queue);
         SDL_DestroyMutex(q->mutex);
         return NULL;
     }
+    struct GrooveQueue *queue = &q->externals;
     queue->cleanup = groove_queue_cleanup_default;
     return queue;
 }
 
-void groove_queue_flush(GrooveQueue *queue) {
-    GrooveQueuePrivate *q = queue->internals;
+void groove_queue_flush(struct GrooveQueue *queue) {
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
 
     SDL_LockMutex(q->mutex);
 
-    ItemList *el;
-    ItemList *el1;
+    struct ItemList *el;
+    struct ItemList *el1;
     for (el = q->first; el != NULL; el = el1) {
         el1 = el->next;
         if (queue->cleanup)
@@ -60,17 +56,16 @@ void groove_queue_flush(GrooveQueue *queue) {
     SDL_UnlockMutex(q->mutex);
 }
 
-void groove_queue_destroy(GrooveQueue *queue) {
+void groove_queue_destroy(struct GrooveQueue *queue) {
     groove_queue_flush(queue);
-    GrooveQueuePrivate *q = queue->internals;
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
     SDL_DestroyMutex(q->mutex);
     SDL_DestroyCond(q->cond);
     av_free(q);
-    av_free(queue);
 }
 
-void groove_queue_abort(GrooveQueue *queue) {
-    GrooveQueuePrivate *q = queue->internals;
+void groove_queue_abort(struct GrooveQueue *queue) {
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
 
     SDL_LockMutex(q->mutex);
 
@@ -80,8 +75,8 @@ void groove_queue_abort(GrooveQueue *queue) {
     SDL_UnlockMutex(q->mutex);
 }
 
-void groove_queue_reset(GrooveQueue *queue) {
-    GrooveQueuePrivate *q = queue->internals;
+void groove_queue_reset(struct GrooveQueue *queue) {
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
 
     SDL_LockMutex(q->mutex);
 
@@ -90,15 +85,15 @@ void groove_queue_reset(GrooveQueue *queue) {
     SDL_UnlockMutex(q->mutex);
 }
 
-int groove_queue_put(GrooveQueue *queue, void *obj) {
-    ItemList * el1 = av_mallocz(sizeof(ItemList));
+int groove_queue_put(struct GrooveQueue *queue, void *obj) {
+    struct ItemList * el1 = av_mallocz(sizeof(struct ItemList));
 
     if (!el1)
         return -1;
 
     el1->obj = obj;
 
-    GrooveQueuePrivate *q = queue->internals;
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
     SDL_LockMutex(q->mutex);
 
     if (!q->last)
@@ -116,10 +111,10 @@ int groove_queue_put(GrooveQueue *queue, void *obj) {
     return 0;
 }
 
-int groove_queue_peek(GrooveQueue *queue, int block) {
+int groove_queue_peek(struct GrooveQueue *queue, int block) {
     int ret;
 
-    GrooveQueuePrivate *q = queue->internals;
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
     SDL_LockMutex(q->mutex);
 
     for (;;) {
@@ -143,11 +138,11 @@ int groove_queue_peek(GrooveQueue *queue, int block) {
     return ret;
 }
 
-int groove_queue_get(GrooveQueue *queue, void **obj_ptr, int block) {
-    ItemList *ev1;
+int groove_queue_get(struct GrooveQueue *queue, void **obj_ptr, int block) {
+    struct ItemList *ev1;
     int ret;
 
-    GrooveQueuePrivate *q = queue->internals;
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
     SDL_LockMutex(q->mutex);
 
     for (;;) {
@@ -181,12 +176,12 @@ int groove_queue_get(GrooveQueue *queue, void **obj_ptr, int block) {
     return ret;
 }
 
-void groove_queue_purge(GrooveQueue *queue) {
-    GrooveQueuePrivate *q = queue->internals;
+void groove_queue_purge(struct GrooveQueue *queue) {
+    struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
 
     SDL_LockMutex(q->mutex);
-    ItemList *node = q->first;
-    ItemList *prev = NULL;
+    struct ItemList *node = q->first;
+    struct ItemList *prev = NULL;
     while (node) {
         if (queue->purge(queue, node->obj)) {
             if (prev) {
@@ -198,7 +193,7 @@ void groove_queue_purge(GrooveQueue *queue) {
                 if (!node)
                     q->last = prev;
             } else {
-                ItemList *next = node->next;
+                struct ItemList *next = node->next;
                 if (queue->cleanup)
                     queue->cleanup(queue, node->obj);
                 av_free(node);
@@ -215,7 +210,7 @@ void groove_queue_purge(GrooveQueue *queue) {
     SDL_UnlockMutex(q->mutex);
 }
 
-void groove_queue_cleanup_default(GrooveQueue *queue, void *obj) {
+void groove_queue_cleanup_default(struct GrooveQueue *queue, void *obj) {
     av_free(obj);
 }
 
