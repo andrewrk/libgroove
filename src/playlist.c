@@ -111,7 +111,7 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSin
     }
 
     GroovePlaylistPrivate *p = playlist->internals;
-    GrooveFile *file = p->decode_head->file;
+    struct GrooveFile *file = p->decode_head->file;
 
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
@@ -132,7 +132,7 @@ static GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSin
 
 
 // decode one audio packet and return its uncompressed size
-static int audio_decode_frame(GroovePlaylist *playlist, GrooveFile *file) {
+static int audio_decode_frame(GroovePlaylist *playlist, struct GrooveFile *file) {
     GroovePlaylistPrivate * p = playlist->internals;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
@@ -242,7 +242,7 @@ static int audio_decode_frame(GroovePlaylist *playlist, GrooveFile *file) {
 
 // abuffer -> volume -> asplit for each audio format
 //                     -> aformat -> abuffersink
-static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
+static int init_filter_graph(GroovePlaylist *playlist, struct GrooveFile *file) {
     GroovePlaylistPrivate *p = playlist->internals;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
@@ -394,7 +394,7 @@ static int init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
     return 0;
 }
 
-static int maybe_init_filter_graph(GroovePlaylist *playlist, GrooveFile *file) {
+static int maybe_init_filter_graph(GroovePlaylist *playlist, struct GrooveFile *file) {
     GroovePlaylistPrivate *p = playlist->internals;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     AVCodecContext *avctx = f->audio_st->codec;
@@ -465,7 +465,7 @@ static void every_sink_flush(GroovePlaylist *playlist) {
     every_sink(playlist, sink_flush, 0);
 }
 
-static int decode_one_frame(GroovePlaylist *playlist, GrooveFile *file) {
+static int decode_one_frame(GroovePlaylist *playlist, struct GrooveFile *file) {
     GroovePlaylistPrivate *p = playlist->internals;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     AVPacket *pkt = &f->audio_pkt;
@@ -609,7 +609,7 @@ static int decode_thread(void *arg) {
             continue;
         }
 
-        GrooveFile *file = p->decode_head->file;
+        struct GrooveFile *file = p->decode_head->file;
 
         p->volume = p->decode_head->gain * playlist->volume;
 
@@ -617,7 +617,7 @@ static int decode_thread(void *arg) {
             p->decode_head = p->decode_head->next;
             // seek to beginning of next song
             if (p->decode_head) {
-                GrooveFile *next_file = p->decode_head->file;
+                struct GrooveFile *next_file = p->decode_head->file;
                 struct GrooveFilePrivate *next_f = (struct GrooveFilePrivate *) next_file;
                 SDL_LockMutex(next_f->seek_mutex);
                 next_f->seek_pos = 0;
@@ -893,7 +893,7 @@ void groove_playlist_pause(GroovePlaylist *playlist) {
 }
 
 void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, double seconds) {
-    GrooveFile * file = item->file;
+    struct GrooveFile * file = item->file;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     int64_t ts = seconds * f->audio_st->time_base.den / f->audio_st->time_base.num;
@@ -915,7 +915,7 @@ void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item, do
     SDL_UnlockMutex(p->decode_head_mutex);
 }
 
-GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, GrooveFile *file,
+GroovePlaylistItem * groove_playlist_insert(GroovePlaylist *playlist, struct GrooveFile *file,
         double gain, GroovePlaylistItem *next)
 {
     GroovePlaylistItem * item = av_mallocz(sizeof(GroovePlaylistItem));
@@ -1054,7 +1054,7 @@ void groove_playlist_position(GroovePlaylist *playlist, GroovePlaylistItem **ite
         *item = p->decode_head;
 
     if (seconds && p->decode_head) {
-        GrooveFile *file = p->decode_head->file;
+        struct GrooveFile *file = p->decode_head->file;
         struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
         *seconds = f->audio_clock;
     }

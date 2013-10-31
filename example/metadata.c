@@ -20,7 +20,7 @@ int main(int argc, char * argv[]) {
     char * filename = argv[1];
     groove_init();
     groove_set_logging(GROOVE_LOG_INFO);
-    GrooveFile * file = groove_file_open(filename);
+    struct GrooveFile * file = groove_file_open(filename);
     if (!file) {
         fprintf(stderr, "error opening file\n");
         return 1;

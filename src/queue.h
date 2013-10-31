@@ -8,7 +8,6 @@ struct GrooveQueue {
     void (*put)(struct GrooveQueue*, void *obj);
     void (*get)(struct GrooveQueue*, void *obj);
     int (*purge)(struct GrooveQueue*, void *obj);
-    void *internals;
 };
 
 struct GrooveQueue *groove_queue_create();

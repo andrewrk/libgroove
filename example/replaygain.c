@@ -9,7 +9,7 @@ static void progress_cb(void *userdata, double amount) {
 }
 
 static void complete_cb(void *userdata, double gain, double peak) {
-    GrooveFile *file = userdata;
+    struct GrooveFile *file = userdata;
     fprintf(stderr, "\nfile complete: %s\n", file->filename);
     fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f\n", gain, peak);
 }
@@ -31,7 +31,7 @@ int main(int argc, char * argv[]) {
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
         // TODO: after de-special-casing replaygain scan, free these files.
-        GrooveFile * file = groove_file_open(filename);
+        struct GrooveFile * file = groove_file_open(filename);
         if (!file) {
             fprintf(stderr, "Unable to open %s\n", filename);
             continue;

@@ -58,10 +58,10 @@ typedef struct GrooveAudioFormat {
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
 /************* GrooveFile *************/
-typedef struct GrooveFile {
+struct GrooveFile {
     int dirty; // read-only
     char *filename; // read-only
-} GrooveFile;
+};
 
 // flags to groove_file_metadata_*
 #define GROOVE_TAG_MATCH_CASE      1
@@ -78,10 +78,10 @@ const char *groove_tag_value(GrooveTag *tag);
 
 // you are always responsible for calling groove_file_close on the
 // returned GrooveFile.
-GrooveFile *groove_file_open(char *filename);
-void groove_file_close(GrooveFile *file);
+struct GrooveFile *groove_file_open(char *filename);
+void groove_file_close(struct GrooveFile *file);
 
-GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
+GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags);
 // key entry to add to metadata. will be strdup'd
 // value entry to add to metadata. will be strdup'd
@@ -89,31 +89,31 @@ GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
 // return >= 0 on success otherwise an error code < 0
 // note that this will not save the file; you must call groove_file_save
 // to do that.
-int groove_file_metadata_set(GrooveFile *file, const char *key,
+int groove_file_metadata_set(struct GrooveFile *file, const char *key,
         const char *value, int flags);
 
 // a comma separated list of short names for the format
-const char *groove_file_short_names(GrooveFile *file);
+const char *groove_file_short_names(struct GrooveFile *file);
 
 // write changes made to metadata to disk.
 // return < 0 on error
-int groove_file_save(GrooveFile *file);
+int groove_file_save(struct GrooveFile *file);
 
 // main audio stream duration in seconds. note that this relies on a
 // combination of format headers and heuristics. It can be inaccurate.
 // The most accurate way to learn the duration of a file is to use
 // GrooveDurationAnalyzer
-double groove_file_duration(GrooveFile *file);
+double groove_file_duration(struct GrooveFile *file);
 
 // get the audio format of the main audio stream of a file
-void groove_file_audio_format(GrooveFile *file,
+void groove_file_audio_format(struct GrooveFile *file,
         GrooveAudioFormat *audio_format);
 
 /************* GroovePlaylist *************/
 typedef struct GroovePlaylistItem {
     // all fields are read-only. modify with methods below.
     struct GroovePlaylistItem *prev;
-    GrooveFile *file;
+    struct GrooveFile *file;
     // a volume adjustment in float format to apply to the file when it plays.
     // This is typically used for ReplayGain.
     // To convert from dB to float, use exp(log(10) * 0.05 * dB_value)
@@ -153,7 +153,7 @@ void groove_playlist_seek(GroovePlaylist *playlist, GroovePlaylistItem *item,
 // gain: see GroovePlaylistItem structure. use 0 for no adjustment.
 // returns the newly created playlist item.
 GroovePlaylistItem *groove_playlist_insert(GroovePlaylist *playlist,
-        GrooveFile *file, double gain, GroovePlaylistItem *next);
+        struct GrooveFile *file, double gain, GroovePlaylistItem *next);
 
 // this will not call groove_file_close on item->file !
 // item is destroyed and the address it points to is no longer valid
@@ -374,7 +374,7 @@ int groove_player_event_peek(GroovePlayer *player, int block);
 // attach a GrooveEncoder to a playlist to keep a buffer of encoded audio full.
 // for example you could use it to implement an http audio stream
 
-typedef struct GrooveEncoder {
+struct GrooveEncoder {
     // The desired audio format to encode.
     // groove_encoder_create defaults these to 44100 Hz,
     // signed 16-bit int, stereo.
@@ -419,32 +419,30 @@ typedef struct GrooveEncoder {
     // playlist. ideally will be the same as target_audio_format but might
     // not be.
     GrooveAudioFormat actual_audio_format;
+};
 
-    void *internals; // private
-} GrooveEncoder;
-
-GrooveEncoder *groove_encoder_create();
+struct GrooveEncoder *groove_encoder_create();
 // detach before destroying
-void groove_encoder_destroy(GrooveEncoder *encoder);
+void groove_encoder_destroy(struct GrooveEncoder *encoder);
 
 // once you attach, you must detach before destroying the playlist
 // at playlist begin, format headers are generated. when end of playlist is
 // reached, format trailers are generated.
-int groove_encoder_attach(GrooveEncoder *encoder, GroovePlaylist *playlist);
-int groove_encoder_detach(GrooveEncoder *encoder);
+int groove_encoder_attach(struct GrooveEncoder *encoder, GroovePlaylist *playlist);
+int groove_encoder_detach(struct GrooveEncoder *encoder);
 
 // returns < 0 on error, GROOVE_BUFFER_NO on aborted (block=1) or no buffer
 // ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
 // on end of playlist.
 // buffer is always set to either a valid GrooveBuffer or NULL.
-int groove_encoder_get_buffer(GrooveEncoder *encoder, GrooveBuffer **buffer,
-        int block);
+int groove_encoder_get_buffer(struct GrooveEncoder *encoder,
+        GrooveBuffer **buffer, int block);
 
 // see docs for groove_file_metadata_get
-GrooveTag *groove_encoder_metadata_get(GrooveEncoder *encoder, const char *key,
-        const GrooveTag *prev, int flags);
+GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,
+        const char *key, const GrooveTag *prev, int flags);
 // see docs for groove_file_metadata_set
-int groove_encoder_metadata_set(GrooveEncoder *encoder, const char *key,
+int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
         const char *value, int flags);
 
 /************* GrooveReplayGainScan *************/
@@ -470,8 +468,8 @@ typedef struct GrooveReplayGainScan {
 GrooveReplayGainScan *groove_replaygainscan_create();
 
 // userdata will be passed back in callbacks
-int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file,
-        void *userdata);
+int groove_replaygainscan_add(GrooveReplayGainScan *scan,
+        struct GrooveFile *file, void *userdata);
 
 // starts replaygain scanning. blocks until scanning is complete.
 // gain: recommended gain adjustment of all files in scan, in float format

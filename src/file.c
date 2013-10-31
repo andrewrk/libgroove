@@ -8,7 +8,7 @@ static int decode_interrupt_cb(void *ctx) {
     return f ? f->abort_request : 0;
 }
 
-GrooveFile *groove_file_open(char *filename) {
+struct GrooveFile *groove_file_open(char *filename) {
     struct GrooveFilePrivate *f = av_mallocz(sizeof(struct GrooveFilePrivate));
     if (!f) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate file context\n");
@@ -97,7 +97,7 @@ GrooveFile *groove_file_open(char *filename) {
 }
 
 // should be safe to call no matter what state the file is in
-void groove_file_close(GrooveFile *file) {
+void groove_file_close(struct GrooveFile *file) {
     if (!file)
         return;
 
@@ -129,18 +129,18 @@ void groove_file_close(GrooveFile *file) {
 }
 
 
-const char *groove_file_short_names(GrooveFile *file) {
+const char *groove_file_short_names(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     return f->ic->iformat->name;
 }
 
-double groove_file_duration(GrooveFile *file) {
+double groove_file_duration(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     double time_base = av_q2d(f->audio_st->time_base);
     return time_base * f->audio_st->duration;
 }
 
-void groove_file_audio_format(GrooveFile *file, GrooveAudioFormat *audio_format) {
+void groove_file_audio_format(struct GrooveFile *file, GrooveAudioFormat *audio_format) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     AVCodecContext *codec_ctx = f->audio_st->codec;
@@ -149,7 +149,7 @@ void groove_file_audio_format(GrooveFile *file, GrooveAudioFormat *audio_format)
     audio_format->sample_fmt = codec_ctx->sample_fmt;
 }
 
-GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
+GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
         const GrooveTag *prev, int flags)
 {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
@@ -157,7 +157,7 @@ GrooveTag *groove_file_metadata_get(GrooveFile *file, const char *key,
     return av_dict_get(f->ic->metadata, key, e, flags|AV_DICT_IGNORE_SUFFIX);
 }
 
-int groove_file_metadata_set(GrooveFile *file, const char *key,
+int groove_file_metadata_set(struct GrooveFile *file, const char *key,
         const char *value, int flags)
 {
     file->dirty = 1;
@@ -192,7 +192,7 @@ static int tempfileify(char * str, size_t max_len) {
     return 0;
 }
 
-static void cleanup_save(GrooveFile *file) {
+static void cleanup_save(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     av_free_packet(&f->audio_pkt);
@@ -208,7 +208,7 @@ static void cleanup_save(GrooveFile *file) {
     }
 }
 
-int groove_file_save(GrooveFile *file) {
+int groove_file_save(struct GrooveFile *file) {
     if (!file->dirty)
         return 0;
 

@@ -22,7 +22,7 @@ int main(int argc, char * argv[]) {
 
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
-        GrooveFile * file = groove_file_open(filename);
+        struct GrooveFile * file = groove_file_open(filename);
         if (!file) {
             fprintf(stderr, "Not queuing %s\n", filename);
             continue;
@@ -44,7 +44,7 @@ int main(int argc, char * argv[]) {
                 printf("done\n");
                 item = playlist->head;
                 while (item) {
-                    GrooveFile *file = item->file;
+                    struct GrooveFile *file = item->file;
                     GroovePlaylistItem *next = item->next;
                     groove_playlist_remove(playlist, item);
                     groove_file_close(file);

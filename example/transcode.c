@@ -43,7 +43,7 @@ int main(int argc, char * argv[]) {
                 return usage(argv[0]);
             }
         } else {
-            GrooveFile * file = groove_file_open(arg);
+            struct GrooveFile * file = groove_file_open(arg);
             if (!file) {
                 fprintf(stderr, "Error opening input file %s\n", arg);
                 return 1;
@@ -54,7 +54,7 @@ int main(int argc, char * argv[]) {
     if (!output_file_name)
         return usage(argv[0]);
 
-    GrooveEncoder *encoder = groove_encoder_create();
+    struct GrooveEncoder *encoder = groove_encoder_create();
     encoder->bit_rate = bit_rate_k * 1000;
     encoder->format_short_name = format;
     encoder->codec_short_name = codec;
@@ -95,7 +95,7 @@ int main(int argc, char * argv[]) {
 
     GroovePlaylistItem *item = playlist->head;
     while (item) {
-        GrooveFile *file = item->file;
+        struct GrooveFile *file = item->file;
         GroovePlaylistItem *next = item->next;
         groove_playlist_remove(playlist, item);
         groove_file_close(file);

@@ -7,7 +7,7 @@
 
 typedef struct FileStackItem {
     void *userdata;
-    GrooveFile *file;
+    struct GrooveFile *file;
     struct FileStackItem *next;
 } FileStackItem;
 
@@ -70,7 +70,7 @@ GrooveReplayGainScan * groove_replaygainscan_create() {
     return scan;
 }
 
-int groove_replaygainscan_add(GrooveReplayGainScan *scan, GrooveFile *file, void *userdata) {
+int groove_replaygainscan_add(GrooveReplayGainScan *scan, struct GrooveFile *file, void *userdata) {
     GrooveReplayGainScanPrivate *s = scan->internals;
 
     FileStackItem *item = av_mallocz(sizeof(FileStackItem));
@@ -119,7 +119,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
     double progress_interval = scan->progress_interval;
     while (s->file_item) {
         node = filestack_pop(&s->file_item);
-        GrooveFile *file = node->file;
+        struct GrooveFile *file = node->file;
         void *userdata = node->userdata;
         av_freep(&node);
 

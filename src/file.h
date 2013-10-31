@@ -7,7 +7,7 @@
 #include <SDL2/SDL_thread.h>
 
 struct GrooveFilePrivate {
-    GrooveFile externals;
+    struct GrooveFile externals;
     int audio_stream_index;
     int abort_request; // true when we're closing the file
     AVFormatContext *ic;
