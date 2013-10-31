@@ -191,7 +191,7 @@ void groove_playlist_set_volume(GroovePlaylist *playlist, double volume);
 #define GROOVE_BUFFER_YES 1
 #define GROOVE_BUFFER_END 2
 
-typedef struct GrooveBuffer {
+struct GrooveBuffer {
     // all fields read-only
     // for interleaved audio, data[0] is the buffer.
     // for planar audio, each channel has a separate data pointer.
@@ -214,10 +214,10 @@ typedef struct GrooveBuffer {
     int size;
 
     void *internals;
-} GrooveBuffer;
+};
 
-void groove_buffer_ref(GrooveBuffer *buffer);
-void groove_buffer_unref(GrooveBuffer *buffer);
+void groove_buffer_ref(struct GrooveBuffer *buffer);
+void groove_buffer_unref(struct GrooveBuffer *buffer);
 
 /************** GrooveSink ****************/
 
@@ -286,7 +286,8 @@ int groove_sink_detach(GrooveSink *sink);
 // ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
 // on end of playlist.
 // buffer is always set to either a valid GrooveBuffer or NULL
-int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block);
+int groove_sink_get_buffer(GrooveSink *sink, struct GrooveBuffer **buffer,
+        int block);
 
 
 /************* GroovePlayer ****************/
@@ -436,7 +437,7 @@ int groove_encoder_detach(struct GrooveEncoder *encoder);
 // on end of playlist.
 // buffer is always set to either a valid GrooveBuffer or NULL.
 int groove_encoder_get_buffer(struct GrooveEncoder *encoder,
-        GrooveBuffer **buffer, int block);
+        struct GrooveBuffer **buffer, int block);
 
 // see docs for groove_file_metadata_get
 GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,

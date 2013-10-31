@@ -130,7 +130,7 @@ int groove_replaygainscan_exec(GrooveReplayGainScan *scan, double *scan_gain,
         double prev_clock = 0;
         double duration = groove_file_duration(file);
 
-        GrooveBuffer *buffer;
+        struct GrooveBuffer *buffer;
         while (groove_sink_get_buffer(s->sink, &buffer, 1) == GROOVE_BUFFER_YES) {
             // process buffer
             ebur128_state *st = s->ebur_states[s->current_index];

@@ -6,7 +6,7 @@
 #include <SDL2/SDL_audio.h>
 
 typedef struct GroovePlayerPrivate {
-    GrooveBuffer *audio_buf;
+    struct GrooveBuffer *audio_buf;
     size_t audio_buf_size; // in bytes
     size_t audio_buf_index; // in bytes
 

@@ -7,7 +7,8 @@
 #include <libavcodec/avcodec.h>
 #include <SDL2/SDL_thread.h>
 
-typedef struct GrooveBufferPrivate {
+struct GrooveBufferPrivate {
+    struct GrooveBuffer externals;
     AVFrame *frame;
     int is_packet;
     int ref_count;
@@ -15,6 +16,6 @@ typedef struct GrooveBufferPrivate {
     // used for when is_packet is true
     // GrooveBuffer::data[0] will point to this
     uint8_t *data;
-} GrooveBufferPrivate;
+};
 
 #endif /* GROOVE_BUFFER_H_INCLUDED */

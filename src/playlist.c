@@ -80,7 +80,7 @@ typedef struct GroovePlaylistPrivate {
 
 // this is used to tell the difference between a buffer underrun
 // and the end of the playlist.
-static GrooveBuffer *end_of_q_sentinel = NULL;
+static struct GrooveBuffer *end_of_q_sentinel = NULL;
 
 static int frame_size(const AVFrame *frame) {
     return av_get_channel_layout_nb_channels(frame->channel_layout) *
@@ -88,25 +88,21 @@ static int frame_size(const AVFrame *frame) {
         frame->nb_samples;
 }
 
-static GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSink *sink, AVFrame *frame) {
-    GrooveBuffer *buffer = av_mallocz(sizeof(GrooveBuffer));
-    GrooveBufferPrivate *b = av_mallocz(sizeof(GrooveBufferPrivate));
+static struct GrooveBuffer * frame_to_groove_buffer(GroovePlaylist *playlist, GrooveSink *sink, AVFrame *frame) {
+    struct GrooveBufferPrivate *b = av_mallocz(sizeof(struct GrooveBufferPrivate));
 
-    if (!buffer || !b) {
-        av_free(buffer);
-        av_free(b);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer: out of memory");
+    if (!b) {
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer\n");
         return NULL;
     }
 
-    buffer->internals = b;
+    struct GrooveBuffer *buffer = &b->externals;
 
     b->mutex = SDL_CreateMutex();
 
     if (!b->mutex) {
-        av_free(buffer);
         av_free(b);
-        av_log(NULL, AV_LOG_ERROR, "unable to create mutex: out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return NULL;
     }
 
@@ -204,7 +200,7 @@ static int audio_decode_frame(GroovePlaylist *playlist, struct GrooveFile *file)
                     av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
                     return -1;
                 }
-                GrooveBuffer *buffer = frame_to_groove_buffer(playlist, example_sink, oframe);
+                struct GrooveBuffer *buffer = frame_to_groove_buffer(playlist, example_sink, oframe);
                 if (!buffer) {
                     av_frame_free(&oframe);
                     return -1;
@@ -538,7 +534,7 @@ static int decode_one_frame(GroovePlaylist *playlist, struct GrooveFile *file) {
 }
 
 static void audioq_put(struct GrooveQueue *queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
     GrooveSink *sink = queue->context;
@@ -547,7 +543,7 @@ static void audioq_put(struct GrooveQueue *queue, void *obj) {
 }
 
 static void audioq_get(struct GrooveQueue *queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
     GrooveSink *sink = queue->context;
@@ -561,7 +557,7 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
 }
 
 static void audioq_cleanup(struct GrooveQueue *queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
     GrooveSink *sink = queue->context;
@@ -571,7 +567,7 @@ static void audioq_cleanup(struct GrooveQueue *queue, void *obj) {
 }
 
 static int audioq_purge(struct GrooveQueue *queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return 0;
     GrooveSink *sink = queue->context;
@@ -782,7 +778,7 @@ int groove_sink_attach(GrooveSink *sink, GroovePlaylist *playlist) {
     return 0;
 }
 
-int groove_sink_get_buffer(GrooveSink *sink, GrooveBuffer **buffer, int block) {
+int groove_sink_get_buffer(GrooveSink *sink, struct GrooveBuffer **buffer, int block) {
     GrooveSinkPrivate *s = sink->internals;
 
     if (groove_queue_get(s->audioq, (void**)buffer, block) == 1) {

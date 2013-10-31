@@ -81,7 +81,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    GrooveBuffer *buffer;
+    struct GrooveBuffer *buffer;
 
     while (groove_encoder_get_buffer(encoder, &buffer, 1) == GROOVE_BUFFER_YES) {
         fwrite(buffer->data[0], 1, buffer->size, f);

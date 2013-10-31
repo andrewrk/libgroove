@@ -46,9 +46,9 @@ struct GrooveEncoderPrivate {
     AVDictionary *metadata;
 };
 
-static GrooveBuffer *end_of_q_sentinel = NULL;
+static struct GrooveBuffer *end_of_q_sentinel = NULL;
 
-static int encode_buffer(struct GrooveEncoder *encoder, GrooveBuffer *buffer) {
+static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buffer) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     av_init_packet(&e->pkt);
@@ -59,7 +59,7 @@ static int encode_buffer(struct GrooveEncoder *encoder, GrooveBuffer *buffer) {
         e->encode_pos = buffer->pos;
         e->encode_format = buffer->format;
 
-        GrooveBufferPrivate *b = buffer->internals;
+        struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
         frame = b->frame;
     }
 
@@ -84,7 +84,7 @@ static int encode_thread(void *arg) {
     struct GrooveEncoder *encoder = arg;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
-    GrooveBuffer *buffer;
+    struct GrooveBuffer *buffer;
     for (;;) {
         SDL_LockMutex(e->encode_head_mutex);
 
@@ -185,7 +185,7 @@ static void sink_flush(GrooveSink *sink) {
 }
 
 static int audioq_purge(struct GrooveQueue* queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return 0;
     struct GrooveEncoderPrivate *e = queue->context;
@@ -193,7 +193,7 @@ static int audioq_purge(struct GrooveQueue* queue, void *obj) {
 }
 
 static void audioq_cleanup(struct GrooveQueue* queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
     struct GrooveEncoderPrivate *e = queue->context;
@@ -202,7 +202,7 @@ static void audioq_cleanup(struct GrooveQueue* queue, void *obj) {
 }
 
 static void audioq_put(struct GrooveQueue *queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
     struct GrooveEncoderPrivate *e = queue->context;
@@ -210,7 +210,7 @@ static void audioq_put(struct GrooveQueue *queue, void *obj) {
 }
 
 static void audioq_get(struct GrooveQueue *queue, void *obj) {
-    GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = obj;
     if (buffer == end_of_q_sentinel)
         return;
     struct GrooveEncoderPrivate *e = queue->context;
@@ -224,22 +224,18 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
 static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     struct GrooveEncoderPrivate *e = opaque;
 
-    GrooveBuffer *buffer = av_mallocz(sizeof(GrooveBuffer));
-    GrooveBufferPrivate *b = av_mallocz(sizeof(GrooveBufferPrivate));
+    struct GrooveBufferPrivate *b = av_mallocz(sizeof(struct GrooveBufferPrivate));
 
-    if (!buffer || !b) {
-        av_free(buffer);
-        av_free(b);
+    if (!b) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer\n");
         return -1;
     }
 
-    buffer->internals = b;
+    struct GrooveBuffer *buffer = &b->externals;
 
     b->mutex = SDL_CreateMutex();
 
     if (!b->mutex) {
-        av_free(buffer);
         av_free(b);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return -1;
@@ -618,8 +614,8 @@ int groove_encoder_detach(struct GrooveEncoder *encoder) {
     return 0;
 }
 
-int groove_encoder_get_buffer(struct GrooveEncoder *encoder, GrooveBuffer **buffer,
-        int block)
+int groove_encoder_get_buffer(struct GrooveEncoder *encoder,
+        struct GrooveBuffer **buffer, int block)
 {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 

@@ -2,19 +2,19 @@
 
 #include <libavutil/mem.h>
 
-void groove_buffer_ref(GrooveBuffer *buffer) {
-    GrooveBufferPrivate *b = buffer->internals;
+void groove_buffer_ref(struct GrooveBuffer *buffer) {
+    struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
 
     SDL_LockMutex(b->mutex);
     b->ref_count += 1;
     SDL_UnlockMutex(b->mutex);
 }
 
-void groove_buffer_unref(GrooveBuffer *buffer) {
+void groove_buffer_unref(struct GrooveBuffer *buffer) {
     if (!buffer)
         return;
 
-    GrooveBufferPrivate *b = buffer->internals;
+    struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
 
     SDL_LockMutex(b->mutex);
     b->ref_count -= 1;
@@ -29,6 +29,5 @@ void groove_buffer_unref(GrooveBuffer *buffer) {
             av_frame_free(&b->frame);
         }
         av_free(b);
-        av_free(buffer);
     }
 }
