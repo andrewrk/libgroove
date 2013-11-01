@@ -29,10 +29,6 @@ struct GroovePlayerPrivate {
     SDL_AudioDeviceID device_id;
     struct GrooveSink *sink;
 
-    // only touched by sdl_audio_callback, tells whether we have reached end
-    // of audio queue naturally rather than a buffer underrun
-    int end_of_q;
-
     struct GrooveQueue *eventq;
 };
 
@@ -101,14 +97,12 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
             if (ret == GROOVE_BUFFER_END) {
                 emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
 
-                p->end_of_q = 1;
                 p->play_head = NULL;
                 p->play_pos = -1.0;
             } else if (ret == GROOVE_BUFFER_YES) {
                 if (p->play_head != p->audio_buf->item)
                     emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
 
-                p->end_of_q = 0;
                 p->play_head = p->audio_buf->item;
                 p->play_pos = p->audio_buf->pos;
                 p->audio_buf_size = p->audio_buf->size;
