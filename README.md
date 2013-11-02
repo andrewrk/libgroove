@@ -33,7 +33,7 @@ available in the #libgroove channel of irc.freenode.org.
 You will need these to compile libgroove. These are most likely in your
 distribution's package manager.
 
- * [libbz2](http://www.bzip.org/)
+ * [libbz2-dev](http://www.bzip.org/)
  * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
  * [libsdl2-dev](http://www.libsdl.org/)
