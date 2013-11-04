@@ -507,6 +507,13 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector);
 int groove_loudness_detector_get_info(struct GrooveLoudnessDetector *detector,
         struct GrooveLoudnessDetectorInfo *info, int block);
 
+// get the position of the detect head
+// both the current playlist item and the position in seconds in the playlist
+// item are given. item will be set to NULL if the playlist is empty
+// you may pass NULL for item or seconds
+void groove_loudness_detector_position(struct GrooveLoudnessDetector *detector,
+        struct GroovePlaylistItem **item, double *seconds);
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

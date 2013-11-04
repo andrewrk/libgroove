@@ -357,3 +357,19 @@ int groove_loudness_detector_get_info(struct GrooveLoudnessDetector *detector,
 
     return 0;
 }
+
+void groove_loudness_detector_position(struct GrooveLoudnessDetector *detector,
+        struct GroovePlaylistItem **item, double *seconds)
+{
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *) detector;
+
+    SDL_LockMutex(d->info_head_mutex);
+
+    if (item)
+        *item = d->info_head;
+
+    if (seconds)
+        *seconds = d->info_pos;
+
+    SDL_UnlockMutex(d->info_head_mutex);
+}
