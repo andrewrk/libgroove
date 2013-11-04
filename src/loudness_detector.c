@@ -47,7 +47,10 @@ struct GrooveLoudnessDetectorPrivate {
 
 static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
     struct GrooveLoudnessDetectorInfo *info = av_mallocz(sizeof(struct GrooveLoudnessDetectorInfo));
-    // TODO check for NULL
+    if (!info) {
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate loudness detector info\n");
+        return -1;
+    }
     info->item = d->info_head;
     info->duration = d->track_duration;
 
@@ -92,11 +95,14 @@ static int detect_thread(void *arg) {
 
             // send album info
             struct GrooveLoudnessDetectorInfo *info = av_mallocz(sizeof(struct GrooveLoudnessDetectorInfo));
-            // TODO check for NULL
-            info->duration = d->album_duration;
-            ebur128_loudness_global(d->ebur_album_state, &info->loudness);
-            info->peak = d->album_peak;
-            groove_queue_put(d->info_queue, info);
+            if (info) {
+                info->duration = d->album_duration;
+                ebur128_loudness_global(d->ebur_album_state, &info->loudness);
+                info->peak = d->album_peak;
+                groove_queue_put(d->info_queue, info);
+            } else {
+                av_log(NULL, AV_LOG_ERROR, "unable to allocate album loudness info\n");
+            }
 
             d->album_peak = 0.0;
             ebur128_destroy(&d->ebur_album_state);
@@ -121,14 +127,18 @@ static int detect_thread(void *arg) {
                 ebur128_destroy(&d->ebur_track_state);
             }
             d->ebur_track_state = ebur128_init(2, 44100, EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
+            if (!d->ebur_track_state) {
+                av_log(NULL, AV_LOG_ERROR, "unable to allocate EBU R128 track context\n");
+            }
             d->track_duration = 0.0;
-            // TODO check for NULL
             d->info_head = buffer->item;
             d->info_pos = buffer->pos;
         }
         if (!d->ebur_album_state) {
             d->ebur_album_state = ebur128_init(2, 44100, EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
-            // TODO check for NULL
+            if (!d->ebur_album_state) {
+                av_log(NULL, AV_LOG_ERROR, "unable to allocate EBU R128 album context\n");
+            }
         }
 
         double buffer_duration = buffer->frame_count / (double)buffer->format.sample_rate;
