@@ -469,6 +469,8 @@ struct GrooveLoudnessDetectorInfo {
     double loudness;
     // peak amplitude in float format
     double peak;
+    // how many seconds long this song is
+    double duration;
 
     // if item is NULL, this info applies to all songs analyzed until
     // this point. otherwise it is the playlist item that this info

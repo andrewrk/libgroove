@@ -33,12 +33,16 @@ int main(int argc, char * argv[]) {
     while (groove_loudness_detector_get_info(detector, &info, 1) == 1) {
         if (info.item) {
             fprintf(stderr, "\nfile complete: %s\n", info.item->file->filename);
-            fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f\n",
-                    groove_loudness_to_replaygain(info.loudness), info.peak);
+            fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f, duration: %fs\n",
+                    groove_loudness_to_replaygain(info.loudness),
+                    info.peak,
+                    info.duration);
         } else {
             fprintf(stderr, "\nAll files complete.\n");
-            fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f\n",
-                    groove_loudness_to_replaygain(info.loudness), info.peak);
+            fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f, duration: %fs\n",
+                    groove_loudness_to_replaygain(info.loudness),
+                    info.peak,
+                    info.duration);
             break;
         }
     }

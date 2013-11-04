@@ -36,6 +36,8 @@ struct GrooveLoudnessDetectorPrivate {
     // how many items are in the queue
     int info_queue_count;
     double album_peak;
+    double track_duration;
+    double album_duration;
 
     // set temporarily
     struct GroovePlaylistItem *purge_item;
@@ -47,6 +49,7 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
     struct GrooveLoudnessDetectorInfo *info = av_mallocz(sizeof(struct GrooveLoudnessDetectorInfo));
     // TODO check for NULL
     info->item = d->info_head;
+    info->duration = d->track_duration;
 
     ebur128_loudness_global(d->ebur_track_state, &info->loudness);
     ebur128_sample_peak(d->ebur_track_state, 0, &info->peak);
@@ -90,13 +93,15 @@ static int detect_thread(void *arg) {
             // send album info
             struct GrooveLoudnessDetectorInfo *info = av_mallocz(sizeof(struct GrooveLoudnessDetectorInfo));
             // TODO check for NULL
+            info->duration = d->album_duration;
             ebur128_loudness_global(d->ebur_album_state, &info->loudness);
             info->peak = d->album_peak;
             groove_queue_put(d->info_queue, info);
 
-            d->album_peak = 0;
+            d->album_peak = 0.0;
             ebur128_destroy(&d->ebur_album_state);
             d->ebur_album_state = NULL;
+            d->album_duration = 0.0;
 
             d->info_head = NULL;
             d->info_pos = -1.0;
@@ -116,6 +121,8 @@ static int detect_thread(void *arg) {
                 ebur128_destroy(&d->ebur_track_state);
             }
             d->ebur_track_state = ebur128_init(2, 44100, EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
+            d->track_duration = 0.0;
+            // TODO check for NULL
             d->info_head = buffer->item;
             d->info_pos = buffer->pos;
         }
@@ -124,6 +131,9 @@ static int detect_thread(void *arg) {
             // TODO check for NULL
         }
 
+        double buffer_duration = buffer->frame_count / (double)buffer->format.sample_rate;
+        d->track_duration += buffer_duration;
+        d->album_duration += buffer_duration;
         ebur128_add_frames_double(d->ebur_track_state, (double*)buffer->data[0], buffer->frame_count);
         ebur128_add_frames_double(d->ebur_album_state, (double*)buffer->data[0], buffer->frame_count);
 
@@ -187,6 +197,7 @@ static void sink_flush(struct GrooveSink *sink) {
     if (d->ebur_track_state) {
         ebur128_destroy(&d->ebur_track_state);
         d->ebur_track_state = NULL;
+        d->track_duration = 0.0;
     }
     if (d->ebur_album_state) {
         ebur128_destroy(&d->ebur_album_state);
