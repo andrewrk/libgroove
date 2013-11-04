@@ -23,10 +23,9 @@ available in the #libgroove channel of irc.freenode.org.
    * **encoder sink** - provides encoded audio buffers. For example you could
      use this to create an HTTP audio stream.
    * **loudness scanner sink** - uses the [EBU R 128](http://tech.ebu.ch/loudness)
-     standard to provide
-     [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification)-compatible values.
-   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/23)) accoustid fingerprint
-   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) perfect duration analyzer
+     standard to detect loudness. The values it produces are compatible with
+     [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification).
+   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) accoustid fingerprint
  * Thread-safe.
 
 ## Dependencies
