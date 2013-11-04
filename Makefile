@@ -27,7 +27,7 @@ STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
 LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2 -lmp3lame
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
-O_FILES = src/scan.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/buffer.o src/global.o
+O_FILES = src/loudness_detector.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/buffer.o src/global.o
 
 # for compiling examples
 EX_CFLAGS = -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
@@ -63,8 +63,8 @@ src/global.o: src/global.c $(LIBAV_DEP)
 src/queue.o: src/queue.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/queue.o -c src/queue.c
 
-src/scan.o: src/scan.c $(LIBAV_DEP)
-	$(CC) $(CFLAGS) -o src/scan.o -c src/scan.c
+src/loudness_detector.o: src/loudness_detector.c $(LIBAV_DEP)
+	$(CC) $(CFLAGS) -o src/loudness_detector.o -c src/loudness_detector.c
 
 src/playlist.o: src/playlist.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/playlist.o -c src/playlist.c

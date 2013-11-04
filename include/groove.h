@@ -67,6 +67,14 @@ struct GrooveAudioFormat {
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
+
+// loudness is in LUFS. EBU R128 specifies that playback should target
+// -23 LUFS. replaygain on the other hand is a suggestion of how many dB to
+// adjust the gain so that it equals -18 dB.
+// 1 LUFS = 1 dB
+double groove_loudness_to_replaygain(double loudness);
+
+
 /************* GrooveFile *************/
 struct GrooveFile {
     int dirty; // read-only
@@ -317,7 +325,7 @@ struct GroovePlayer {
     // groove_player_create defaults this to 1024
     int device_buffer_size;
 
-    // how big the memory buffer should be, in sample frames.
+    // how big the sink buffer should be, in sample frames.
     // groove_player_create defaults this to 8192
     int sink_buffer_size;
 
@@ -418,7 +426,7 @@ struct GrooveEncoder {
     // groove_encoder_create defaults this to 16384
     int encoded_buffer_size;
 
-    // read-only. set when attached and cleared when you detached
+    // read-only. set when attached and cleared when detached
     struct GroovePlaylist *playlist;
 
     // read-only. set to the actual format you get when you attach to a
@@ -452,39 +460,50 @@ struct GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,
 int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
         const char *value, int flags);
 
-/************* GrooveReplayGainScan *************/
-struct GrooveReplayGainScan {
-    // userdata: the same value you passed to groove_replaygainscan_add
-    // amount: value between 0 and 1 representing progress
-    // optional callback
-    void (*file_progress)(void *userdata, double amount);
-    // number of seconds to decode before progress callback is called
-    double progress_interval;
-    // userdata: the same value you passed to groove_replaygainscan_add
-    // gain: recommended gain adjustment of this file, in float format
-    // peak: peak amplitude of this file, in float format
-    void (*file_complete)(void *userdata, double gain, double peak);
-    // set this to 1 during a callback if you want to abort the scan
-    int abort_request;
+/************* GrooveLoudnessDetector *************/
+struct GrooveLoudnessDetectorInfo {
+    // loudness is in LUFS. 1 LUFS == 1 dB
+    // for playback you might adjust the gain so that it is equal to -18 dB
+    // (this would be the replaygain standard) or so that it is equal to -23 dB
+    // (this would be the EBU R128 standard).
+    double loudness;
+    // peak amplitude in float format
+    double peak;
+
+    // if item is NULL, this info applies to all songs analyzed until
+    // this point. otherwise it is the playlist item that this info
+    // applies to.
+    struct GroovePlaylistItem *item;
 };
 
-// after you create a GrooveReplayGainScan you may set the callbacks and call
-// groove_replaygainscan_add
-struct GrooveReplayGainScan *groove_replaygainscan_create(void);
+struct GrooveLoudnessDetector {
+    // maximum number of GrooveLoudnessDetectorInfo items to store in this
+    // loudness detector's queue. this defaults to MAX_INT, meaning that
+    // the loudness detector will cause the decoder to decode the entire
+    // playlist. if you want to instead, for example, obtain loudness info
+    // at the same time as playback, you might set this value to 1.
+    int info_queue_size;
 
-// userdata will be passed back in callbacks
-int groove_replaygainscan_add(struct GrooveReplayGainScan *scan,
-        struct GrooveFile *file, void *userdata);
+    // how big the sink buffer should be, in sample frames.
+    // groove_loudness_detector_create defaults this to 8192
+    int sink_buffer_size;
 
-// starts replaygain scanning. blocks until scanning is complete.
-// gain: recommended gain adjustment of all files in scan, in float format
-// peak: peak amplitude of all files in scan, in float format
-int groove_replaygainscan_exec(struct GrooveReplayGainScan *scan, double *gain,
-        double *peak);
+    // read-only. set when attached and cleared when detached
+    struct GroovePlaylist *playlist;
+};
 
-// must be called to cleanup. May not be called during a callback.
-void groove_replaygainscan_destroy(struct GrooveReplayGainScan *scan);
+struct GrooveLoudnessDetector *groove_loudness_detector_create(void);
+void groove_loudness_detector_destroy(struct GrooveLoudnessDetector *detector);
 
+// once you attach, you must detach before destroying the playlist
+int groove_loudness_detector_attach(struct GrooveLoudnessDetector *detector,
+        struct GroovePlaylist *playlist);
+int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector);
+
+// returns < 0 on error, 0 on aborted (block=1) or no info ready (block=0),
+// 1 on info returned
+int groove_loudness_detector_get_info(struct GrooveLoudnessDetector *detector,
+        struct GrooveLoudnessDetectorInfo *info, int block);
 
 #ifdef __cplusplus
 }

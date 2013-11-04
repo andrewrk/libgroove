@@ -18,6 +18,7 @@ available in the #libgroove channel of irc.freenode.org.
    and keeps its buffer full. Types of sinks:
    * **raw sink** - provides reference-counted raw audio buffers you can do
      whatever you like with. For example a real-time audio visualization.
+     All other sink types are built on top of this one.
    * **player sink** - sends frames to a sound device.
    * **encoder sink** - provides encoded audio buffers. For example you could
      use this to create an HTTP audio stream.
