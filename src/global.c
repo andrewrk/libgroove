@@ -86,14 +86,3 @@ uint64_t groove_channel_layout_default(int count) {
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format) {
     return av_get_bytes_per_sample(format);
 }
-
-static double clamp_rg(double x) {
-    if (x < -51.0) return -51.0;
-    else if (x > 51.0) return 51.0;
-    else return x;
-}
-
-double groove_loudness_to_replaygain(double loudness) {
-    return clamp_rg(-18.0 - loudness);
-}
-

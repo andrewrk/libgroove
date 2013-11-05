@@ -4,6 +4,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static double clamp_rg(double x) {
+    if (x < -51.0) return -51.0;
+    else if (x > 51.0) return 51.0;
+    else return x;
+}
+
+double loudness_to_replaygain(double loudness) {
+    return clamp_rg(-18.0 - loudness);
+}
+
 int main(int argc, char * argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s file1 file2 ...\n", argv[0]);
@@ -34,13 +44,13 @@ int main(int argc, char * argv[]) {
         if (info.item) {
             fprintf(stderr, "\nfile complete: %s\n", info.item->file->filename);
             fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f, duration: %fs\n",
-                    groove_loudness_to_replaygain(info.loudness),
+                    loudness_to_replaygain(info.loudness),
                     info.peak,
                     info.duration);
         } else {
             fprintf(stderr, "\nAll files complete.\n");
             fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f, duration: %fs\n",
-                    groove_loudness_to_replaygain(info.loudness),
+                    loudness_to_replaygain(info.loudness),
                     info.peak,
                     info.duration);
             break;

@@ -17,6 +17,7 @@ extern "C"
 
 /************* global *************/
 // call once at the beginning of your program from the main thread
+// returns 0 on success, < 0 on error
 int groove_init(void);
 // call at the end of your program to clean up. after calling this
 // you may no longer use this API.
@@ -67,14 +68,6 @@ struct GrooveAudioFormat {
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
-
-// loudness is in LUFS. EBU R128 specifies that playback should target
-// -23 LUFS. replaygain on the other hand is a suggestion of how many dB to
-// adjust the gain so that it equals -18 dB.
-// 1 LUFS = 1 dB
-double groove_loudness_to_replaygain(double loudness);
-
-
 /************* GrooveFile *************/
 struct GrooveFile {
     int dirty; // read-only
@@ -120,7 +113,7 @@ int groove_file_save(struct GrooveFile *file);
 // main audio stream duration in seconds. note that this relies on a
 // combination of format headers and heuristics. It can be inaccurate.
 // The most accurate way to learn the duration of a file is to use
-// GrooveDurationAnalyzer
+// GrooveLoudnessDetector
 double groove_file_duration(struct GrooveFile *file);
 
 // get the audio format of the main audio stream of a file
@@ -470,7 +463,10 @@ int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
 /************* GrooveLoudnessDetector *************/
 struct GrooveLoudnessDetectorInfo {
     // loudness is in LUFS. 1 LUFS == 1 dB
-    // for playback you might adjust the gain so that it is equal to -18 dB
+    // EBU R128 specifies that playback should target -23 LUFS. replaygain on
+    // the other hand is a suggestion of how many dB to adjust the gain so
+    // that it equals -18 dB.
+    // so, for playback you might adjust the gain so that it is equal to -18 dB
     // (this would be the replaygain standard) or so that it is equal to -23 dB
     // (this would be the EBU R128 standard).
     double loudness;
