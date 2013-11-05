@@ -93,7 +93,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
             p->audio_buf_index = 0;
             p->audio_buf_size = 0;
 
-            int ret = groove_sink_get_buffer(p->sink, &p->audio_buf, 0);
+            int ret = groove_sink_buffer_get(p->sink, &p->audio_buf, 0);
             if (ret == GROOVE_BUFFER_END) {
                 emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
 

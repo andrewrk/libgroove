@@ -788,7 +788,7 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
     return 0;
 }
 
-int groove_sink_get_buffer(struct GrooveSink *sink, struct GrooveBuffer **buffer, int block) {
+int groove_sink_buffer_get(struct GrooveSink *sink, struct GrooveBuffer **buffer, int block) {
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     if (groove_queue_get(s->audioq, (void**)buffer, block) == 1) {
@@ -802,6 +802,11 @@ int groove_sink_get_buffer(struct GrooveSink *sink, struct GrooveBuffer **buffer
         *buffer = NULL;
         return GROOVE_BUFFER_NO;
     }
+}
+
+int groove_sink_buffer_peek(struct GrooveSink *sink, int block) {
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+    return groove_queue_peek(s->audioq, block);
 }
 
 struct GroovePlaylist * groove_playlist_create(void) {

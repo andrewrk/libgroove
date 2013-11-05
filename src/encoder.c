@@ -107,7 +107,7 @@ static int encode_thread(void *arg) {
         // sink_purge is called.
         SDL_UnlockMutex(e->encode_head_mutex);
 
-        int result = groove_sink_get_buffer(e->sink, &buffer, 1);
+        int result = groove_sink_buffer_get(e->sink, &buffer, 1);
 
         SDL_LockMutex(e->encode_head_mutex);
 
@@ -624,7 +624,7 @@ int groove_encoder_detach(struct GrooveEncoder *encoder) {
     return 0;
 }
 
-int groove_encoder_get_buffer(struct GrooveEncoder *encoder,
+int groove_encoder_buffer_get(struct GrooveEncoder *encoder,
         struct GrooveBuffer **buffer, int block)
 {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
@@ -655,4 +655,9 @@ int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
 {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
     return av_dict_set(&e->metadata, key, value, flags|AV_DICT_IGNORE_SUFFIX);
+}
+
+int groove_encoder_buffer_peek(struct GrooveEncoder *encoder, int block) {
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
+    return groove_queue_peek(e->audioq, block);
 }

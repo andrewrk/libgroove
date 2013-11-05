@@ -288,9 +288,12 @@ int groove_sink_detach(struct GrooveSink *sink);
 // ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
 // on end of playlist.
 // buffer is always set to either a valid GrooveBuffer or NULL
-int groove_sink_get_buffer(struct GrooveSink *sink, struct GrooveBuffer **buffer,
+int groove_sink_buffer_get(struct GrooveSink *sink, struct GrooveBuffer **buffer,
         int block);
 
+// returns < 0 on error, 0 on no buffer ready, 1 on buffer ready
+// if block is 1, block until buffer is ready
+int groove_sink_buffer_peek(struct GrooveSink *sink, int block);
 
 /************* GroovePlayer ****************/
 
@@ -450,8 +453,12 @@ int groove_encoder_detach(struct GrooveEncoder *encoder);
 // ready (block=0), GROOVE_BUFFER_YES on buffer returned, and GROOVE_BUFFER_END
 // on end of playlist.
 // buffer is always set to either a valid GrooveBuffer or NULL.
-int groove_encoder_get_buffer(struct GrooveEncoder *encoder,
+int groove_encoder_buffer_get(struct GrooveEncoder *encoder,
         struct GrooveBuffer **buffer, int block);
+
+// returns < 0 on error, 0 on no buffer ready, 1 on buffer ready
+// if block is 1, block until buffer is ready
+int groove_encoder_buffer_peek(struct GrooveEncoder *encoder, int block);
 
 // see docs for groove_file_metadata_get
 struct GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,
@@ -504,8 +511,13 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector);
 
 // returns < 0 on error, 0 on aborted (block=1) or no info ready (block=0),
 // 1 on info returned
-int groove_loudness_detector_get_info(struct GrooveLoudnessDetector *detector,
+int groove_loudness_detector_info_get(struct GrooveLoudnessDetector *detector,
         struct GrooveLoudnessDetectorInfo *info, int block);
+
+// returns < 0 on error, 0 on no info ready, 1 on info ready
+// if block is 1, block until info is ready
+int groove_loudness_detector_info_peek(struct GrooveLoudnessDetector *detector,
+        int block);
 
 // get the position of the detect head
 // both the current playlist item and the position in seconds in the playlist

@@ -30,7 +30,7 @@ int main(int argc, char * argv[]) {
     groove_loudness_detector_attach(detector, playlist);
 
     struct GrooveLoudnessDetectorInfo info;
-    while (groove_loudness_detector_get_info(detector, &info, 1) == 1) {
+    while (groove_loudness_detector_info_get(detector, &info, 1) == 1) {
         if (info.item) {
             fprintf(stderr, "\nfile complete: %s\n", info.item->file->filename);
             fprintf(stderr, "suggested gain: %.2f dB, sample peak: %f, duration: %fs\n",

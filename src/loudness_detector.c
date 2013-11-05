@@ -85,7 +85,7 @@ static int detect_thread(void *arg) {
         // sink_purge is called.
         SDL_UnlockMutex(d->info_head_mutex);
 
-        int result = groove_sink_get_buffer(d->sink, &buffer, 1);
+        int result = groove_sink_buffer_get(d->sink, &buffer, 1);
 
         SDL_LockMutex(d->info_head_mutex);
 
@@ -343,7 +343,7 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector) {
     return 0;
 }
 
-int groove_loudness_detector_get_info(struct GrooveLoudnessDetector *detector,
+int groove_loudness_detector_info_get(struct GrooveLoudnessDetector *detector,
         struct GrooveLoudnessDetectorInfo *info, int block)
 {
     struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *) detector;
@@ -356,6 +356,13 @@ int groove_loudness_detector_get_info(struct GrooveLoudnessDetector *detector,
     }
 
     return 0;
+}
+
+int groove_loudness_detector_info_peek(struct GrooveLoudnessDetector *detector,
+        int block)
+{
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *) detector;
+    return groove_queue_peek(d->info_queue, block);
 }
 
 void groove_loudness_detector_position(struct GrooveLoudnessDetector *detector,
