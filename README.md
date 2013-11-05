@@ -25,7 +25,8 @@ available in the #libgroove channel of irc.freenode.org.
    * **loudness scanner sink** - uses the [EBU R 128](http://tech.ebu.ch/loudness)
      standard to detect loudness. The values it produces are compatible with
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification).
-   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) accoustid fingerprint
+   * **chromaprint sink** - computes [AccoustID](http://acoustid.org/)
+     fingerprints.
  * Thread-safe.
 
 ## Dependencies
@@ -38,6 +39,7 @@ distribution's package manager.
  * [cmake](http://www.cmake.org/)
  * [libsdl2-dev](http://www.libsdl.org/)
  * [libmp3lame-dev](http://lame.sourceforge.net/)
+ * [libchromaprint-dev](http://acoustid.org/chromaprint)
 
 ### Bundled Dependencies
 

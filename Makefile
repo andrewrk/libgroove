@@ -24,10 +24,10 @@ GROOVE_A_DEST = $(PREFIX)/lib/libgroove.a
 ALLAVLIBS = avfilter avformat avcodec avresample swscale avutil
 CFLAGS := -I$(LIBAV_PREFIX)/include -I$(EBUR128_SRC) -I$(abspath include) -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -g -O0 -fPIC -D_REENTRANT
 STATIC_LIBS := $(ALLAVLIBS:%=$(LIBAV_PREFIX)/lib/lib%.a) $(EBUR128_DEP)
-LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2 -lmp3lame
+LDLIBS = -lbz2 -lz -lm -lpthread -lSDL2 -lmp3lame -lchromaprint
 LDFLAGS = -fPIC -shared -Wl,-soname,libgroove.so.$(VERSION_MAJOR) -Wl,-Bsymbolic
 
-O_FILES = src/loudness_detector.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/buffer.o src/global.o
+O_FILES = src/chromaprinter.o src/loudness_detector.o src/playlist.o src/queue.o src/player.o src/encoder.o src/file.o src/buffer.o src/global.o
 
 # for compiling examples
 EX_CFLAGS = -D_POSIX_C_SOURCE=200809L -pedantic -Werror -Wall -g -O0
@@ -65,6 +65,9 @@ src/queue.o: src/queue.c $(LIBAV_DEP)
 
 src/loudness_detector.o: src/loudness_detector.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/loudness_detector.o -c src/loudness_detector.c
+
+src/chromaprinter.o: src/chromaprinter.c $(LIBAV_DEP)
+	$(CC) $(CFLAGS) -o src/chromaprinter.o -c src/chromaprinter.c
 
 src/playlist.o: src/playlist.c $(LIBAV_DEP)
 	$(CC) $(CFLAGS) -o src/playlist.o -c src/playlist.c

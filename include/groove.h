@@ -522,6 +522,57 @@ int groove_loudness_detector_info_peek(struct GrooveLoudnessDetector *detector,
 void groove_loudness_detector_position(struct GrooveLoudnessDetector *detector,
         struct GroovePlaylistItem **item, double *seconds);
 
+
+/************* GrooveChromaprinter *************/
+struct GrooveChromaprinterInfo {
+    // raw fingerprint data
+    struct GrooveBuffer *buffer;
+
+    // the playlist item that this fingerprint applies to.
+    struct GroovePlaylistItem *item;
+};
+
+struct GrooveChromaprinter {
+    // maximum number of GrooveLoudnessDetectorInfo items to store in this
+    // loudness detector's queue. this defaults to MAX_INT, meaning that
+    // the loudness detector will cause the decoder to decode the entire
+    // playlist. if you want to instead, for example, obtain loudness info
+    // at the same time as playback, you might set this value to 1.
+    int info_queue_size;
+
+    // how big the sink buffer should be, in sample frames.
+    // groove_chromaprinter_create defaults this to 8192
+    int sink_buffer_size;
+
+    // read-only. set when attached and cleared when detached
+    struct GroovePlaylist *playlist;
+};
+
+struct GrooveChromaprinter *groove_chromaprinter_create(void);
+void groove_chromaprinter_destroy(struct GrooveChromaprinter *chromaprinter);
+
+// once you attach, you must detach before destroying the playlist
+int groove_chromaprinter_attach(struct GrooveChromaprinter *chromaprinter,
+        struct GroovePlaylist *playlist);
+int groove_chromaprinter_detach(struct GrooveChromaprinter *chromaprinter);
+
+// returns < 0 on error, 0 on aborted (block=1) or no info ready (block=0),
+// 1 on info returned
+int groove_chromaprinter_info_get(struct GrooveChromaprinter *chromaprinter,
+        struct GrooveChromaprinterInfo *info, int block);
+
+// returns < 0 on error, 0 on no info ready, 1 on info ready
+// if block is 1, block until info is ready
+int groove_chromaprinter_info_peek(struct GrooveChromaprinter *chromaprinter,
+        int block);
+
+// get the position of the chromaprinter head
+// both the current playlist item and the position in seconds in the playlist
+// item are given. item will be set to NULL if the playlist is empty
+// you may pass NULL for item or seconds
+void groove_chromaprinter_position(struct GrooveChromaprinter *chromaprinter,
+        struct GroovePlaylistItem **item, double *seconds);
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
