@@ -20,8 +20,10 @@
 struct GrooveLoudnessDetectorPrivate {
     struct GrooveLoudnessDetector externals;
 
-    ebur128_state *ebur_track_state;
-    ebur128_state *ebur_album_state;
+    int state_history_count;
+    // index into all_track_states
+    int cur_track_index;
+    ebur128_state **all_track_states;
     struct GrooveSink *sink;
     struct GrooveQueue *info_queue;
     SDL_Thread *thread_id;
@@ -54,15 +56,28 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
     info->item = d->info_head;
     info->duration = d->track_duration;
 
-    ebur128_loudness_global(d->ebur_track_state, &info->loudness);
-    ebur128_sample_peak(d->ebur_track_state, 0, &info->peak);
+    ebur128_state *cur_track_state = d->all_track_states[d->cur_track_index];
+    ebur128_loudness_global(cur_track_state, &info->loudness);
+    ebur128_sample_peak(cur_track_state, 0, &info->peak);
     double out;
-    ebur128_sample_peak(d->ebur_track_state, 1, &out);
+    ebur128_sample_peak(cur_track_state, 1, &out);
     if (out > info->peak) info->peak = out;
     if (info->peak > d->album_peak) d->album_peak = info->peak;
 
     groove_queue_put(d->info_queue, info);
 
+    return 0;
+}
+
+static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
+    int new_size = d->state_history_count * 2;
+    d->all_track_states = realloc(d->all_track_states, new_size);
+    if (!d->all_track_states) {
+        av_log(NULL, AV_LOG_ERROR, "unable to reallocate state pointer array\n");
+        return -1;
+    }
+    memset(d->all_track_states + d->state_history_count, 0, new_size - d->state_history_count);
+    d->state_history_count = new_size;
     return 0;
 }
 
@@ -94,19 +109,29 @@ static int detect_thread(void *arg) {
             emit_track_info(d);
 
             // send album info
-            struct GrooveLoudnessDetectorInfo *info = av_mallocz(sizeof(struct GrooveLoudnessDetectorInfo));
+            struct GrooveLoudnessDetectorInfo *info = av_mallocz(
+                    sizeof(struct GrooveLoudnessDetectorInfo));
             if (info) {
                 info->duration = d->album_duration;
-                ebur128_loudness_global(d->ebur_album_state, &info->loudness);
+                if (!detector->disable_album) {
+                    ebur128_loudness_global_multiple(d->all_track_states, d->cur_track_index + 1,
+                            &info->loudness);
+                }
                 info->peak = d->album_peak;
                 groove_queue_put(d->info_queue, info);
             } else {
                 av_log(NULL, AV_LOG_ERROR, "unable to allocate album loudness info\n");
             }
 
+            if (!detector->disable_album) {
+                for (int i = 0; i <= d->cur_track_index; i += 1) {
+                    if (d->all_track_states[i])
+                        ebur128_destroy(&d->all_track_states[i]);
+                }
+                d->cur_track_index = 0;
+            }
+
             d->album_peak = 0.0;
-            ebur128_destroy(&d->ebur_album_state);
-            d->ebur_album_state = NULL;
             d->album_duration = 0.0;
 
             d->info_head = NULL;
@@ -122,30 +147,35 @@ static int detect_thread(void *arg) {
         }
 
         if (buffer->item != d->info_head) {
-            if (d->ebur_track_state) {
+            if (d->all_track_states[d->cur_track_index]) {
                 emit_track_info(d);
-                ebur128_destroy(&d->ebur_track_state);
+                if (detector->disable_album) {
+                    ebur128_destroy(&d->all_track_states[d->cur_track_index]);
+                } else {
+                    d->cur_track_index += 1;
+                    if (d->cur_track_index >= d->state_history_count) {
+                        av_log(NULL, AV_LOG_WARNING, "loudness scanner: resizing state history."
+                                " Unless you're loudness-scanning very large albums you might"
+                                " consider setting disable_album to 1.\n");
+                        resize_state_history(d);
+                    }
+                }
             }
-            d->ebur_track_state = ebur128_init(2, 44100, EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
-            if (!d->ebur_track_state) {
+            d->all_track_states[d->cur_track_index] = ebur128_init(2, 44100,
+                    EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
+            if (!d->all_track_states[d->cur_track_index]) {
                 av_log(NULL, AV_LOG_ERROR, "unable to allocate EBU R128 track context\n");
             }
             d->track_duration = 0.0;
             d->info_head = buffer->item;
             d->info_pos = buffer->pos;
         }
-        if (!d->ebur_album_state) {
-            d->ebur_album_state = ebur128_init(2, 44100, EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
-            if (!d->ebur_album_state) {
-                av_log(NULL, AV_LOG_ERROR, "unable to allocate EBU R128 album context\n");
-            }
-        }
 
         double buffer_duration = buffer->frame_count / (double)buffer->format.sample_rate;
         d->track_duration += buffer_duration;
         d->album_duration += buffer_duration;
-        ebur128_add_frames_double(d->ebur_track_state, (double*)buffer->data[0], buffer->frame_count);
-        ebur128_add_frames_double(d->ebur_album_state, (double*)buffer->data[0], buffer->frame_count);
+        ebur128_add_frames_double(d->all_track_states[d->cur_track_index],
+                (double*)buffer->data[0], buffer->frame_count);
 
         SDL_UnlockMutex(d->info_head_mutex);
         groove_buffer_unref(buffer);
@@ -204,15 +234,15 @@ static void sink_flush(struct GrooveSink *sink) {
 
     SDL_LockMutex(d->info_head_mutex);
     groove_queue_flush(d->info_queue);
-    if (d->ebur_track_state) {
-        ebur128_destroy(&d->ebur_track_state);
-        d->ebur_track_state = NULL;
-        d->track_duration = 0.0;
+    for (int i = 0; i <= d->cur_track_index; i += 1) {
+        if (d->all_track_states[i])
+            ebur128_destroy(&d->all_track_states[i]);
     }
-    if (d->ebur_album_state) {
-        ebur128_destroy(&d->ebur_album_state);
-        d->ebur_album_state = NULL;
-    }
+    d->cur_track_index = 0;
+    d->track_duration = 0.0;
+    d->info_head = NULL;
+    d->info_pos = -1.0;
+
     SDL_CondSignal(d->drain_cond);
     SDL_UnlockMutex(d->info_head_mutex);
 }
@@ -301,6 +331,16 @@ int groove_loudness_detector_attach(struct GrooveLoudnessDetector *detector,
     detector->playlist = playlist;
     groove_queue_reset(d->info_queue);
 
+    // set the initial state history size. if we run out we will realloc later.
+    d->state_history_count = detector->disable_album ? 1 : 128;
+    d->all_track_states = calloc(d->state_history_count, sizeof(ebur128_state*));
+    d->cur_track_index = 0;
+    if (!d->all_track_states) {
+        groove_loudness_detector_detach(detector);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate ebur128 track state pointers\n");
+        return -1;
+    }
+
     if (groove_sink_attach(d->sink, playlist) < 0) {
         groove_loudness_detector_detach(detector);
         av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
@@ -331,10 +371,15 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector) {
 
     detector->playlist = NULL;
 
-    if (d->ebur_track_state)
-        ebur128_destroy(&d->ebur_track_state);
-    if (d->ebur_album_state)
-        ebur128_destroy(&d->ebur_album_state);
+    if (d->all_track_states) {
+        for (int i = 0; i <= d->cur_track_index; i += 1) {
+            if (d->all_track_states[i])
+                ebur128_destroy(&d->all_track_states[i]);
+        }
+        free(d->all_track_states);
+        d->all_track_states = NULL;
+    }
+    d->cur_track_index = 0;
 
     d->abort_request = 0;
     d->info_head = NULL;

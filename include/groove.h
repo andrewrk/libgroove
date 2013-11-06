@@ -478,6 +478,8 @@ struct GrooveLoudnessDetectorInfo {
     // if item is NULL, this info applies to all songs analyzed until
     // this point. otherwise it is the playlist item that this info
     // applies to.
+    // when disable_album is set, this sentinel is still sent, but loudness
+    // will be set to 0
     struct GroovePlaylistItem *item;
 };
 
@@ -492,6 +494,10 @@ struct GrooveLoudnessDetector {
     // how big the sink buffer should be, in sample frames.
     // groove_loudness_detector_create defaults this to 8192
     int sink_buffer_size;
+
+    // set to 1 to only compute track loudness. This is faster and requires
+    // less memory than computing both.
+    int disable_album;
 
     // read-only. set when attached and cleared when detached
     struct GroovePlaylist *playlist;
