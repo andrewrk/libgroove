@@ -460,6 +460,13 @@ struct GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,
 int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
         const char *value, int flags);
 
+// get the position of the encode head
+// both the current playlist item and the position in seconds in the playlist
+// item are given. item will be set to NULL if the playlist is empty
+// you may pass NULL for item or seconds
+void groove_encoder_position(struct GrooveEncoder *encoder,
+        struct GroovePlaylistItem **item, double *seconds);
+
 /************* GrooveLoudnessDetector *************/
 struct GrooveLoudnessDetectorInfo {
     // loudness is in LUFS. 1 LUFS == 1 dB

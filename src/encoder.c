@@ -661,3 +661,19 @@ int groove_encoder_buffer_peek(struct GrooveEncoder *encoder, int block) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
     return groove_queue_peek(e->audioq, block);
 }
+
+void groove_encoder_position(struct GrooveEncoder *encoder,
+        struct GroovePlaylistItem **item, double *seconds)
+{
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
+
+    SDL_LockMutex(e->encode_head_mutex);
+
+    if (item)
+        *item = e->encode_head;
+
+    if (seconds)
+        *seconds = e->encode_pos;
+
+    SDL_UnlockMutex(e->encode_head_mutex);
+}
