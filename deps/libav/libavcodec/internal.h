@@ -86,6 +86,14 @@ typedef struct AVCodecInternal {
     AVFrame to_free;
 
     FramePool *pool;
+
+    void *thread_ctx;
+
+    /**
+     * Current packet as passed into the decoder, to avoid having to pass the
+     * packet into every function.
+     */
+    AVPacket *pkt;
 } AVCodecInternal;
 
 struct AVCodecDefault {
@@ -97,11 +105,10 @@ struct AVCodecDefault {
  * Return the hardware accelerated codec for codec codec_id and
  * pixel format pix_fmt.
  *
- * @param codec_id the codec to match
- * @param pix_fmt the pixel format to match
+ * @param avctx The codec context containing the codec_id and pixel format.
  * @return the hardware accelerated codec, or NULL if none was found.
  */
-AVHWAccel *ff_find_hwaccel(enum AVCodecID codec_id, enum AVPixelFormat pix_fmt);
+AVHWAccel *ff_find_hwaccel(AVCodecContext *avctx);
 
 /**
  * Return the index into tab at which {a,b} match elements {[0],[1]} of tab.
@@ -165,5 +172,11 @@ int ff_reget_buffer(AVCodecContext *avctx, AVFrame *frame);
 const uint8_t *avpriv_find_start_code(const uint8_t *restrict p,
                                       const uint8_t *end,
                                       uint32_t *restrict state);
+
+/**
+ * Check that the provided frame dimensions are valid and set them on the codec
+ * context.
+ */
+int ff_set_dimensions(AVCodecContext *s, int width, int height);
 
 #endif /* AVCODEC_INTERNAL_H */

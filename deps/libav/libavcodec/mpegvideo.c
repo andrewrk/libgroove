@@ -30,6 +30,7 @@
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/internal.h"
 #include "avcodec.h"
 #include "dsputil.h"
 #include "internal.h"
@@ -165,8 +166,6 @@ av_cold int ff_dct_common_init(MpegEncContext *s)
         s->dct_unquantize_mpeg2_intra = dct_unquantize_mpeg2_intra_bitexact;
     s->dct_unquantize_mpeg2_inter = dct_unquantize_mpeg2_inter_c;
 
-    if (ARCH_ALPHA)
-        ff_MPV_common_init_axp(s);
     if (ARCH_ARM)
         ff_MPV_common_init_arm(s);
     if (ARCH_BFIN)
@@ -321,8 +320,7 @@ static int alloc_picture_tables(MpegEncContext *s, Picture *pic)
             return AVERROR(ENOMEM);
     }
 
-    if (s->out_format == FMT_H263 || s->encoding ||
-               (s->avctx->debug & FF_DEBUG_MV) || s->avctx->debug_mv) {
+    if (s->out_format == FMT_H263 || s->encoding) {
         int mv_size        = 2 * (b8_array_size + 4) * sizeof(int16_t);
         int ref_index_size = 4 * mb_array_size;
 
@@ -1674,8 +1672,12 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
         update_noise_reduction(s);
     }
 
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
     if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration)
         return ff_xvmc_field_start(s, avctx);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
 
     return 0;
 }
@@ -1685,31 +1687,37 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
 void ff_MPV_frame_end(MpegEncContext *s)
 {
     int i;
+
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
     /* redraw edges for the frame if decoding didn't complete */
     // just to make sure that all data is rendered.
     if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration) {
         ff_xvmc_field_end(s);
-   } else if ((s->er.error_count || s->encoding) &&
-              !s->avctx->hwaccel &&
-              s->unrestricted_mv &&
-              s->current_picture.reference &&
-              !s->intra_only &&
-              !(s->flags & CODEC_FLAG_EMU_EDGE)) {
-       const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(s->avctx->pix_fmt);
-       int hshift = desc->log2_chroma_w;
-       int vshift = desc->log2_chroma_h;
-       s->dsp.draw_edges(s->current_picture.f.data[0], s->linesize,
-                         s->h_edge_pos, s->v_edge_pos,
-                         EDGE_WIDTH, EDGE_WIDTH,
-                         EDGE_TOP | EDGE_BOTTOM);
-       s->dsp.draw_edges(s->current_picture.f.data[1], s->uvlinesize,
-                         s->h_edge_pos >> hshift, s->v_edge_pos >> vshift,
-                         EDGE_WIDTH >> hshift, EDGE_WIDTH >> vshift,
-                         EDGE_TOP | EDGE_BOTTOM);
-       s->dsp.draw_edges(s->current_picture.f.data[2], s->uvlinesize,
-                         s->h_edge_pos >> hshift, s->v_edge_pos >> vshift,
-                         EDGE_WIDTH >> hshift, EDGE_WIDTH >> vshift,
-                         EDGE_TOP | EDGE_BOTTOM);
+    } else
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
+    if ((s->er.error_count || s->encoding) &&
+        !s->avctx->hwaccel &&
+        s->unrestricted_mv &&
+        s->current_picture.reference &&
+        !s->intra_only &&
+        !(s->flags & CODEC_FLAG_EMU_EDGE)) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(s->avctx->pix_fmt);
+        int hshift = desc->log2_chroma_w;
+        int vshift = desc->log2_chroma_h;
+        s->dsp.draw_edges(s->current_picture.f.data[0], s->linesize,
+                          s->h_edge_pos, s->v_edge_pos,
+                          EDGE_WIDTH, EDGE_WIDTH,
+                          EDGE_TOP | EDGE_BOTTOM);
+        s->dsp.draw_edges(s->current_picture.f.data[1], s->uvlinesize,
+                          s->h_edge_pos >> hshift, s->v_edge_pos >> vshift,
+                          EDGE_WIDTH >> hshift, EDGE_WIDTH >> vshift,
+                          EDGE_TOP | EDGE_BOTTOM);
+        s->dsp.draw_edges(s->current_picture.f.data[2], s->uvlinesize,
+                          s->h_edge_pos >> hshift, s->v_edge_pos >> vshift,
+                          EDGE_WIDTH >> hshift, EDGE_WIDTH >> vshift,
+                          EDGE_TOP | EDGE_BOTTOM);
     }
 
     emms_c();
@@ -1962,10 +1970,15 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
                             int is_mpeg12)
 {
     const int mb_xy = s->mb_y * s->mb_stride + s->mb_x;
+
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
     if(CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration){
         ff_xvmc_decode_mb(s);//xvmc uses pblocks
         return;
     }
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
 
     if(s->avctx->debug&FF_DEBUG_DCT_COEFF) {
        /* print DCT coefficients */

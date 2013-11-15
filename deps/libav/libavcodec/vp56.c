@@ -341,7 +341,8 @@ static void vp56_mc(VP56Context *s, int b, int plane, uint8_t *src,
         y<0 || y+12>=s->plane_height[plane]) {
         s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
                             src + s->block_offset[b] + (dy-2)*stride + (dx-2),
-                            stride, 12, 12, x, y,
+                            stride, stride,
+                            12, 12, x, y,
                             s->plane_width[plane],
                             s->plane_height[plane]);
         src_block = s->edge_emu_buffer;
@@ -470,7 +471,7 @@ static int vp56_size_changed(AVCodecContext *avctx)
     s->mb_height = (avctx->coded_height+15) / 16;
 
     if (s->mb_width > 1000 || s->mb_height > 1000) {
-        avcodec_set_dimensions(avctx, 0, 0);
+        ff_set_dimensions(avctx, 0, 0);
         av_log(avctx, AV_LOG_ERROR, "picture too big\n");
         return -1;
     }
@@ -528,7 +529,7 @@ int ff_vp56_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
             for (i = 0; i < 4; i++)
                 av_frame_unref(s->frames[i]);
             if (is_alpha) {
-                avcodec_set_dimensions(avctx, 0, 0);
+                ff_set_dimensions(avctx, 0, 0);
                 return -1;
             }
         }

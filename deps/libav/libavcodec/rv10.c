@@ -28,6 +28,7 @@
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
 #include "error_resilience.h"
+#include "internal.h"
 #include "mpegvideo.h"
 #include "mpeg4video.h"
 #include "h263.h"
@@ -358,10 +359,12 @@ static int rv20_decode_picture_header(RVDecContext *rv)
         if (new_w != s->width || new_h != s->height) {
             av_log(s->avctx, AV_LOG_DEBUG,
                    "attempting to change resolution to %dx%d\n", new_w, new_h);
-            if (av_image_check_size(new_w, new_h, 0, s->avctx) < 0)
-                return AVERROR_INVALIDDATA;
             ff_MPV_common_end(s);
-            avcodec_set_dimensions(s->avctx, new_w, new_h);
+
+            ret = ff_set_dimensions(s->avctx, new_w, new_h);
+            if (ret < 0)
+                return ret;
+
             s->width  = new_w;
             s->height = new_h;
             if ((ret = ff_MPV_common_init(s)) < 0)
@@ -481,6 +484,7 @@ static av_cold int rv10_decode_init(AVCodecContext *avctx)
     if ((ret = ff_MPV_common_init(s)) < 0)
         return ret;
 
+    ff_h263dsp_init(&s->h263dsp);
     ff_h263_decode_init_vlc();
 
     /* init rv vlc */

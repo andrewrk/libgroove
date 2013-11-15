@@ -68,9 +68,6 @@ void ff_put_no_rnd_mpeg4_qpel8_v_lowpass_mmxext(uint8_t *dst, uint8_t *src,
 #define ff_put_no_rnd_pixels16_mmxext ff_put_pixels16_mmxext
 #define ff_put_no_rnd_pixels8_mmxext ff_put_pixels8_mmxext
 
-void ff_h263_v_loop_filter_mmx(uint8_t *src, int stride, int qscale);
-void ff_h263_h_loop_filter_mmx(uint8_t *src, int stride, int qscale);
-
 int32_t ff_scalarproduct_int16_mmxext(const int16_t *v1, const int16_t *v2,
                                       int order);
 int32_t ff_scalarproduct_int16_sse2(const int16_t *v1, const int16_t *v2,
@@ -566,11 +563,6 @@ static av_cold void dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx,
 #endif /* HAVE_MMX_INLINE */
 
 #if HAVE_MMX_EXTERNAL
-    if (CONFIG_H263_DECODER || CONFIG_H263_ENCODER) {
-        c->h263_v_loop_filter = ff_h263_v_loop_filter_mmx;
-        c->h263_h_loop_filter = ff_h263_h_loop_filter_mmx;
-    }
-
     c->vector_clip_int32 = ff_vector_clip_int32_mmx;
 #endif /* HAVE_MMX_EXTERNAL */
 }
@@ -619,11 +611,15 @@ static av_cold void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx,
     const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
     if (!high_bit_depth) {
+#if FF_API_XVMC
         if (!(CONFIG_MPEG_XVMC_DECODER && avctx->xvmc_acceleration > 1)) {
             /* XvMCCreateBlocks() may not allocate 16-byte aligned blocks */
-            c->clear_block  = ff_clear_block_sse;
-            c->clear_blocks = ff_clear_blocks_sse;
+#endif /* FF_API_XVMC */
+        c->clear_block  = ff_clear_block_sse;
+        c->clear_blocks = ff_clear_blocks_sse;
+#if FF_API_XVMC
         }
+#endif /* FF_API_XVMC */
     }
 
     c->vector_clipf = ff_vector_clipf_sse;

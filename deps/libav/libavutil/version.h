@@ -37,7 +37,7 @@
  */
 
 #define LIBAVUTIL_VERSION_MAJOR 52
-#define LIBAVUTIL_VERSION_MINOR 16
+#define LIBAVUTIL_VERSION_MINOR 18
 #define LIBAVUTIL_VERSION_MICRO  0
 
 #define LIBAVUTIL_VERSION_INT   AV_VERSION_INT(LIBAVUTIL_VERSION_MAJOR, \
@@ -87,6 +87,9 @@
 #endif
 #ifndef FF_API_VDPAU
 #define FF_API_VDPAU                    (LIBAVUTIL_VERSION_MAJOR < 53)
+#endif
+#ifndef FF_API_XVMC
+#define FF_API_XVMC                     (LIBAVUTIL_VERSION_MAJOR < 53)
 #endif
 
 /**

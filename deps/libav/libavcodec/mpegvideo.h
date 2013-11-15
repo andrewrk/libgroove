@@ -32,6 +32,7 @@
 #include "dsputil.h"
 #include "error_resilience.h"
 #include "get_bits.h"
+#include "h263dsp.h"
 #include "hpeldsp.h"
 #include "put_bits.h"
 #include "ratecontrol.h"
@@ -63,6 +64,8 @@ enum OutputFormat {
 #define MAX_THREADS 16
 
 #define MAX_PICTURE_COUNT 32
+
+#define MAX_B_FRAMES 16
 
 #define ME_MAP_SIZE 64
 #define ME_MAP_SHIFT 3
@@ -105,6 +108,30 @@ typedef struct Picture{
 
     AVBufferRef *mb_type_buf;
     uint32_t *mb_type;
+
+#if !FF_API_MB_TYPE
+#define MB_TYPE_INTRA4x4   0x0001
+#define MB_TYPE_INTRA16x16 0x0002 //FIXME H.264-specific
+#define MB_TYPE_INTRA_PCM  0x0004 //FIXME H.264-specific
+#define MB_TYPE_16x16      0x0008
+#define MB_TYPE_16x8       0x0010
+#define MB_TYPE_8x16       0x0020
+#define MB_TYPE_8x8        0x0040
+#define MB_TYPE_INTERLACED 0x0080
+#define MB_TYPE_DIRECT2    0x0100 //FIXME
+#define MB_TYPE_ACPRED     0x0200
+#define MB_TYPE_GMC        0x0400
+#define MB_TYPE_SKIP       0x0800
+#define MB_TYPE_P0L0       0x1000
+#define MB_TYPE_P1L0       0x2000
+#define MB_TYPE_P0L1       0x4000
+#define MB_TYPE_P1L1       0x8000
+#define MB_TYPE_L0         (MB_TYPE_P0L0 | MB_TYPE_P1L0)
+#define MB_TYPE_L1         (MB_TYPE_P0L1 | MB_TYPE_P1L1)
+#define MB_TYPE_L0L1       (MB_TYPE_L0   | MB_TYPE_L1)
+#define MB_TYPE_QUANT      0x00010000
+#define MB_TYPE_CBP        0x00020000
+#endif
 
     AVBufferRef *mbskip_table_buf;
     uint8_t *mbskip_table;
@@ -172,6 +199,7 @@ typedef struct Picture{
 
     int reference;
     int shared;
+    int recovered;              ///< Picture at IDR or recovery point + recovery count
 } Picture;
 
 /**
@@ -383,6 +411,7 @@ typedef struct MpegEncContext {
     DSPContext dsp;             ///< pointers for accelerated dsp functions
     HpelDSPContext hdsp;
     VideoDSPContext vdsp;
+    H263DSPContext h263dsp;
     int f_code;                 ///< forward MV resolution
     int b_code;                 ///< backward MV resolution for B Frames (mpeg4)
     int16_t (*p_mv_table_base)[2];
@@ -678,7 +707,6 @@ typedef struct MpegEncContext {
     int rtp_mode;
 
     uint8_t *ptr_lastgob;
-    int swap_uv;             //vcr2 codec is an MPEG-2 variant with U and V swapped
     int16_t (*pblocks[12])[64];
 
     int16_t (*block)[64]; ///< points to one of the following blocks
@@ -724,6 +752,8 @@ typedef struct MpegEncContext {
     int context_reinit;
 
     ERContext er;
+
+    int error_rate;
 } MpegEncContext;
 
 #define REBASE_PICTURE(pic, new_ctx, old_ctx)             \
@@ -749,7 +779,9 @@ typedef struct MpegEncContext {
                                                                       FF_MPV_OFFSET(luma_elim_threshold), AV_OPT_TYPE_INT, { .i64 = 0 }, INT_MIN, INT_MAX, FF_MPV_OPT_FLAGS },\
 { "chroma_elim_threshold", "single coefficient elimination threshold for chrominance (negative values also consider dc coefficient)",\
                                                                       FF_MPV_OFFSET(chroma_elim_threshold), AV_OPT_TYPE_INT, { .i64 = 0 }, INT_MIN, INT_MAX, FF_MPV_OPT_FLAGS },\
-{ "quantizer_noise_shaping", NULL,                                  FF_MPV_OFFSET(quantizer_noise_shaping), AV_OPT_TYPE_INT, { .i64 = 0 },       0, INT_MAX, FF_MPV_OPT_FLAGS },
+{ "quantizer_noise_shaping", NULL,                                  FF_MPV_OFFSET(quantizer_noise_shaping), AV_OPT_TYPE_INT, { .i64 = 0 },       0, INT_MAX, FF_MPV_OPT_FLAGS },\
+{ "error_rate", "Simulate errors in the bitstream to test error concealment.",                                                                                                  \
+                                                                    FF_MPV_OFFSET(error_rate),              AV_OPT_TYPE_INT, { .i64 = 0 },       0, INT_MAX, FF_MPV_OPT_FLAGS },
 
 extern const AVOption ff_mpv_generic_options[];
 
@@ -782,7 +814,6 @@ int ff_MPV_encode_picture(AVCodecContext *avctx, AVPacket *pkt,
                           const AVFrame *frame, int *got_packet);
 void ff_MPV_encode_init_x86(MpegEncContext *s);
 void ff_MPV_common_init_x86(MpegEncContext *s);
-void ff_MPV_common_init_axp(MpegEncContext *s);
 void ff_MPV_common_init_arm(MpegEncContext *s);
 void ff_MPV_common_init_bfin(MpegEncContext *s);
 void ff_MPV_common_init_ppc(MpegEncContext *s);
@@ -895,7 +926,6 @@ void ff_mpeg1_encode_slice_header(MpegEncContext *s);
 
 extern const uint8_t ff_aic_dc_scale_table[32];
 extern const uint8_t ff_h263_chroma_qscale_table[32];
-extern const uint8_t ff_h263_loop_filter_strength[32];
 
 /* rv10.c */
 void ff_rv10_encode_picture_header(MpegEncContext *s, int picture_number);

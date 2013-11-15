@@ -89,7 +89,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     s->bg          = DEFAULT_BG_COLOR;
 
     if (!avctx->width || !avctx->height)
-        avcodec_set_dimensions(avctx, 80<<3, 25<<4);
+        ff_set_dimensions(avctx, 80 << 3, 25 << 4);
 
     return 0;
 }
@@ -165,7 +165,10 @@ static void draw_char(AVCodecContext *avctx, int c)
 static int execute_code(AVCodecContext * avctx, int c)
 {
     AnsiContext *s = avctx->priv_data;
-    int ret, i, width, height;
+    int ret, i;
+    int width = 0;
+    int height = 0;
+
     switch(c) {
     case 'A': //Cursor Up
         s->y = FFMAX(s->y - (s->nb_args > 0 ? s->args[0]*s->font_height : s->font_height), 0);
@@ -224,9 +227,12 @@ static int execute_code(AVCodecContext * avctx, int c)
         default:
             avpriv_request_sample(avctx, "Unsupported screen mode");
         }
-        if (width != avctx->width || height != avctx->height) {
+        if (width != 0 && height != 0 &&
+            (width != avctx->width || height != avctx->height)) {
             av_frame_unref(s->frame);
-            avcodec_set_dimensions(avctx, width, height);
+            ret = ff_set_dimensions(avctx, width, height);
+            if (ret < 0)
+                return ret;
             ret = ff_get_buffer(avctx, s->frame, AV_GET_BUFFER_FLAG_REF);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");

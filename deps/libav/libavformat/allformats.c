@@ -45,8 +45,7 @@
     {                                                                   \
         extern URLProtocol ff_##x##_protocol;                           \
         if (CONFIG_##X##_PROTOCOL)                                      \
-            ffurl_register_protocol(&ff_##x##_protocol,                 \
-                                    sizeof(ff_##x##_protocol));         \
+            ffurl_register_protocol(&ff_##x##_protocol);                \
     }
 
 void av_register_all(void)
@@ -118,7 +117,10 @@ void av_register_all(void)
     REGISTER_MUXDEMUX(H261,             h261);
     REGISTER_MUXDEMUX(H263,             h263);
     REGISTER_MUXDEMUX(H264,             h264);
+    REGISTER_MUXER   (HDS,              hds);
+    REGISTER_DEMUXER (HEVC,             hevc);
     REGISTER_MUXDEMUX(HLS,              hls);
+    REGISTER_DEMUXER (HNM,              hnm);
     REGISTER_DEMUXER (IDCIN,            idcin);
     REGISTER_DEMUXER (IFF,              iff);
     REGISTER_MUXDEMUX(ILBC,             ilbc);

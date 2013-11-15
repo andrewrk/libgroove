@@ -40,6 +40,14 @@ version 10:
 - Opus in Ogg demuxing
 - Enhanced Low Delay AAC (ER AAC ELD) decoding (no LD SBR support)
 - F4V muxer
+- HNM version 4 demuxer and video decoder
+- HEVC decoder
+- raw HEVC, HEVC in MOV/MP4, HEVC in Matroska, HEVC in MPEG-TS demuxing
+- remove avplay -vismv option, which has not worked for a long time
+- Live HDS muxer
+- setsar/setdar filters now support variables in ratio expressions
+- dar variable in the scale filter now returns the actual DAR (i.e. a * sar)
+- VP9 decoder
 
 
 version 9:

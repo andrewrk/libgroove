@@ -237,6 +237,11 @@ static int decrypt_init(AVFormatContext *s, ID3v2ExtraMeta *em, uint8_t *header)
         av_log(s, AV_LOG_ERROR, "Invalid encryption header\n");
         return AVERROR_INVALIDDATA;
     }
+    if (OMA_ENC_HEADER_SIZE + oc->k_size + oc->e_size + oc->i_size + 8 > geob->datasize ||
+        OMA_ENC_HEADER_SIZE + 48 > geob->datasize) {
+        av_log(s, AV_LOG_ERROR, "Too little GEOB data\n");
+        return AVERROR_INVALIDDATA;
+    }
     oc->rid = AV_RB32(&gdata[OMA_ENC_HEADER_SIZE + 28]);
     av_log(s, AV_LOG_DEBUG, "RID: %.8x\n", oc->rid);
 
@@ -263,7 +268,7 @@ static int decrypt_init(AVFormatContext *s, ID3v2ExtraMeta *em, uint8_t *header)
                 !nprobe(s, gdata, geob->datasize, oc->n_val))
                 break;
         }
-        if (i >= sizeof(leaf_table)) {
+        if (i >= FF_ARRAY_ELEMS(leaf_table)) {
             av_log(s, AV_LOG_ERROR, "Invalid key\n");
             return AVERROR_INVALIDDATA;
         }
@@ -441,23 +446,16 @@ static int oma_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 static int oma_read_probe(AVProbeData *p)
 {
-    const uint8_t *buf;
+    const uint8_t *buf = p->buf;
     unsigned tag_len = 0;
 
-    buf = p->buf;
-
-    if (p->buf_size < ID3v2_HEADER_SIZE ||
-        !ff_id3v2_match(buf, ID3v2_EA3_MAGIC) ||
-        buf[3] != 3 || // version must be 3
-        buf[4]) // flags byte zero
-        return 0;
-
-    tag_len = ff_id3v2_tag_len(buf);
+    if (p->buf_size >= ID3v2_HEADER_SIZE && ff_id3v2_match(buf, ID3v2_EA3_MAGIC))
+        tag_len = ff_id3v2_tag_len(buf);
 
     /* This check cannot overflow as tag_len has at most 28 bits */
     if (p->buf_size < tag_len + 5)
         /* EA3 header comes late, might be outside of the probe buffer */
-        return AVPROBE_SCORE_EXTENSION;
+        return tag_len ? AVPROBE_SCORE_EXTENSION : 0;
 
     buf += tag_len;
 

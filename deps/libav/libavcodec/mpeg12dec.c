@@ -37,6 +37,7 @@
 #include "bytestream.h"
 #include "xvmc_internal.h"
 #include "thread.h"
+#include "version.h"
 
 typedef struct Mpeg1Context {
     MpegEncContext mpeg_enc_ctx;
@@ -44,7 +45,6 @@ typedef struct Mpeg1Context {
     int repeat_field; /* true if we must repeat the field */
     AVPanScan pan_scan;              /**< some temporary storage for the panscan */
     int slice_count;
-    int swap_uv;//indicate VCR2
     int save_aspect_info;
     int save_width, save_height, save_progressive_seq;
     AVRational frame_rate_ext;       ///< MPEG-2 specific framerate modificator
@@ -646,15 +646,6 @@ static inline int get_qscale(MpegEncContext *s)
     }
 }
 
-static void exchange_uv(MpegEncContext *s)
-{
-    int16_t (*tmp)[64];
-
-    tmp           = s->pblocks[4];
-    s->pblocks[4] = s->pblocks[5];
-    s->pblocks[5] = tmp;
-}
-
 /* motion type (for MPEG-2) */
 #define MT_FIELD 1
 #define MT_FRAME 2
@@ -756,13 +747,14 @@ static int mpeg_decode_mb(MpegEncContext *s, int16_t block[12][64])
         } else
             memset(s->last_mv, 0, sizeof(s->last_mv)); /* reset mv prediction */
         s->mb_intra = 1;
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
         // if 1, we memcpy blocks in xvmcvideo
         if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration > 1) {
             ff_xvmc_pack_pblocks(s, -1); // inter are always full blocks
-            if (s->swap_uv) {
-                exchange_uv(s);
-            }
         }
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
 
         if (s->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
             if (s->flags2 & CODEC_FLAG2_FAST) {
@@ -969,13 +961,14 @@ static int mpeg_decode_mb(MpegEncContext *s, int16_t block[12][64])
                 return -1;
             }
 
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
             //if 1, we memcpy blocks in xvmcvideo
             if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration > 1) {
                 ff_xvmc_pack_pblocks(s, cbp);
-                if (s->swap_uv) {
-                    exchange_uv(s);
-                }
             }
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
 
             if (s->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
                 if (s->flags2 & CODEC_FLAG2_FAST) {
@@ -1098,10 +1091,12 @@ static void quant_matrix_rebuild(uint16_t *matrix, const uint8_t *old_perm,
     }
 }
 
+#if FF_API_XVMC
 static const enum AVPixelFormat pixfmt_xvmc_mpg2_420[] = {
     AV_PIX_FMT_XVMC_MPEG2_IDCT,
     AV_PIX_FMT_XVMC_MPEG2_MC,
     AV_PIX_FMT_NONE };
+#endif /* FF_API_XVMC */
 
 static const enum AVPixelFormat mpeg12_hwaccel_pixfmt_list_420[] = {
 #if CONFIG_MPEG2_DXVA2_HWACCEL
@@ -1122,16 +1117,19 @@ static enum AVPixelFormat mpeg_get_pixelformat(AVCodecContext *avctx)
     Mpeg1Context *s1 = avctx->priv_data;
     MpegEncContext *s = &s1->mpeg_enc_ctx;
 
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
     if (avctx->xvmc_acceleration)
         return avctx->get_format(avctx, pixfmt_xvmc_mpg2_420);
-    else {
-        if (s->chroma_format <  2)
-            return avctx->get_format(avctx, mpeg12_hwaccel_pixfmt_list_420);
-        else if (s->chroma_format == 2)
-            return AV_PIX_FMT_YUV422P;
-        else
-            return AV_PIX_FMT_YUV444P;
-    }
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
+
+    if (s->chroma_format <  2)
+        return avctx->get_format(avctx, mpeg12_hwaccel_pixfmt_list_420);
+    else if (s->chroma_format == 2)
+        return AV_PIX_FMT_YUV422P;
+    else
+        return AV_PIX_FMT_YUV444P;
 }
 
 /* Call this function when we know all parameters.
@@ -1141,6 +1139,7 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
     Mpeg1Context *s1 = avctx->priv_data;
     MpegEncContext *s = &s1->mpeg_enc_ctx;
     uint8_t old_permutation[64];
+    int ret;
 
     if ((s1->mpeg_enc_ctx_allocated == 0) ||
         avctx->coded_width  != s->width   ||
@@ -1162,7 +1161,10 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         if ((s->width == 0) || (s->height == 0))
             return -2;
 
-        avcodec_set_dimensions(avctx, s->width, s->height);
+        ret = ff_set_dimensions(avctx, s->width, s->height);
+        if (ret < 0)
+            return ret;
+
         avctx->bit_rate          = s->bit_rate;
         s1->save_aspect_info     = s->aspect_ratio_info;
         s1->save_width           = s->width;
@@ -1223,12 +1225,15 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         } // MPEG-2
 
         avctx->pix_fmt = mpeg_get_pixelformat(avctx);
-        avctx->hwaccel = ff_find_hwaccel(avctx->codec->id, avctx->pix_fmt);
+        avctx->hwaccel = ff_find_hwaccel(avctx);
         // until then pix_fmt may be changed right after codec init
-        if (avctx->pix_fmt == AV_PIX_FMT_XVMC_MPEG2_IDCT ||
-            avctx->hwaccel)
-            if (avctx->idct_algo == FF_IDCT_AUTO)
-                avctx->idct_algo = FF_IDCT_SIMPLE;
+#if FF_API_XVMC
+        if ((avctx->pix_fmt == AV_PIX_FMT_XVMC_MPEG2_IDCT ||
+            avctx->hwaccel) && avctx->idct_algo == FF_IDCT_AUTO)
+#else
+        if (avctx->hwaccel && avctx->idct_algo == FF_IDCT_AUTO)
+#endif /* FF_API_XVMC */
+            avctx->idct_algo = FF_IDCT_SIMPLE;
 
         /* Quantization matrices may need reordering
          * if DCT permutation is changed. */
@@ -1553,11 +1558,15 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
             return -1;
     }
 
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
 // MPV_frame_start will call this function too,
 // but we need to call it on every field
     if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration)
         if (ff_xvmc_field_start(s, avctx) < 0)
             return -1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
 
     return 0;
 }
@@ -1658,9 +1667,13 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
     }
 
     for (;;) {
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
         // If 1, we memcpy blocks in xvmcvideo.
         if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration > 1)
             ff_xvmc_init_block(s); // set s->block
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
 
         if (mpeg_decode_mb(s, s->block) < 0)
             return -1;
@@ -1850,8 +1863,12 @@ static int slice_end(AVCodecContext *avctx, AVFrame *pict)
             av_log(avctx, AV_LOG_ERROR, "hardware accelerator failed to decode picture\n");
     }
 
+#if FF_API_XVMC
+FF_DISABLE_DEPRECATION_WARNINGS
     if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration)
         ff_xvmc_field_end(s);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif /* FF_API_XVMC */
 
     /* end of slice reached */
     if (/*s->mb_y << field_pic == s->mb_height &&*/ !s->first_field) {
@@ -1956,7 +1973,6 @@ static int mpeg1_decode_sequence(AVCodecContext *avctx,
     s->chroma_format        = 1;
     s->codec_id             = s->avctx->codec_id = AV_CODEC_ID_MPEG1VIDEO;
     s->out_format           = FMT_MPEG1;
-    s->swap_uv              = 0; // AFAIK VCR2 does not have SEQ_HEADER
     if (s->flags & CODEC_FLAG_LOW_DELAY)
         s->low_delay = 1;
 
@@ -1984,16 +2000,18 @@ static int vcr2_init_sequence(AVCodecContext *avctx)
     s->low_delay = 1;
 
     avctx->pix_fmt = mpeg_get_pixelformat(avctx);
-    avctx->hwaccel = ff_find_hwaccel(avctx->codec->id, avctx->pix_fmt);
+    avctx->hwaccel = ff_find_hwaccel(avctx);
 
-    if (avctx->pix_fmt == AV_PIX_FMT_XVMC_MPEG2_IDCT || avctx->hwaccel)
-        if (avctx->idct_algo == FF_IDCT_AUTO)
-            avctx->idct_algo = FF_IDCT_SIMPLE;
+#if FF_API_XVMC
+    if ((avctx->pix_fmt == AV_PIX_FMT_XVMC_MPEG2_IDCT || avctx->hwaccel) &&
+        avctx->idct_algo == FF_IDCT_AUTO)
+#else
+    if (avctx->hwaccel && avctx->idct_algo == FF_IDCT_AUTO)
+#endif /* FF_API_XVMC */
+        avctx->idct_algo = FF_IDCT_SIMPLE;
 
     if (ff_MPV_common_init(s) < 0)
         return -1;
-    exchange_uv(s); // common init reset pblocks, so we swap them here
-    s->swap_uv = 1; // in case of xvmc we need to swap uv for each MB
     s1->mpeg_enc_ctx_allocated = 1;
 
     for (i = 0; i < 64; i++) {
@@ -2432,6 +2450,7 @@ AVCodec ff_mpeg2video_decoder = {
     .profiles       = NULL_IF_CONFIG_SMALL(mpeg2_video_profiles),
 };
 
+#if FF_API_XVMC
 #if CONFIG_MPEG_XVMC_DECODER
 static av_cold int mpeg_mc_decode_init(AVCodecContext *avctx)
 {
@@ -2465,3 +2484,4 @@ AVCodec ff_mpeg_xvmc_decoder = {
 };
 
 #endif
+#endif /* FF_API_XVMC */
