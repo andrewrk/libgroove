@@ -118,8 +118,8 @@ install: $(GROOVE_SO_SRC) $(GROOVE_A_SRC) include/groove.h
 	install -m 0755 $(GROOVE_A_SRC) $(GROOVE_A_DEST)
 	install -m 0644 include/groove.h $(PREFIX)/include
 	rm -f $(PREFIX)/lib/libgroove.so
-	ln -s $(GROOVE_SO_DEST) $(PREFIX)/lib/libgroove.so
-	ldconfig -n $(PREFIX)/lib
+	ln -s $(GROOVE_SO_NAME) $(PREFIX)/lib/libgroove.so
+	ldconfig
 
 uninstall:
 	rm -f $(PREFIX)/lib/libgroove.so*
