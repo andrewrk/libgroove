@@ -116,10 +116,6 @@ int groove_file_save(struct GrooveFile *file);
 // GrooveLoudnessDetector
 double groove_file_duration(struct GrooveFile *file);
 
-// see notes for groove_file_duration. This returns frame count instead
-// of seconds.
-int64_t groove_file_frame_count(struct GrooveFile *file);
-
 // get the audio format of the main audio stream of a file
 void groove_file_audio_format(struct GrooveFile *file,
         struct GrooveAudioFormat *audio_format);
