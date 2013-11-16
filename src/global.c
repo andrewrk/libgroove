@@ -85,7 +85,7 @@ uint64_t groove_channel_layout_default(int count) {
 }
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format) {
-    return av_get_bytes_per_sample(format);
+    return av_get_bytes_per_sample((enum AVSampleFormat)format);
 }
 
 const char *groove_version(void) {

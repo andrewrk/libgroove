@@ -153,7 +153,7 @@ void groove_file_audio_format(struct GrooveFile *file, struct GrooveAudioFormat 
     AVCodecContext *codec_ctx = f->audio_st->codec;
     audio_format->sample_rate = codec_ctx->sample_rate;
     audio_format->channel_layout = codec_ctx->channel_layout;
-    audio_format->sample_fmt = codec_ctx->sample_fmt;
+    audio_format->sample_fmt = (enum GrooveSampleFormat)codec_ctx->sample_fmt;
 }
 
 struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
