@@ -18,6 +18,8 @@ int main(int argc, char * argv[]) {
     if (argc < 2)
         return usage(exe);
 
+    printf("Using libgroove v%s\n", groove_version());
+
     char * filename = argv[1];
     groove_init();
     atexit(groove_finish);

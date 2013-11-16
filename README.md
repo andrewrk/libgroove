@@ -27,11 +27,16 @@ available in the #libgroove channel of irc.freenode.org.
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification).
    * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) accoustid fingerprint
  * Thread-safe.
+ * Example programs included:
+   * `playlist` - play a series of songs with gapless playback
+   * `metadata` - read or update song metadata
+   * `replaygain` - report the suggested replaygain for a set of files
+   * `transcode` - transcode one or more files into one output file
 
 ## Dependencies
 
-You will need these to compile libgroove. These are most likely in your
-distribution's package manager.
+You will need these to compile libgroove. All of these are almost certainly
+in your local package manager.
 
  * [libbz2-dev](http://www.bzip.org/)
  * [yasm](http://yasm.tortall.net/)
@@ -52,20 +57,10 @@ dependencies and instead make our own debian upstream release.
 
 ## Installation
 
- 1. Once you have the dependencies installed, you can use `make` to build
-    libgroove.so. Using the `-jx` option where x is how many cores you have
-    is recommended.
- 2. Next install libgroove to your system with `make install`. You will need
-    root privileges if you leave the `PREFIX` variable to its default, which
-    is `/usr/local`.
- 3. With libgroove installed in your system, you can compile the examples with
-    `make examples`.
- 4. Optionally you can install the examples to your system with
-   `make install-examples`. These examples are:
-    * `playlist` - play a series of songs with gapless playback
-    * `metadata` - read or update song metadata
-    * `replaygain` - report the suggested replaygain for a set of files
-    * `transcode` - transcode one or more files into one output file
+ 1. `mkdir build && cd build && cmake ../`
+ 2. Verify that all dependencies say "OK".
+ 3. `make`
+ 4. `sudo make install`
 
 ## Projects Using libgroove
 

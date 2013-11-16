@@ -6,6 +6,7 @@
  */
 
 #include "groove.h"
+#include "config.h"
 
 #include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
@@ -85,4 +86,20 @@ uint64_t groove_channel_layout_default(int count) {
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format) {
     return av_get_bytes_per_sample(format);
+}
+
+const char *groove_version(void) {
+    return GROOVE_VERSION_STRING;
+}
+
+int groove_version_major(void) {
+    return GROOVE_VERSION_MAJOR;
+}
+
+int groove_version_minor(void) {
+    return GROOVE_VERSION_MINOR;
+}
+
+int groove_version_patch(void) {
+    return GROOVE_VERSION_PATCH;
 }
