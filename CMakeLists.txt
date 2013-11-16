@@ -80,6 +80,11 @@ set(LIBAV_SRC "${PROJECT_SOURCE_DIR}/deps/libav")
 set(LIBAV_BUILD "${LIBAV_SRC}/build")
 set(EBUR128_SRC "${PROJECT_SOURCE_DIR}/deps/ebur128")
 set(LIB_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -g -D_REENTRANT")
+if(UNIX)
+  set(LIB_LDFLAGS "-Wl,-Bsymbolic")
+else(UNIX)
+  set(LIB_LDFLAGS "")
+endif(UNIX)
 set(LIB_INCLUDES ${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/include ${SDL2_INCLUDE_DIR} ${LIBAV_BUILD}/include ${EBUR128_SRC})
 set(EXAMPLE_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -g")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}/include")
@@ -106,7 +111,7 @@ set_target_properties(groove PROPERTIES
     SOVERSION ${VERSION_MAJOR}
     VERSION ${VERSION}
     COMPILE_FLAGS ${LIB_CFLAGS}
-    LINK_FLAGS "-Wl,-Bsymbolic"
+    LINK_FLAGS ${LIB_LDFLAGS}
     )
 target_link_libraries(groove
   ebur128_static
