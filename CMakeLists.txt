@@ -23,9 +23,40 @@ endif(C99_FLAG_DETECTED)
 # check for SDL2
 find_package(SDL2)
 if(SDL2_FOUND)
-  set(STATUS_SDL2 "OK")
+  set(STATUS_SDL2 "OK (system)")
+  set(SDL2_IS_BUNDLED FALSE)
 else(SDL2_FOUND)
-  set(STATUS_SDL2 "not found")
+  find_package(DL)
+  if (DL_FOUND)
+    set(STATUS_SDL2 "OK (bundled)")
+    set(SDL2_IS_BUNDLED TRUE)
+
+    set(SDL2_SRC "${PROJECT_SOURCE_DIR}/deps/SDL2")
+    set(SDL2_BUILD "${SDL2_SRC}/build")
+    ExternalProject_Add(sdl2_bundled
+      SOURCE_DIR ${SDL2_SRC}
+      BINARY_DIR ${SDL2_SRC}
+      INSTALL_DIR ${SDL2_BUILD}
+      CONFIGURE_COMMAND ./configure
+          --prefix=${SDL2_BUILD}
+          --with-pic
+          --disable-shared
+          --disable-video
+          --disable-render
+          --disable-events
+          --disable-joystick
+          --disable-haptic
+          --disable-power
+          --disable-file
+          --disable-loadso
+          --disable-cpuinfo
+          --disable-timers
+      )
+    set(SDL2_INCLUDE_DIR "${SDL2_BUILD}/include")
+    set(SDL2_LIBRARY "${SDL2_BUILD}/lib/libSDL2.a" "${DL_LIBRARIES}")
+  else(DL_FOUND)
+    set(STATUS_SDL2 "-ldl not found")
+  endif(DL_FOUND)
 endif(SDL2_FOUND)
 
 # check for bz2
@@ -104,6 +135,9 @@ set_target_properties(groove_static PROPERTIES
     COMPILE_FLAGS "${LIB_CFLAGS}")
 target_include_directories(groove_static BEFORE PUBLIC ${LIB_INCLUDES})
 add_dependencies(groove_static ebur128_static libav)
+if(SDL2_IS_BUNDLED)
+  add_dependencies(groove_static sdl2_bundled)
+endif(SDL2_IS_BUNDLED)
 
 
 add_library(groove SHARED ${SOURCES} ${HEADERS})
@@ -128,6 +162,9 @@ target_link_libraries(groove
   ${CMAKE_THREAD_LIBS_INIT})
 target_include_directories(groove BEFORE PUBLIC ${LIB_INCLUDES})
 add_dependencies(groove ebur128_static libav)
+if(SDL2_IS_BUNDLED)
+  add_dependencies(groove sdl2_bundled)
+endif(SDL2_IS_BUNDLED)
 
 add_executable(metadata example/metadata.c)
 set_target_properties(metadata PROPERTIES
