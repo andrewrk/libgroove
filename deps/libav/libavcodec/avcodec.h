@@ -762,10 +762,12 @@ typedef struct RcOverride{
  * Codec should fill in channel configuration and samplerate instead of container
  */
 #define CODEC_CAP_CHANNEL_CONF     0x0400
+#if FF_API_NEG_LINESIZES
 /**
- * Codec is able to deal with negative linesizes
+ * @deprecated no codecs use this capability
  */
 #define CODEC_CAP_NEG_LINESIZES    0x0800
+#endif
 /**
  * Codec supports frame-level multithreading.
  */
@@ -2494,7 +2496,7 @@ typedef struct AVCodecContext {
     /**
      * the picture in the bitstream
      * - encoding: Set by libavcodec.
-     * - decoding: Set by libavcodec.
+     * - decoding: unused
      */
     AVFrame *coded_frame;
 
@@ -3094,14 +3096,13 @@ const AVClass *avcodec_get_class(void);
  */
 int avcodec_copy_context(AVCodecContext *dest, const AVCodecContext *src);
 
+#if FF_API_AVFRAME_LAVC
 /**
- * Allocate an AVFrame and set its fields to default values.  The resulting
- * struct must be freed using avcodec_free_frame().
- *
- * @return An AVFrame filled with default values or NULL on failure.
- * @see avcodec_get_frame_defaults
+ * @deprecated use av_frame_alloc()
  */
+attribute_deprecated
 AVFrame *avcodec_alloc_frame(void);
+#endif
 
 /**
  * Set the fields of the given AVFrame to default values.

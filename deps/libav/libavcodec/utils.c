@@ -815,6 +815,7 @@ void avcodec_get_frame_defaults(AVFrame *frame)
     frame->extended_data       = frame->data;
 }
 
+#if FF_API_AVFRAME_LAVC
 AVFrame *avcodec_alloc_frame(void)
 {
     AVFrame *frame = av_mallocz(sizeof(AVFrame));
@@ -826,6 +827,7 @@ AVFrame *avcodec_alloc_frame(void)
 
     return frame;
 }
+#endif
 
 void avcodec_free_frame(AVFrame **frame)
 {
@@ -1125,7 +1127,7 @@ static int pad_last_frame(AVCodecContext *s, AVFrame **dst, const AVFrame *src)
     AVFrame *frame = NULL;
     int ret;
 
-    if (!(frame = avcodec_alloc_frame()))
+    if (!(frame = av_frame_alloc()))
         return AVERROR(ENOMEM);
 
     frame->format         = src->format;

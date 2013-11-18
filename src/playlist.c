@@ -843,7 +843,7 @@ struct GroovePlaylist * groove_playlist_create(void) {
         return NULL;
     }
 
-    p->in_frame = avcodec_alloc_frame();
+    p->in_frame = av_frame_alloc();
 
     if (!p->in_frame) {
         groove_playlist_destroy(playlist);
