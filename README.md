@@ -42,19 +42,21 @@ in your local package manager.
  * [libbz2-dev](http://www.bzip.org/)
  * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
- * [libsdl2-dev](http://www.libsdl.org/)
  * [libmp3lame-dev](http://lame.sourceforge.net/)
 
 ### Bundled Dependencies
 
-These are bundled with libgroove. You don't need to do anything except
-appreciate them.
-
-Once libav makes a debian upstream release, we will no longer bundle these
-dependencies and instead make our own debian upstream release.
-
  * [libav](http://libav.org)
+   - Once libav makes an upstream release, libgroove will try to build against
+     the system libav and fall back on the bundled version.
  * [libebur128](https://github.com/jiixyj/libebur128)
+   - libgroove always builds with the bundled libebur128. It is
+     [on the roadmap](https://github.com/superjoe30/libgroove/issues/38) to
+     to build against the system libebur128 and fall back on the bundled
+     version.
+ * [libsdl2-dev](http://www.libsdl.org/)
+   - libgroove tries to build against system SDL2 library and falls back on
+     the bundled version.
 
 ## Installation
 
