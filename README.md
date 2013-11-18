@@ -32,6 +32,7 @@ available in the #libgroove channel of irc.freenode.org.
    * `metadata` - read or update song metadata
    * `replaygain` - report the suggested replaygain for a set of files
    * `transcode` - transcode one or more files into one output file
+ * Cross-platform.
 
 ## Dependencies
 
