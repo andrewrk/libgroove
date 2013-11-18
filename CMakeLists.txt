@@ -26,37 +26,30 @@ if(SDL2_FOUND)
   set(STATUS_SDL2 "OK (system)")
   set(SDL2_IS_BUNDLED FALSE)
 else(SDL2_FOUND)
-  find_package(DL)
-  if (DL_FOUND)
-    set(STATUS_SDL2 "OK (bundled)")
-    set(SDL2_IS_BUNDLED TRUE)
+  set(STATUS_SDL2 "OK (bundled)")
+  set(SDL2_IS_BUNDLED TRUE)
 
-    set(SDL2_SRC "${PROJECT_SOURCE_DIR}/deps/SDL2")
-    set(SDL2_BUILD "${SDL2_SRC}/build")
-    ExternalProject_Add(sdl2_bundled
-      SOURCE_DIR ${SDL2_SRC}
-      BINARY_DIR ${SDL2_SRC}
-      INSTALL_DIR ${SDL2_BUILD}
-      CONFIGURE_COMMAND ./configure
-          --prefix=${SDL2_BUILD}
-          --with-pic
-          --disable-shared
-          --disable-video
-          --disable-render
-          --disable-events
-          --disable-joystick
-          --disable-haptic
-          --disable-power
-          --disable-file
-          --disable-loadso
-          --disable-cpuinfo
-          --disable-timers
-      )
-    set(SDL2_INCLUDE_DIR "${SDL2_BUILD}/include")
-    set(SDL2_LIBRARY "${SDL2_BUILD}/lib/libSDL2.a" "${DL_LIBRARIES}")
-  else(DL_FOUND)
-    set(STATUS_SDL2 "-ldl not found")
-  endif(DL_FOUND)
+  set(SDL_STATIC ON)
+  set(SDL_Threads ON)
+
+  set(SDL_SHARED OFF CACHE BOOL "test")
+  set(SDL_VIDEO OFF CACHE BOOL "test")
+  set(SDL_RENDER OFF CACHE BOOL "test")
+  set(SDL_EVENTS OFF CACHE BOOL "test")
+  set(SDL_JOYSTICK OFF CACHE BOOL "test")
+  set(SDL_HAPTIC OFF CACHE BOOL "test")
+  set(SDL_POWER OFF CACHE BOOL "test")
+  set(SDL_TIMERS OFF CACHE BOOL "test")
+  set(SDL_FILE OFF CACHE BOOL "test")
+  set(SDL_LOADSO OFF CACHE BOOL "test")
+  set(SDL_CPUINFO OFF CACHE BOOL "test")
+  set(SDL_FILESYSTEM OFF CACHE BOOL "test")
+
+  set(EXTRA_CFLAGS "-fPIC" CACHE STRING "test")
+
+  set(SDL2_SRC "${PROJECT_SOURCE_DIR}/deps/SDL2")
+  add_subdirectory(${SDL2_SRC})
+  set(SDL2_INCLUDE_DIR ${SDL2_SRC})
 endif(SDL2_FOUND)
 
 # check for bz2
@@ -132,11 +125,11 @@ add_subdirectory(${EBUR128_SRC})
 add_library(groove_static STATIC ${SOURCES} ${HEADERS})
 set_target_properties(groove_static PROPERTIES
     OUTPUT_NAME groove
-    COMPILE_FLAGS "${LIB_CFLAGS}")
+    COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
 target_include_directories(groove_static BEFORE PUBLIC ${LIB_INCLUDES})
 add_dependencies(groove_static ebur128_static libav)
 if(SDL2_IS_BUNDLED)
-  add_dependencies(groove_static sdl2_bundled)
+  add_dependencies(groove_static SDL2-static)
 endif(SDL2_IS_BUNDLED)
 
 
@@ -157,13 +150,17 @@ target_link_libraries(groove
   ${LIBAV_BUILD}/lib/libavutil.a
   ${BZIP2_LIBRARIES}
   ${ZLIB_LIBRARIES}
-  ${SDL2_LIBRARY}
   ${MP3LAME_LIBRARY}
   ${CMAKE_THREAD_LIBS_INIT})
+if(SDL2_IS_BUNDLED)
+  target_link_libraries(groove SDL2-static)
+else()
+  target_link_libraries(groove ${SDL2_LIBRARY})
+endif()
 target_include_directories(groove BEFORE PUBLIC ${LIB_INCLUDES})
 add_dependencies(groove ebur128_static libav)
 if(SDL2_IS_BUNDLED)
-  add_dependencies(groove sdl2_bundled)
+  add_dependencies(groove SDL2-static)
 endif(SDL2_IS_BUNDLED)
 
 add_executable(metadata example/metadata.c)
