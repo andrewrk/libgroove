@@ -236,7 +236,7 @@ static int alloc_frame_buffer(MpegEncContext *s, Picture *pic)
         r = avcodec_default_get_buffer2(s->avctx, &pic->f, 0);
     }
 
-    if (r < 0 || !pic->f.data[0]) {
+    if (r < 0 || !pic->f.buf[0]) {
         av_log(s->avctx, AV_LOG_ERROR, "get_buffer() failed (%d %p)\n",
                r, pic->f.data[0]);
         return -1;
@@ -372,7 +372,7 @@ int ff_alloc_picture(MpegEncContext *s, Picture *pic, int shared)
         assert(pic->f.data[0]);
         pic->shared = 1;
     } else {
-        assert(!pic->f.data[0]);
+        assert(!pic->f.buf[0]);
 
         if (alloc_frame_buffer(s, pic) < 0)
             return -1;
@@ -518,6 +518,15 @@ fail:
     return ret;
 }
 
+static void exchange_uv(MpegEncContext *s)
+{
+    int16_t (*tmp)[64];
+
+    tmp           = s->pblocks[4];
+    s->pblocks[4] = s->pblocks[5];
+    s->pblocks[5] = tmp;
+}
+
 static int init_duplicate_context(MpegEncContext *s)
 {
     int y_size = s->b8_stride * (2 * s->mb_height + 1);
@@ -548,6 +557,8 @@ static int init_duplicate_context(MpegEncContext *s)
     for (i = 0; i < 12; i++) {
         s->pblocks[i] = &s->block[i];
     }
+    if (s->avctx->codec_tag == AV_RL32("VCR2"))
+        exchange_uv(s);
 
     if (s->out_format == FMT_H263) {
         /* ac values */
@@ -622,6 +633,8 @@ int ff_update_duplicate_context(MpegEncContext *dst, MpegEncContext *src)
     for (i = 0; i < 12; i++) {
         dst->pblocks[i] = &dst->block[i];
     }
+    if (dst->avctx->codec_tag == AV_RL32("VCR2"))
+        exchange_uv(dst);
     if (!dst->edge_emu_buffer &&
         (ret = ff_mpv_frame_size_alloc(dst, dst->linesize)) < 0) {
         av_log(dst->avctx, AV_LOG_ERROR, "failed to allocate context "
@@ -674,7 +687,7 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
 
     for (i = 0; i < MAX_PICTURE_COUNT; i++) {
         ff_mpeg_unref_picture(s, &s->picture[i]);
-        if (s1->picture[i].f.data[0] &&
+        if (s1->picture[i].f.buf[0] &&
             (ret = ff_mpeg_ref_picture(s, &s->picture[i], &s1->picture[i])) < 0)
             return ret;
     }
@@ -682,7 +695,7 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
 #define UPDATE_PICTURE(pic)\
 do {\
     ff_mpeg_unref_picture(s, &s->pic);\
-    if (s1->pic.f.data[0])\
+    if (s1->pic.f.buf[0])\
         ret = ff_mpeg_ref_picture(s, &s->pic, &s1->pic);\
     else\
         ret = update_picture_tables(&s->pic, &s1->pic);\
@@ -1401,7 +1414,7 @@ void ff_release_unused_pictures(MpegEncContext*s, int remove_current)
 
 static inline int pic_is_unused(MpegEncContext *s, Picture *pic)
 {
-    if (pic->f.data[0] == NULL)
+    if (pic->f.buf[0] == NULL)
         return 1;
     if (pic->needs_realloc && !(pic->reference & DELAYED_PIC_REF))
         return 1;
@@ -1414,7 +1427,7 @@ static int find_unused_picture(MpegEncContext *s, int shared)
 
     if (shared) {
         for (i = 0; i < MAX_PICTURE_COUNT; i++) {
-            if (s->picture[i].f.data[0] == NULL)
+            if (s->picture[i].f.buf[0] == NULL)
                 return i;
         }
     } else {
@@ -1476,7 +1489,7 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
     /* mark & release old frames */
     if (s->pict_type != AV_PICTURE_TYPE_B && s->last_picture_ptr &&
         s->last_picture_ptr != s->next_picture_ptr &&
-        s->last_picture_ptr->f.data[0]) {
+        s->last_picture_ptr->f.buf[0]) {
         ff_mpeg_unref_picture(s, s->last_picture_ptr);
     }
 
@@ -1501,7 +1514,7 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
         ff_release_unused_pictures(s, 1);
 
         if (s->current_picture_ptr &&
-            s->current_picture_ptr->f.data[0] == NULL) {
+            s->current_picture_ptr->f.buf[0] == NULL) {
             // we already have a unused image
             // (maybe it was set before reading the header)
             pic = s->current_picture_ptr;
@@ -1561,7 +1574,7 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
             s->pict_type, s->droppable);
 
     if ((s->last_picture_ptr == NULL ||
-         s->last_picture_ptr->f.data[0] == NULL) &&
+         s->last_picture_ptr->f.buf[0] == NULL) &&
         (s->pict_type != AV_PICTURE_TYPE_I ||
          s->picture_structure != PICT_FRAME)) {
         int h_chroma_shift, v_chroma_shift;
@@ -1599,7 +1612,7 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
         ff_thread_report_progress(&s->last_picture_ptr->tf, INT_MAX, 1);
     }
     if ((s->next_picture_ptr == NULL ||
-         s->next_picture_ptr->f.data[0] == NULL) &&
+         s->next_picture_ptr->f.buf[0] == NULL) &&
         s->pict_type == AV_PICTURE_TYPE_B) {
         /* Allocate a dummy frame */
         i = ff_find_unused_picture(s, 0);
@@ -1618,21 +1631,21 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
 
     if (s->last_picture_ptr) {
         ff_mpeg_unref_picture(s, &s->last_picture);
-        if (s->last_picture_ptr->f.data[0] &&
+        if (s->last_picture_ptr->f.buf[0] &&
             (ret = ff_mpeg_ref_picture(s, &s->last_picture,
                                        s->last_picture_ptr)) < 0)
             return ret;
     }
     if (s->next_picture_ptr) {
         ff_mpeg_unref_picture(s, &s->next_picture);
-        if (s->next_picture_ptr->f.data[0] &&
+        if (s->next_picture_ptr->f.buf[0] &&
             (ret = ff_mpeg_ref_picture(s, &s->next_picture,
                                        s->next_picture_ptr)) < 0)
             return ret;
     }
 
     if (s->pict_type != AV_PICTURE_TYPE_I &&
-        !(s->last_picture_ptr && s->last_picture_ptr->f.data[0])) {
+        !(s->last_picture_ptr && s->last_picture_ptr->f.buf[0])) {
         av_log(s, AV_LOG_ERROR,
                "Non-reference picture received and no reference available\n");
         return AVERROR_INVALIDDATA;
