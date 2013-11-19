@@ -354,7 +354,7 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
             // create aformat filter
             snprintf(p->strbuf, sizeof(p->strbuf),
                     "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%"PRIx64,
-                    av_get_sample_fmt_name(audio_format->sample_fmt),
+                    av_get_sample_fmt_name((enum AVSampleFormat)audio_format->sample_fmt),
                     audio_format->sample_rate, audio_format->channel_layout);
             av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
             err = avfilter_graph_create_filter(&map_item->aformat_ctx, aformat,
@@ -760,11 +760,11 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
 
     // cache computed audio format stuff
     int channel_count = av_get_channel_layout_nb_channels(sink->audio_format.channel_layout);
-    sink->bytes_per_sec = channel_count * sink->audio_format.sample_rate *
-        av_get_bytes_per_sample(sink->audio_format.sample_fmt);
+    int bytes_per_frame = channel_count *
+        av_get_bytes_per_sample((enum AVSampleFormat)sink->audio_format.sample_fmt);
+    sink->bytes_per_sec = bytes_per_frame * sink->audio_format.sample_rate;
 
-    s->min_audioq_size = sink->buffer_size * channel_count *
-        av_get_bytes_per_sample(sink->audio_format.sample_fmt);
+    s->min_audioq_size = sink->buffer_size * bytes_per_frame;
     av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
 
     // add the sink to the entry that matches its audio format
@@ -843,7 +843,7 @@ struct GroovePlaylist * groove_playlist_create(void) {
         return NULL;
     }
 
-    p->in_frame = avcodec_alloc_frame();
+    p->in_frame = av_frame_alloc();
 
     if (!p->in_frame) {
         groove_playlist_destroy(playlist);

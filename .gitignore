@@ -1,17 +1,5 @@
-*.o
-*.so
-*.a
-/example/playlist
-/example/metadata
-/example/replaygain
-/example/transcode
-/deps/libav/out
-/deps/ebur128/build
+/build
 
+/deps/libav/build
+/deps/ebur128/build
 /deps/SDL2/build
-/deps/SDL2/Makefile
-/deps/SDL2/Makefile.rules
-/deps/SDL2/config.log
-/deps/SDL2/config.status
-/deps/SDL2/include/SDL_config.h
-/deps/SDL2/libtool

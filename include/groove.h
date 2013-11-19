@@ -68,6 +68,11 @@ struct GrooveAudioFormat {
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
+int groove_version_major(void);
+int groove_version_minor(void);
+int groove_version_patch(void);
+const char *groove_version(void);
+
 /************* GrooveFile *************/
 struct GrooveFile {
     int dirty; // read-only

@@ -400,15 +400,15 @@ static enum GrooveSampleFormat closest_supported_sample_fmt(AVCodec *codec,
     if (!codec->sample_fmts)
         return target;
 
-    int target_size = av_get_bytes_per_sample(target);
+    int target_size = av_get_bytes_per_sample((enum AVSampleFormat)target);
     const enum GrooveSampleFormat *p = (enum GrooveSampleFormat*) codec->sample_fmts;
     enum GrooveSampleFormat best = *p;
-    int best_size = av_get_bytes_per_sample(best);
+    int best_size = av_get_bytes_per_sample((enum AVSampleFormat)best);
     while (*p != GROOVE_SAMPLE_FMT_NONE) {
         if (*p == target)
             return target;
 
-        int size = av_get_bytes_per_sample(*p);
+        int size = av_get_bytes_per_sample((enum AVSampleFormat)*p);
         if ((best_size < target_size && size > best_size) ||
             (size >= target_size &&
              abs_diff(target_size, size) < abs_diff(target_size, best_size)))
@@ -421,7 +421,7 @@ static enum GrooveSampleFormat closest_supported_sample_fmt(AVCodec *codec,
     }
 
     // prefer interleaved format
-    enum GrooveSampleFormat packed_best = av_get_packed_sample_fmt(best);
+    enum GrooveSampleFormat packed_best = (enum GrooveSampleFormat)av_get_packed_sample_fmt((enum AVSampleFormat)best);
     return codec_supports_fmt(codec, packed_best) ? packed_best : best;
 }
 
@@ -482,11 +482,11 @@ static uint64_t closest_supported_channel_layout(AVCodec *codec, uint64_t target
 }
 
 static void log_audio_fmt(const struct GrooveAudioFormat *fmt) {
-    const int buf_size = 128;
-    char buf[buf_size];
+    char buf[128];
 
-    av_get_channel_layout_string(buf, buf_size, 0, fmt->channel_layout);
-    av_log(NULL, AV_LOG_INFO, "encoder: using audio format: %s, %d Hz, %s\n", av_get_sample_fmt_name(fmt->sample_fmt),
+    av_get_channel_layout_string(buf, sizeof(buf), 0, fmt->channel_layout);
+    av_log(NULL, AV_LOG_INFO, "encoder: using audio format: %s, %d Hz, %s\n",
+            av_get_sample_fmt_name((enum AVSampleFormat)fmt->sample_fmt),
             fmt->sample_rate, buf);
 }
 
@@ -557,7 +557,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
 
     AVCodecContext *codec_ctx = e->stream->codec;
     codec_ctx->bit_rate = encoder->bit_rate;
-    codec_ctx->sample_fmt = encoder->actual_audio_format.sample_fmt;
+    codec_ctx->sample_fmt = (enum AVSampleFormat)encoder->actual_audio_format.sample_fmt;
     codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
     codec_ctx->channel_layout = encoder->actual_audio_format.channel_layout;
     codec_ctx->channels = av_get_channel_layout_nb_channels(encoder->actual_audio_format.channel_layout);

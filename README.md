@@ -27,45 +27,43 @@ available in the #libgroove channel of irc.freenode.org.
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification).
    * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) accoustid fingerprint
  * Thread-safe.
+ * Example programs included:
+   * `playlist` - play a series of songs with gapless playback
+   * `metadata` - read or update song metadata
+   * `replaygain` - report the suggested replaygain for a set of files
+   * `transcode` - transcode one or more files into one output file
+ * Cross-platform.
 
 ## Dependencies
 
-You will need these to compile libgroove. These are most likely in your
-distribution's package manager.
+You will need these to compile libgroove. All of these are almost certainly
+in your local package manager.
 
  * [libbz2-dev](http://www.bzip.org/)
  * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
- * [libsdl2-dev](http://www.libsdl.org/)
  * [libmp3lame-dev](http://lame.sourceforge.net/)
 
 ### Bundled Dependencies
 
-These are bundled with libgroove. You don't need to do anything except
-appreciate them.
-
-Once libav makes a debian upstream release, we will no longer bundle these
-dependencies and instead make our own debian upstream release.
-
  * [libav](http://libav.org)
+   - Once libav makes an upstream release, libgroove will try to build against
+     the system libav and fall back on the bundled version.
  * [libebur128](https://github.com/jiixyj/libebur128)
+   - libgroove always builds with the bundled libebur128. It is
+     [on the roadmap](https://github.com/superjoe30/libgroove/issues/38) to
+     to build against the system libebur128 and fall back on the bundled
+     version.
+ * [libsdl2-dev](http://www.libsdl.org/)
+   - libgroove tries to build against system SDL2 library and falls back on
+     the bundled version.
 
 ## Installation
 
- 1. Once you have the dependencies installed, you can use `make` to build
-    libgroove.so. Using the `-jx` option where x is how many cores you have
-    is recommended.
- 2. Next install libgroove to your system with `make install`. You will need
-    root privileges if you leave the `PREFIX` variable to its default, which
-    is `/usr/local`.
- 3. With libgroove installed in your system, you can compile the examples with
-    `make examples`.
- 4. Optionally you can install the examples to your system with
-   `make install-examples`. These examples are:
-    * `playlist` - play a series of songs with gapless playback
-    * `metadata` - read or update song metadata
-    * `replaygain` - report the suggested replaygain for a set of files
-    * `transcode` - transcode one or more files into one output file
+ 1. `mkdir build && cd build && cmake ../`
+ 2. Verify that all dependencies say "OK".
+ 3. `make`
+ 4. `sudo make install`
 
 ## Projects Using libgroove
 
