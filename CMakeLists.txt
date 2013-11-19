@@ -111,23 +111,26 @@ file(GLOB_RECURSE SOURCES ${CMAKE_SOURCE_DIR}/src/*.c)
 file(GLOB_RECURSE HEADERS ${CMAKE_SOURCE_DIR}/src/*.h)
 
 set(LIBAV_SRC "${PROJECT_SOURCE_DIR}/deps/libav")
-set(LIBAV_BUILD "${LIBAV_SRC}/build")
+set(LIBAV_BUILD "${PROJECT_BINARY_DIR}/deps/libav")
+set(LIBAV_INSTALL "${LIBAV_BUILD}/install")
 set(LIB_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -g -D_REENTRANT")
 if(APPLE)
   set(LIB_LDFLAGS " ")
 else(APPLE)
   set(LIB_LDFLAGS "-Wl,-Bsymbolic")
 endif(APPLE)
-set(LIB_INCLUDES ${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/include ${SDL2_INCLUDE_DIR} ${LIBAV_BUILD}/include ${EBUR128_INCLUDE_DIR})
+set(LIB_INCLUDES ${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/include ${SDL2_INCLUDE_DIR} ${LIBAV_INSTALL}/include ${EBUR128_INCLUDE_DIR})
 set(EXAMPLE_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -g")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 
 ExternalProject_Add(libav
   SOURCE_DIR ${LIBAV_SRC}
-  BINARY_DIR ${LIBAV_SRC}
-  INSTALL_DIR ${LIBAV_BUILD}
-  CONFIGURE_COMMAND ./configure --prefix=${LIBAV_BUILD} --enable-pic --enable-gpl --enable-libmp3lame
+  BINARY_DIR ${LIBAV_BUILD}
+  INSTALL_DIR ${LIBAV_INSTALL}
+  CONFIGURE_COMMAND ${LIBAV_SRC}/configure --prefix=${LIBAV_INSTALL} --enable-pic --enable-gpl --enable-libmp3lame
   )
+# until libav makes a release we're stuck bundling it.
+set(STATUS_LIBAV "OK (bundled)")
 
 
 add_library(groove_static STATIC ${SOURCES} ${HEADERS})
@@ -152,12 +155,12 @@ set_target_properties(groove PROPERTIES
     LINK_FLAGS ${LIB_LDFLAGS}
     )
 target_link_libraries(groove
-  ${LIBAV_BUILD}/lib/libavfilter.a
-  ${LIBAV_BUILD}/lib/libavformat.a
-  ${LIBAV_BUILD}/lib/libavcodec.a
-  ${LIBAV_BUILD}/lib/libavresample.a
-  ${LIBAV_BUILD}/lib/libswscale.a
-  ${LIBAV_BUILD}/lib/libavutil.a
+  ${LIBAV_INSTALL}/lib/libavfilter.a
+  ${LIBAV_INSTALL}/lib/libavformat.a
+  ${LIBAV_INSTALL}/lib/libavcodec.a
+  ${LIBAV_INSTALL}/lib/libavresample.a
+  ${LIBAV_INSTALL}/lib/libswscale.a
+  ${LIBAV_INSTALL}/lib/libavutil.a
   ${BZIP2_LIBRARIES}
   ${ZLIB_LIBRARIES}
   ${MP3LAME_LIBRARY}
@@ -224,6 +227,7 @@ message(
 "* threads                      : ${STATUS_THREADS}\n"
 "* SDL2                         : ${STATUS_SDL2}\n"
 "* ebur128                      : ${STATUS_EBUR128}\n"
+"* libav                        : ${STATUS_LIBAV}\n"
 "* bzip2                        : ${STATUS_BZIP2}\n"
 "* mp3lame                      : ${STATUS_MP3LAME}\n"
 "* zlib                         : ${STATUS_ZLIB}\n"
