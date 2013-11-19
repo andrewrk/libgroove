@@ -50,10 +50,8 @@ in your local package manager.
    - Once libav makes an upstream release, libgroove will try to build against
      the system libav and fall back on the bundled version.
  * [libebur128](https://github.com/jiixyj/libebur128)
-   - libgroove always builds with the bundled libebur128. It is
-     [on the roadmap](https://github.com/superjoe30/libgroove/issues/38) to
-     to build against the system libebur128 and fall back on the bundled
-     version.
+   - libgroove tries to build against system libebur128 library and falls back
+     on the bundled version.
  * [libsdl2-dev](http://www.libsdl.org/)
    - libgroove tries to build against system SDL2 library and falls back on
      the bundled version.
