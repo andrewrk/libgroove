@@ -20,6 +20,20 @@ else(C99_FLAG_DETECTED)
   set(STATUS_C99 "not found")
 endif(C99_FLAG_DETECTED)
 
+# check for ebur128
+find_package(ebur128)
+if(EBUR128_FOUND)
+  set(STATUS_EBUR128 "OK (system)")
+  set(EBUR128_IS_BUNDLED FALSE)
+else(EBUR128_FOUND)
+  set(STATUS_EBUR128 "OK (bundled)")
+  set(EBUR128_IS_BUNDLED TRUE)
+
+  set(EBUR128_SRC "${PROJECT_SOURCE_DIR}/deps/ebur128")
+  add_subdirectory(${EBUR128_SRC})
+  set(EBUR128_INCLUDE_DIR ${EBUR128_SRC})
+endif(EBUR128_FOUND)
+
 # check for SDL2
 find_package(SDL2)
 if(SDL2_FOUND)
@@ -98,14 +112,13 @@ file(GLOB_RECURSE HEADERS ${CMAKE_SOURCE_DIR}/src/*.h)
 
 set(LIBAV_SRC "${PROJECT_SOURCE_DIR}/deps/libav")
 set(LIBAV_BUILD "${LIBAV_SRC}/build")
-set(EBUR128_SRC "${PROJECT_SOURCE_DIR}/deps/ebur128")
 set(LIB_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -g -O3 -D_REENTRANT")
 if(APPLE)
   set(LIB_LDFLAGS " ")
 else(APPLE)
   set(LIB_LDFLAGS "-Wl,-Bsymbolic")
 endif(APPLE)
-set(LIB_INCLUDES ${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/include ${SDL2_INCLUDE_DIR} ${LIBAV_BUILD}/include ${EBUR128_SRC})
+set(LIB_INCLUDES ${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/include ${SDL2_INCLUDE_DIR} ${LIBAV_BUILD}/include ${EBUR128_INCLUDE_DIR})
 set(EXAMPLE_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -g -O3")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 
@@ -116,17 +129,19 @@ ExternalProject_Add(libav
   CONFIGURE_COMMAND ./configure --prefix=${LIBAV_BUILD} --enable-pic --enable-gpl --enable-libmp3lame
   )
 
-add_subdirectory(${EBUR128_SRC})
 
 add_library(groove_static STATIC ${SOURCES} ${HEADERS})
 set_target_properties(groove_static PROPERTIES
     OUTPUT_NAME groove
     COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
 target_include_directories(groove_static BEFORE PUBLIC ${LIB_INCLUDES})
-add_dependencies(groove_static ebur128_static libav)
+add_dependencies(groove_static libav)
 if(SDL2_IS_BUNDLED)
   add_dependencies(groove_static SDL2-static)
 endif(SDL2_IS_BUNDLED)
+if(EBUR128_IS_BUNDLED)
+  add_dependencies(groove_static ebur128_static)
+endif(EBUR128_IS_BUNDLED)
 
 
 add_library(groove SHARED ${SOURCES} ${HEADERS})
@@ -137,7 +152,6 @@ set_target_properties(groove PROPERTIES
     LINK_FLAGS ${LIB_LDFLAGS}
     )
 target_link_libraries(groove
-  ebur128_static
   ${LIBAV_BUILD}/lib/libavfilter.a
   ${LIBAV_BUILD}/lib/libavformat.a
   ${LIBAV_BUILD}/lib/libavcodec.a
@@ -153,6 +167,11 @@ if(SDL2_IS_BUNDLED)
 else()
   target_link_libraries(groove ${SDL2_LIBRARY})
 endif()
+if(EBUR128_IS_BUNDLED)
+  target_link_libraries(groove ebur128_static)
+else(EBUR128_IS_BUNDLED)
+  target_link_libraries(groove ${EBUR128_LIBRARY})
+endif(EBUR128_IS_BUNDLED)
 target_include_directories(groove BEFORE PUBLIC ${LIB_INCLUDES})
 add_dependencies(groove ebur128_static libav)
 if(SDL2_IS_BUNDLED)
@@ -204,6 +223,7 @@ message(
 "* yasm                         : ${STATUS_YASM}\n"
 "* threads                      : ${STATUS_THREADS}\n"
 "* SDL2                         : ${STATUS_SDL2}\n"
+"* ebur128                      : ${STATUS_EBUR128}\n"
 "* bzip2                        : ${STATUS_BZIP2}\n"
 "* mp3lame                      : ${STATUS_MP3LAME}\n"
 "* zlib                         : ${STATUS_ZLIB}\n"
