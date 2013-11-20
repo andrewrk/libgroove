@@ -61,6 +61,7 @@ in your local package manager.
 ### Pre-Built Packages
 
  * Ubuntu 13.10 Saucy - https://launchpad.net/~andrewrk/+archive/libgroove
+
    ```
    sudo apt-add-repository ppa:andrewrk/libgroove
    sudo apt-get update
