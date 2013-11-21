@@ -58,6 +58,18 @@ in your local package manager.
 
 ## Installation
 
+### Pre-Built Packages
+
+ * Ubuntu 13.10 Saucy - https://launchpad.net/~andrewrk/+archive/libgroove
+
+   ```
+   sudo apt-add-repository ppa:andrewrk/libgroove
+   sudo apt-get update
+   sudo apt-get install libgroove-dev
+   ```
+
+### From Source
+
  1. `mkdir build && cd build && cmake ../`
  2. Verify that all dependencies say "OK".
  3. `make`
