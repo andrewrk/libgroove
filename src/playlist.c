@@ -109,9 +109,7 @@ static struct GrooveBuffer * frame_to_groove_buffer(struct GroovePlaylist *playl
 
     struct GrooveBuffer *buffer = &b->externals;
 
-    b->mutex = SDL_CreateMutex();
-
-    if (!b->mutex) {
+    if (pthread_mutex_init(&b->mutex, NULL) != 0) {
         av_free(b);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return NULL;
