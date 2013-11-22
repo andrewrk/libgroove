@@ -137,7 +137,7 @@ add_library(groove_static STATIC ${SOURCES} ${HEADERS})
 set_target_properties(groove_static PROPERTIES
     OUTPUT_NAME groove
     COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
-target_include_directories(groove_static BEFORE PUBLIC ${LIB_INCLUDES})
+include_directories(${LIB_INCLUDES})
 add_dependencies(groove_static libav)
 if(SDL2_IS_BUNDLED)
   add_dependencies(groove_static SDL2-static)
@@ -178,7 +178,7 @@ if(EBUR128_IS_BUNDLED)
 else(EBUR128_IS_BUNDLED)
   target_link_libraries(groove ${EBUR128_LIBRARY})
 endif(EBUR128_IS_BUNDLED)
-target_include_directories(groove BEFORE PUBLIC ${LIB_INCLUDES})
+include_directories(${LIB_INCLUDES})
 add_dependencies(groove ebur128_static libav)
 if(SDL2_IS_BUNDLED)
   add_dependencies(groove SDL2-static)
@@ -187,28 +187,28 @@ endif(SDL2_IS_BUNDLED)
 add_executable(metadata example/metadata.c)
 set_target_properties(metadata PROPERTIES
   COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_include_directories(metadata BEFORE PUBLIC ${EXAMPLE_INCLUDES})
+include_directories(${EXAMPLE_INCLUDES})
 target_link_libraries(metadata groove)
 add_dependencies(metadata groove)
 
 add_executable(playlist example/playlist.c)
 set_target_properties(playlist PROPERTIES
   COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_include_directories(metadata BEFORE PUBLIC ${EXAMPLE_INCLUDES})
+include_directories(${EXAMPLE_INCLUDES})
 target_link_libraries(playlist groove)
 add_dependencies(playlist groove)
 
 add_executable(transcode example/transcode.c)
 set_target_properties(transcode PROPERTIES
   COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_include_directories(metadata BEFORE PUBLIC ${EXAMPLE_INCLUDES})
+include_directories(${EXAMPLE_INCLUDES})
 target_link_libraries(transcode groove)
 add_dependencies(transcode groove)
 
 add_executable(replaygain example/replaygain.c)
 set_target_properties(replaygain PROPERTIES
   COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_include_directories(metadata BEFORE PUBLIC ${EXAMPLE_INCLUDES})
+include_directories(${EXAMPLE_INCLUDES})
 target_link_libraries(replaygain groove)
 add_dependencies(replaygain groove)
 
