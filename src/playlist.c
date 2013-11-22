@@ -216,18 +216,21 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
                 }
                 data_size += buffer->size;
                 struct SinkStack *stack_item = map_item->stack_head;
+                // we hold this reference to avoid cleanups until at least this loop
+                // is done and we call unref after it.
+                groove_buffer_ref(buffer);
                 while (stack_item) {
                     struct GrooveSink *sink = stack_item->sink;
                     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+                    // as soon as we call groove_queue_put, this buffer could be unref'd.
+                    // so we ref before putting it in the queue, and unref if it failed.
+                    groove_buffer_ref(buffer);
                     if (groove_queue_put(s->audioq, buffer) < 0) {
                         av_log(NULL, AV_LOG_ERROR, "unable to put buffer in queue\n");
-                    } else {
-                        groove_buffer_ref(buffer);
+                        groove_buffer_unref(buffer);
                     }
                     stack_item = stack_item->next;
                 }
-                // do a ref/unref to trigger cleanup if there were no refs
-                groove_buffer_ref(buffer);
                 groove_buffer_unref(buffer);
             }
             if (data_size > max_data_size) {
