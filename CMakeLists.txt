@@ -121,6 +121,7 @@ else(APPLE)
 endif(APPLE)
 set(LIB_INCLUDES ${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/include ${SDL2_INCLUDE_DIR} ${LIBAV_INSTALL}/include ${EBUR128_INCLUDE_DIR})
 set(EXAMPLE_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -g -O3")
+set(EXAMPLE_CFLAGS_STRICT "-pedantic -Werror -Wall -g -O3")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 
 ExternalProject_Add(libav
@@ -184,9 +185,10 @@ if(SDL2_IS_BUNDLED)
   add_dependencies(groove SDL2-static)
 endif(SDL2_IS_BUNDLED)
 
+# this one is compiled without c99 to make sure groove.h is ok
 add_executable(metadata example/metadata.c)
 set_target_properties(metadata PROPERTIES
-  COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+  COMPILE_FLAGS ${EXAMPLE_CFLAGS_STRICT})
 include_directories(${EXAMPLE_INCLUDES})
 target_link_libraries(metadata groove)
 add_dependencies(metadata groove)

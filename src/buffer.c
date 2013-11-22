@@ -12,9 +12,9 @@
 void groove_buffer_ref(struct GrooveBuffer *buffer) {
     struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
 
-    SDL_LockMutex(b->mutex);
+    pthread_mutex_lock(&b->mutex);
     b->ref_count += 1;
-    SDL_UnlockMutex(b->mutex);
+    pthread_mutex_unlock(&b->mutex);
 }
 
 void groove_buffer_unref(struct GrooveBuffer *buffer) {
@@ -23,13 +23,13 @@ void groove_buffer_unref(struct GrooveBuffer *buffer) {
 
     struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
 
-    SDL_LockMutex(b->mutex);
+    pthread_mutex_lock(&b->mutex);
     b->ref_count -= 1;
     int free = b->ref_count == 0;
-    SDL_UnlockMutex(b->mutex);
+    pthread_mutex_unlock(&b->mutex);
 
     if (free) {
-        SDL_DestroyMutex(b->mutex);
+        pthread_mutex_destroy(&b->mutex);
         if (b->is_packet && b->data) {
             av_free(b->data);
         } else if (b->frame) {

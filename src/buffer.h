@@ -12,14 +12,15 @@
 
 #include <libavutil/frame.h>
 #include <libavcodec/avcodec.h>
-#include <SDL2/SDL_thread.h>
+#include <pthread.h>
 
 struct GrooveBufferPrivate {
     struct GrooveBuffer externals;
     AVFrame *frame;
     int is_packet;
     int ref_count;
-    SDL_mutex *mutex;
+
+    pthread_mutex_t mutex;
     // used for when is_packet is true
     // GrooveBuffer::data[0] will point to this
     uint8_t *data;

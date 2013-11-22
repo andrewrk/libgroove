@@ -12,34 +12,41 @@ static int usage(char *exe) {
 }
 
 int main(int argc, char * argv[]) {
-    // parse arguments
+    /* parse arguments */
     char *exe = argv[0];
+    char *filename;
+    struct GrooveFile *file;
+    int i;
+    char *arg;
+    char *key;
+    char *value;
+    struct GrooveTag *tag;
 
     if (argc < 2)
         return usage(exe);
 
     printf("Using libgroove v%s\n", groove_version());
 
-    char * filename = argv[1];
+    filename = argv[1];
     groove_init();
     atexit(groove_finish);
     groove_set_logging(GROOVE_LOG_INFO);
-    struct GrooveFile * file = groove_file_open(filename);
+    file = groove_file_open(filename);
     if (!file) {
         fprintf(stderr, "error opening file\n");
         return 1;
     }
 
-    for (int i = 2; i < argc; i += 1) {
-        char * arg = argv[i];
+    for (i = 2; i < argc; i += 1) {
+        arg = argv[i];
         if (strcmp("--update", arg) == 0) {
             if (i + 2 >= argc) {
                 groove_file_close(file);
                 fprintf(stderr, "--update requires 2 arguments");
                 return usage(exe);
             }
-            char *key = argv[++i];
-            char *value = argv[++i];
+            key = argv[++i];
+            value = argv[++i];
             groove_file_metadata_set(file, key, value, 0);
         } else if (strcmp("--delete", arg) == 0) {
             if (i + 1 >= argc) {
@@ -47,14 +54,14 @@ int main(int argc, char * argv[]) {
                 fprintf(stderr, "--delete requires 1 argument");
                 return usage(exe);
             }
-            char *key = argv[++i];
+            key = argv[++i];
             groove_file_metadata_set(file, key, NULL, 0);
         } else {
             groove_file_close(file);
             return usage(exe);
         }
     }
-    struct GrooveTag *tag = NULL;
+    tag = NULL;
     printf("duration=%f\n", groove_file_duration(file));
     while ((tag = groove_file_metadata_get(file, "", tag, 0)))
         printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));
