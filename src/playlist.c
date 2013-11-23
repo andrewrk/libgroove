@@ -823,6 +823,10 @@ struct GroovePlaylist * groove_playlist_create(void) {
     // the other volume multiplied by the playlist item's gain
     p->volume = 1.0;
 
+    // set this flag to true so that a race condition does not send the end of
+    // queue sentinel early.
+    p->sent_end_of_q = 1;
+
     p->decode_head_mutex = SDL_CreateMutex();
     if (!p->decode_head_mutex) {
         groove_playlist_destroy(playlist);

@@ -734,8 +734,10 @@ static int ebml_read_ascii(AVIOContext *pb, int size, char **str)
 static int ebml_read_binary(AVIOContext *pb, int length, EbmlBin *bin)
 {
     av_free(bin->data);
-    if (!(bin->data = av_malloc(length)))
+    if (!(bin->data = av_malloc(length + FF_INPUT_BUFFER_PADDING_SIZE)))
         return AVERROR(ENOMEM);
+
+    memset(bin->data + length, 0, FF_INPUT_BUFFER_PADDING_SIZE);
 
     bin->size = length;
     bin->pos  = avio_tell(pb);
@@ -1453,7 +1455,7 @@ static int matroska_read_header(AVFormatContext *s)
     for (i=0; i < matroska->tracks.nb_elem; i++) {
         MatroskaTrack *track = &tracks[i];
         enum AVCodecID codec_id = AV_CODEC_ID_NONE;
-        EbmlList *encodings_list = &tracks->encodings;
+        EbmlList *encodings_list = &track->encodings;
         MatroskaTrackEncoding *encodings = encodings_list->elem;
         uint8_t *extradata = NULL;
         int extradata_size = 0;
