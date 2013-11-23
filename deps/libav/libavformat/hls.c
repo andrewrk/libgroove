@@ -211,6 +211,7 @@ static int parse_playlist(HLSContext *c, const char *url,
     char line[1024];
     const char *ptr;
     int close_in = 0;
+    uint8_t *new_url = NULL;
 
     if (!in) {
         close_in = 1;
@@ -218,6 +219,9 @@ static int parse_playlist(HLSContext *c, const char *url,
                               c->interrupt_callback, NULL)) < 0)
             return ret;
     }
+
+    if (av_opt_get(in, "location", AV_OPT_SEARCH_CHILDREN, &new_url) >= 0)
+        url = new_url;
 
     read_chomp_line(in, line, sizeof(line));
     if (strcmp(line, "#EXTM3U")) {
@@ -319,6 +323,7 @@ static int parse_playlist(HLSContext *c, const char *url,
         var->last_load_time = av_gettime();
 
 fail:
+    av_free(new_url);
     if (close_in)
         avio_close(in);
     return ret;
@@ -663,7 +668,8 @@ start:
         /* Check if this stream still is on an earlier segment number, or
          * has the packet with the lowest dts */
         if (var->pkt.data) {
-            struct variant *minvar = c->variants[minvariant];
+            struct variant *minvar = minvariant < 0 ?
+                                     NULL : c->variants[minvariant];
             if (minvariant < 0 || var->cur_seq_no < minvar->cur_seq_no) {
                 minvariant = i;
             } else if (var->cur_seq_no == minvar->cur_seq_no) {
