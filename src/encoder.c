@@ -52,6 +52,8 @@ struct GrooveEncoderPrivate {
     char strbuf[512];
 
     AVDictionary *metadata;
+
+    uint64_t next_pts;
 };
 
 static struct GrooveBuffer *end_of_q_sentinel = NULL;
@@ -69,6 +71,8 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
 
         struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
         frame = b->frame;
+        frame->pts = e->next_pts;
+        e->next_pts += buffer->frame_count + 1;
     }
 
     int got_packet = 0;
@@ -81,7 +85,6 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
     if (!got_packet)
         return -1;
 
-    e->pkt.pts = e->pkt.dts = e->stream->nb_frames;
     av_write_frame(e->fmt_ctx, &e->pkt);
     av_free_packet(&e->pkt);
 
@@ -617,6 +620,7 @@ int groove_encoder_detach(struct GrooveEncoder *encoder) {
     e->encode_pos = -1.0;
     e->sent_header = 0;
     e->abort_request = 0;
+    e->next_pts = 0;
 
     encoder->playlist = NULL;
     return 0;
