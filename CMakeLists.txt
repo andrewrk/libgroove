@@ -4,7 +4,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 include(ExternalProject)
 
 set(LIBGROOVE_STATUS "yes")
-set(LIBGROOVE_VERSION_MAJOR 2)
+set(LIBGROOVE_VERSION_MAJOR 3)
 set(LIBGROOVE_VERSION_MINOR 0)
 set(LIBGROOVE_VERSION_PATCH 0)
 set(LIBGROOVE_VERSION "${LIBGROOVE_VERSION_MAJOR}.${LIBGROOVE_VERSION_MINOR}.${LIBGROOVE_VERSION_PATCH}")
@@ -16,11 +16,7 @@ if(DISABLE_PLAYER)
   set(LIBGROOVE_PLAYER_STATUS "no")
 else(DISABLE_PLAYER)
   set(LIBGROOVE_PLAYER_STATUS "yes")
-  set(LIBGROOVE_PLAYER_VERSION_MAJOR 0)
-  set(LIBGROOVE_PLAYER_VERSION_MINOR 0)
-  set(LIBGROOVE_PLAYER_VERSION_PATCH 0)
-  set(LIBGROOVE_PLAYER_VERSION "${LIBGROOVE_PLAYER_VERSION_MAJOR}.${LIBGROOVE_PLAYER_VERSION_MINOR}.${LIBGROOVE_PLAYER_VERSION_PATCH}")
-  message("Configuring libgrooveplayer version ${LIBGROOVE_PLAYER_VERSION}")
+  message("Configuring libgrooveplayer version ${LIBGROOVE_VERSION}")
   file(GLOB_RECURSE LIBGROOVE_PLAYER_SOURCES ${CMAKE_SOURCE_DIR}/grooveplayer/*.c)
   file(GLOB_RECURSE LIBGROOVE_PLAYER_HEADERS ${CMAKE_SOURCE_DIR}/grooveplayer/*.h)
 endif(DISABLE_PLAYER)
@@ -29,11 +25,7 @@ if(DISABLE_LOUDNESS)
   set(LIBGROOVE_LOUDNESS_STATUS "no")
 else(DISABLE_LOUDNESS)
   set(LIBGROOVE_LOUDNESS_STATUS "yes")
-  set(LIBGROOVE_LOUDNESS_VERSION_MAJOR 0)
-  set(LIBGROOVE_LOUDNESS_VERSION_MINOR 0)
-  set(LIBGROOVE_LOUDNESS_VERSION_PATCH 0)
-  set(LIBGROOVE_LOUDNESS_VERSION "${LIBGROOVE_LOUDNESS_VERSION_MAJOR}.${LIBGROOVE_LOUDNESS_VERSION_MINOR}.${LIBGROOVE_LOUDNESS_VERSION_PATCH}")
-  message("Configuring libgrooveloudness version ${LIBGROOVE_LOUDNESS_VERSION}")
+  message("Configuring libgrooveloudness version ${LIBGROOVE_VERSION}")
   file(GLOB_RECURSE LIBGROOVE_LOUDNESS_SOURCES ${CMAKE_SOURCE_DIR}/grooveloudness/*.c)
   file(GLOB_RECURSE LIBGROOVE_LOUDNESS_HEADERS ${CMAKE_SOURCE_DIR}/grooveloudness/*.h)
 endif(DISABLE_LOUDNESS)
@@ -46,6 +38,8 @@ if(C99_FLAG_DETECTED)
 else(C99_FLAG_DETECTED)
   set(STATUS_C99 "not found")
   set(LIBGROOVE_STATUS "missing dependencies")
+  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
 endif(C99_FLAG_DETECTED)
 
 # check for ebur128
@@ -77,7 +71,6 @@ else(DISABLE_PLAYER)
   else(SDL2_FOUND)
     set(STATUS_SDL2 "OK (bundled)")
     set(SDL2_IS_BUNDLED TRUE)
-    set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
 
     set(SDL_SHARED OFF CACHE BOOL "test")
     set(SDL_VIDEO OFF CACHE BOOL "test")
@@ -106,6 +99,8 @@ if(BZIP2_FOUND)
 else(BZIP2_FOUND)
   set(STATUS_BZIP2 "not found")
   set(LIBGROOVE_STATUS "missing dependencies")
+  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
 endif(BZIP2_FOUND)
 
 # check for pthreads
@@ -115,6 +110,8 @@ if(Threads_FOUND)
 else(Threads_FOUND)
   set(STATUS_THREADS "not found")
   set(LIBGROOVE_STATUS "missing dependencies")
+  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
 endif(Threads_FOUND)
 
 # check for yasm
@@ -122,6 +119,8 @@ find_package(Yasm)
 if(${YASM_EXECUTABLE} STREQUAL "YASM_EXECUTABLE-NOTFOUND")
   set(STATUS_YASM "not found")
   set(LIBGROOVE_STATUS "missing dependencies")
+  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
 else()
   set(STATUS_YASM "OK")
 endif()
@@ -141,6 +140,8 @@ if(ZLIB_FOUND)
 else(ZLIB_FOUND)
   set(STATUS_ZLIB "not found")
   set(LIBGROOVE_STATUS "missing dependencies")
+  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
 endif(ZLIB_FOUND)
 
 configure_file (
@@ -222,8 +223,8 @@ else()
     ${LIBGROOVE_PLAYER_SOURCES}
     ${LIBGROOVE_PLAYER_HEADERS})
   set_target_properties(grooveplayer PROPERTIES
-    SOVERSION ${LIBGROOVE_PLAYER_VERSION_MAJOR}
-    VERSION ${LIBGROOVE_PLAYER_VERSION}
+    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
+    VERSION ${LIBGROOVE_VERSION}
     COMPILE_FLAGS ${LIB_CFLAGS}
     )
   target_link_libraries(grooveplayer groove)
@@ -254,8 +255,8 @@ else()
     ${LIBGROOVE_LOUDNESS_SOURCES}
     ${LIBGROOVE_LOUDNESS_HEADERS})
   set_target_properties(grooveloudness PROPERTIES
-    SOVERSION ${LIBGROOVE_LOUDNESS_VERSION_MAJOR}
-    VERSION ${LIBGROOVE_LOUDNESS_VERSION}
+    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
+    VERSION ${LIBGROOVE_VERSION}
     COMPILE_FLAGS ${LIB_CFLAGS}
     )
   target_link_libraries(grooveloudness groove ${CMAKE_THREAD_LIBS_INIT})
