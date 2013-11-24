@@ -10,6 +10,7 @@
 
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
+#include <SDL2/SDL.h>
 #include <SDL2/SDL_audio.h>
 
 struct GroovePlayerPrivate {
@@ -168,6 +169,13 @@ struct GroovePlayer *groove_player_create(void) {
         return NULL;
     }
 
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        av_free(p);
+        av_log(NULL, AV_LOG_ERROR, "unable to init SDL audio subsystem: %s\n",
+                SDL_GetError());
+        return NULL;
+    }
+
     struct GroovePlayer *player = &p->externals;
 
     p->sink = groove_sink_create();
@@ -209,6 +217,8 @@ struct GroovePlayer *groove_player_create(void) {
 void groove_player_destroy(struct GroovePlayer *player) {
     if (!player)
         return;
+
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
 
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
