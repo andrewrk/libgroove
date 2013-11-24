@@ -10,12 +10,13 @@
 
 #include <ebur128.h>
 
-#include <SDL2/SDL_thread.h>
-
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
 
 #include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
 
 struct GrooveLoudnessDetectorPrivate {
     struct GrooveLoudnessDetector externals;
@@ -26,15 +27,17 @@ struct GrooveLoudnessDetectorPrivate {
     ebur128_state **all_track_states;
     struct GrooveSink *sink;
     struct GrooveQueue *info_queue;
-    SDL_Thread *thread_id;
+    pthread_t thread_id;
 
     // info_head_mutex applies to variables inside this block.
-    SDL_mutex *info_head_mutex;
+    pthread_mutex_t info_head_mutex;
+    char info_head_mutex_inited;
     // current playlist item pointer
     struct GroovePlaylistItem *info_head;
     double info_pos;
     // analyze_thread waits on this when the info queue is full
-    SDL_cond *drain_cond;
+    pthread_cond_t drain_cond;
+    char drain_cond_inited;
     // how many items are in the queue
     int info_queue_count;
     double album_peak;
@@ -81,28 +84,28 @@ static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
     return 0;
 }
 
-static int detect_thread(void *arg) {
+static void *detect_thread(void *arg) {
     struct GrooveLoudnessDetectorPrivate *d = arg;
     struct GrooveLoudnessDetector *detector = &d->externals;
 
     struct GrooveBuffer *buffer;
     while (!d->abort_request) {
-        SDL_LockMutex(d->info_head_mutex);
+        pthread_mutex_lock(&d->info_head_mutex);
 
         if (d->info_queue_count >= detector->info_queue_size) {
-            SDL_CondWait(d->drain_cond, d->info_head_mutex);
-            SDL_UnlockMutex(d->info_head_mutex);
+            pthread_cond_wait(&d->drain_cond, &d->info_head_mutex);
+            pthread_mutex_unlock(&d->info_head_mutex);
             continue;
         }
 
         // we definitely want to unlock the mutex while we wait for the
         // next buffer. Otherwise there will be a deadlock when sink_flush or
         // sink_purge is called.
-        SDL_UnlockMutex(d->info_head_mutex);
+        pthread_mutex_unlock(&d->info_head_mutex);
 
         int result = groove_sink_buffer_get(d->sink, &buffer, 1);
 
-        SDL_LockMutex(d->info_head_mutex);
+        pthread_mutex_lock(&d->info_head_mutex);
 
         if (result == GROOVE_BUFFER_END) {
             // last file info
@@ -137,12 +140,12 @@ static int detect_thread(void *arg) {
             d->info_head = NULL;
             d->info_pos = -1.0;
 
-            SDL_UnlockMutex(d->info_head_mutex);
+            pthread_mutex_unlock(&d->info_head_mutex);
             continue;
         }
 
         if (result != GROOVE_BUFFER_YES) {
-            SDL_UnlockMutex(d->info_head_mutex);
+            pthread_mutex_unlock(&d->info_head_mutex);
             break;
         }
 
@@ -177,11 +180,11 @@ static int detect_thread(void *arg) {
         ebur128_add_frames_double(d->all_track_states[d->cur_track_index],
                 (double*)buffer->data[0], buffer->frame_count);
 
-        SDL_UnlockMutex(d->info_head_mutex);
+        pthread_mutex_unlock(&d->info_head_mutex);
         groove_buffer_unref(buffer);
     }
 
-    return 0;
+    return NULL;
 }
 
 static void info_queue_cleanup(struct GrooveQueue* queue, void *obj) {
@@ -203,7 +206,7 @@ static void info_queue_get(struct GrooveQueue *queue, void *obj) {
     d->info_queue_count -= 1;
 
     if (d->info_queue_count < detector->info_queue_size)
-        SDL_CondSignal(d->drain_cond);
+        pthread_cond_signal(&d->drain_cond);
 }
 
 static int info_queue_purge(struct GrooveQueue* queue, void *obj) {
@@ -216,7 +219,7 @@ static int info_queue_purge(struct GrooveQueue* queue, void *obj) {
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
     struct GrooveLoudnessDetectorPrivate *d = sink->userdata;
 
-    SDL_LockMutex(d->info_head_mutex);
+    pthread_mutex_lock(&d->info_head_mutex);
     d->purge_item = item;
     groove_queue_purge(d->info_queue);
     d->purge_item = NULL;
@@ -225,14 +228,14 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
         d->info_head = NULL;
         d->info_pos = -1.0;
     }
-    SDL_CondSignal(d->drain_cond);
-    SDL_UnlockMutex(d->info_head_mutex);
+    pthread_cond_signal(&d->drain_cond);
+    pthread_mutex_unlock(&d->info_head_mutex);
 }
 
 static void sink_flush(struct GrooveSink *sink) {
     struct GrooveLoudnessDetectorPrivate *d = sink->userdata;
 
-    SDL_LockMutex(d->info_head_mutex);
+    pthread_mutex_lock(&d->info_head_mutex);
     groove_queue_flush(d->info_queue);
     for (int i = 0; i <= d->cur_track_index; i += 1) {
         if (d->all_track_states[i])
@@ -243,8 +246,8 @@ static void sink_flush(struct GrooveSink *sink) {
     d->info_head = NULL;
     d->info_pos = -1.0;
 
-    SDL_CondSignal(d->drain_cond);
-    SDL_UnlockMutex(d->info_head_mutex);
+    pthread_cond_signal(&d->drain_cond);
+    pthread_mutex_unlock(&d->info_head_mutex);
 }
 
 struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
@@ -256,19 +259,19 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
 
     struct GrooveLoudnessDetector *detector = &d->externals;
 
-    d->info_head_mutex = SDL_CreateMutex();
-    if (!d->info_head_mutex) {
+    if (pthread_mutex_init(&d->info_head_mutex, NULL) != 0) {
         groove_loudness_detector_destroy(detector);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return NULL;
     }
+    d->info_head_mutex_inited = 1;
 
-    d->drain_cond = SDL_CreateCond();
-    if (!d->drain_cond) {
+    if (pthread_cond_init(&d->drain_cond, NULL) != 0) {
         groove_loudness_detector_destroy(detector);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex condition\n");
         return NULL;
     }
+    d->drain_cond_inited = 1;
 
     d->info_queue = groove_queue_create();
     if (!d->info_queue) {
@@ -314,11 +317,11 @@ void groove_loudness_detector_destroy(struct GrooveLoudnessDetector *detector) {
     if (d->info_queue)
         groove_queue_destroy(d->info_queue);
 
-    if (d->info_head_mutex)
-        SDL_DestroyMutex(d->info_head_mutex);
+    if (d->info_head_mutex_inited)
+        pthread_mutex_destroy(&d->info_head_mutex);
 
-    if (d->drain_cond)
-        SDL_DestroyCond(d->drain_cond);
+    if (d->drain_cond_inited)
+        pthread_cond_destroy(&d->drain_cond);
 
     av_free(d);
 }
@@ -347,9 +350,7 @@ int groove_loudness_detector_attach(struct GrooveLoudnessDetector *detector,
         return -1;
     }
 
-    d->thread_id = SDL_CreateThread(detect_thread, "detect", detector);
-
-    if (!d->thread_id) {
+    if (pthread_create(&d->thread_id, NULL, detect_thread, detector) != 0) {
         groove_loudness_detector_detach(detector);
         av_log(NULL, AV_LOG_ERROR, "unable to create detector thread\n");
         return -1;
@@ -365,9 +366,8 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector) {
     groove_sink_detach(d->sink);
     groove_queue_flush(d->info_queue);
     groove_queue_abort(d->info_queue);
-    SDL_CondSignal(d->drain_cond);
-    SDL_WaitThread(d->thread_id, NULL);
-    d->thread_id = NULL;
+    pthread_cond_signal(&d->drain_cond);
+    pthread_join(d->thread_id, NULL);
 
     detector->playlist = NULL;
 
@@ -415,7 +415,7 @@ void groove_loudness_detector_position(struct GrooveLoudnessDetector *detector,
 {
     struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *) detector;
 
-    SDL_LockMutex(d->info_head_mutex);
+    pthread_mutex_lock(&d->info_head_mutex);
 
     if (item)
         *item = d->info_head;
@@ -423,5 +423,5 @@ void groove_loudness_detector_position(struct GrooveLoudnessDetector *detector,
     if (seconds)
         *seconds = d->info_pos;
 
-    SDL_UnlockMutex(d->info_head_mutex);
+    pthread_mutex_unlock(&d->info_head_mutex);
 }
