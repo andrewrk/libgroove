@@ -16,8 +16,7 @@
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_thread.h>
+#include <pthread.h>
 
 struct GrooveSinkPrivate {
     struct GrooveSink externals;
@@ -40,7 +39,7 @@ struct SinkMap {
 
 struct GroovePlaylistPrivate {
     struct GroovePlaylist externals;
-    SDL_Thread *thread_id;
+    pthread_t thread_id;
     int abort_request;
 
     AVPacket audio_pkt_temp;
@@ -60,12 +59,15 @@ struct GroovePlaylistPrivate {
     AVFilterContext *asplit_ctx;
 
     // this mutex applies to the variables in this block
-    SDL_mutex *decode_head_mutex;
+    pthread_mutex_t decode_head_mutex;
+    char decode_head_mutex_inited;
     // decode_thread waits on this cond when the decode_head is NULL
-    SDL_cond *decode_head_cond;
+    pthread_cond_t decode_head_cond;
+    char decode_head_cond_inited;
     // decode_thread waits on this cond when every sink is full
     // should also signal when the first sink is attached.
-    SDL_cond *sink_drain_cond;
+    pthread_cond_t sink_drain_cond;
+    char sink_drain_cond_inited;
     // pointer to current playlist item being decoded
     struct GroovePlaylistItem *decode_head;
     // desired volume for the volume filter
@@ -564,7 +566,7 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
     struct GroovePlaylist *playlist = sink->playlist;
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     if (s->audioq_size < s->min_audioq_size)
-        SDL_CondSignal(p->sink_drain_cond);
+        pthread_cond_signal(&p->sink_drain_cond);
 }
 
 static void audioq_cleanup(struct GrooveQueue *queue, void *obj) {
@@ -590,12 +592,12 @@ static int audioq_purge(struct GrooveQueue *queue, void *obj) {
 
 // this thread is responsible for decoding and inserting buffers of decoded
 // audio into each sink
-static int decode_thread(void *arg) {
+static void *decode_thread(void *arg) {
     struct GroovePlaylistPrivate *p = arg;
     struct GroovePlaylist *playlist = &p->externals;
 
     while (!p->abort_request) {
-        SDL_LockMutex(p->decode_head_mutex);
+        pthread_mutex_lock(&p->decode_head_mutex);
 
         // if we don't have anything to decode, wait until we do
         if (!p->decode_head) {
@@ -603,16 +605,16 @@ static int decode_thread(void *arg) {
                 every_sink_signal_end(playlist);
                 p->sent_end_of_q = 1;
             }
-            SDL_CondWait(p->decode_head_cond, p->decode_head_mutex);
-            SDL_UnlockMutex(p->decode_head_mutex);
+            pthread_cond_wait(&p->decode_head_cond, &p->decode_head_mutex);
+            pthread_mutex_unlock(&p->decode_head_mutex);
             continue;
         }
         p->sent_end_of_q = 0;
 
         // if all sinks are filled up, no need to read more
         if (every_sink_full(playlist)) {
-            SDL_CondWait(p->sink_drain_cond, p->decode_head_mutex);
-            SDL_UnlockMutex(p->decode_head_mutex);
+            pthread_cond_wait(&p->sink_drain_cond, &p->decode_head_mutex);
+            pthread_mutex_unlock(&p->decode_head_mutex);
             continue;
         }
 
@@ -633,10 +635,10 @@ static int decode_thread(void *arg) {
             }
         }
 
-        SDL_UnlockMutex(p->decode_head_mutex);
+        pthread_mutex_unlock(&p->decode_head_mutex);
     }
 
-    return 0;
+    return NULL;
 }
 
 static int sink_formats_equal(const struct GrooveSink *a, const struct GrooveSink *b) {
@@ -747,9 +749,9 @@ int groove_sink_detach(struct GrooveSink *sink) {
 
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
     int err = remove_sink_from_map(sink);
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_mutex_unlock(&p->decode_head_mutex);
 
     sink->playlist = NULL;
 
@@ -771,10 +773,10 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
     // add the sink to the entry that matches its audio format
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
     int err = add_sink_to_map(playlist, sink);
-    SDL_CondSignal(p->sink_drain_cond);
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_cond_signal(&p->sink_drain_cond);
+    pthread_mutex_unlock(&p->decode_head_mutex);
 
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
@@ -827,26 +829,26 @@ struct GroovePlaylist * groove_playlist_create(void) {
     // queue sentinel early.
     p->sent_end_of_q = 1;
 
-    p->decode_head_mutex = SDL_CreateMutex();
-    if (!p->decode_head_mutex) {
+    if (pthread_mutex_init(&p->decode_head_mutex, NULL) != 0) {
         groove_playlist_destroy(playlist);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate mutex\n");
         return NULL;
     }
+    p->decode_head_mutex_inited = 1;
 
-    p->decode_head_cond = SDL_CreateCond();
-    if (!p->decode_head_cond) {
+    if (pthread_cond_init(&p->decode_head_cond, NULL) != 0) {
         groove_playlist_destroy(playlist);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate decode head mutex condition\n");
         return NULL;
     }
+    p->decode_head_cond_inited = 1;
 
-    p->sink_drain_cond = SDL_CreateCond();
-    if (!p->sink_drain_cond) {
+    if (pthread_cond_init(&p->sink_drain_cond, NULL) != 0) {
         groove_playlist_destroy(playlist);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate sink drain mutex condition\n");
         return NULL;
     }
+    p->sink_drain_cond_inited = 1;
 
     p->in_frame = av_frame_alloc();
 
@@ -856,9 +858,7 @@ struct GroovePlaylist * groove_playlist_create(void) {
         return NULL;
     }
 
-    p->thread_id = SDL_CreateThread(decode_thread, "decode", playlist);
-
-    if (!p->thread_id) {
+    if (pthread_create(&p->thread_id, NULL, decode_thread, playlist) != 0) {
         groove_playlist_destroy(playlist);
         av_log(NULL, AV_LOG_ERROR, "unable to create playlist thread\n");
         return NULL;
@@ -874,23 +874,23 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
 
     // wait for decode thread to finish
     p->abort_request = 1;
-    SDL_CondSignal(p->decode_head_cond);
-    SDL_CondSignal(p->sink_drain_cond);
-    SDL_WaitThread(p->thread_id, NULL);
+    pthread_cond_signal(&p->decode_head_cond);
+    pthread_cond_signal(&p->sink_drain_cond);
+    pthread_join(p->thread_id, NULL);
 
     every_sink(playlist, groove_sink_detach, 0);
 
     avfilter_graph_free(&p->filter_graph);
     avcodec_free_frame(&p->in_frame);
 
-    if (p->decode_head_mutex)
-        SDL_DestroyMutex(p->decode_head_mutex);
+    if (p->decode_head_mutex_inited)
+        pthread_mutex_destroy(&p->decode_head_mutex);
 
-    if (p->decode_head_cond)
-        SDL_DestroyCond(p->decode_head_cond);
+    if (p->decode_head_cond_inited)
+        pthread_cond_destroy(&p->decode_head_cond);
 
-    if (p->sink_drain_cond)
-        SDL_DestroyCond(p->sink_drain_cond);
+    if (p->sink_drain_cond_inited)
+        pthread_cond_destroy(&p->sink_drain_cond);
 
     av_free(p);
 }
@@ -917,7 +917,7 @@ void groove_playlist_seek(struct GroovePlaylist *playlist, struct GroovePlaylist
 
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
     pthread_mutex_lock(&f->seek_mutex);
 
     f->seek_pos = ts;
@@ -926,8 +926,8 @@ void groove_playlist_seek(struct GroovePlaylist *playlist, struct GroovePlaylist
     pthread_mutex_unlock(&f->seek_mutex);
 
     p->decode_head = item;
-    SDL_CondSignal(p->decode_head_cond);
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_cond_signal(&p->decode_head_cond);
+    pthread_mutex_unlock(&p->decode_head_mutex);
 }
 
 struct GroovePlaylistItem * groove_playlist_insert(struct GroovePlaylist *playlist, struct GrooveFile *file,
@@ -946,7 +946,7 @@ struct GroovePlaylistItem * groove_playlist_insert(struct GroovePlaylist *playli
 
     // lock decode_head_mutex so that decode_head cannot point to a new item
     // while we're screwing around with the queue
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
 
     if (next) {
         if (next->prev) {
@@ -966,14 +966,14 @@ struct GroovePlaylistItem * groove_playlist_insert(struct GroovePlaylist *playli
         pthread_mutex_unlock(&f->seek_mutex);
 
         p->decode_head = playlist->head;
-        SDL_CondSignal(p->decode_head_cond);
+        pthread_cond_signal(&p->decode_head_cond);
     } else {
         item->prev = playlist->tail;
         playlist->tail->next = item;
         playlist->tail = item;
     }
 
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_mutex_unlock(&p->decode_head_mutex);
     return item;
 }
 
@@ -995,7 +995,7 @@ static int purge_sink(struct GrooveSink *sink) {
 void groove_playlist_remove(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
 
     // if it's currently being played, seek to the next item
     if (item == p->decode_head) {
@@ -1020,8 +1020,8 @@ void groove_playlist_remove(struct GroovePlaylist *playlist, struct GroovePlayli
     every_sink(playlist, purge_sink, 0);
     p->purge_item = NULL;
 
-    SDL_CondSignal(p->sink_drain_cond);
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_cond_signal(&p->sink_drain_cond);
+    pthread_mutex_unlock(&p->decode_head_mutex);
 
     av_free(item);
 }
@@ -1051,12 +1051,12 @@ void groove_playlist_set_gain(struct GroovePlaylist *playlist, struct GroovePlay
 {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
     item->gain = gain;
     if (item == p->decode_head) {
         p->volume = playlist->volume * p->decode_head->gain;
     }
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_mutex_unlock(&p->decode_head_mutex);
 }
 
 void groove_playlist_position(struct GroovePlaylist *playlist, struct GroovePlaylistItem **item,
@@ -1064,7 +1064,7 @@ void groove_playlist_position(struct GroovePlaylist *playlist, struct GroovePlay
 {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
     if (item)
         *item = p->decode_head;
 
@@ -1073,16 +1073,16 @@ void groove_playlist_position(struct GroovePlaylist *playlist, struct GroovePlay
         struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
         *seconds = f->audio_clock;
     }
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_mutex_unlock(&p->decode_head_mutex);
 }
 
 void groove_playlist_set_volume(struct GroovePlaylist *playlist, double volume) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
-    SDL_LockMutex(p->decode_head_mutex);
+    pthread_mutex_lock(&p->decode_head_mutex);
     playlist->volume = volume;
     p->volume = p->decode_head ? volume * p->decode_head->gain : volume;
-    SDL_UnlockMutex(p->decode_head_mutex);
+    pthread_mutex_unlock(&p->decode_head_mutex);
 }
 
 int groove_playlist_playing(struct GroovePlaylist *playlist) {
