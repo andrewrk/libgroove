@@ -12,6 +12,7 @@
 #include <libavutil/log.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_audio.h>
+#include <pthread.h>
 
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
@@ -20,7 +21,8 @@ struct GroovePlayerPrivate {
     size_t audio_buf_index; // in bytes
 
     // this mutex applies to the variables in this block
-    SDL_mutex *play_head_mutex;
+    pthread_mutex_t play_head_mutex;
+    char play_head_mutex_inited;
     // pointer to current item where the buffered audio is reaching the device
     struct GroovePlaylistItem *play_head;
     // number of seconds into the play_head song where the buffered audio
@@ -86,7 +88,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     double bytes_per_sec = sink->bytes_per_sec;
     int paused = !groove_playlist_playing(playlist);
 
-    SDL_LockMutex(p->play_head_mutex);
+    pthread_mutex_lock(&p->play_head_mutex);
 
     while (len > 0) {
         if (!paused && p->audio_buf_index >= p->audio_buf_size) {
@@ -127,13 +129,13 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
         p->play_pos += len1 / bytes_per_sec;
     }
 
-    SDL_UnlockMutex(p->play_head_mutex);
+    pthread_mutex_unlock(&p->play_head_mutex);
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
     struct GroovePlayerPrivate *p = sink->userdata;
 
-    SDL_LockMutex(p->play_head_mutex);
+    pthread_mutex_lock(&p->play_head_mutex);
 
     if (p->play_head == item) {
         p->play_head = NULL;
@@ -145,20 +147,20 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
         emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
     }
 
-    SDL_UnlockMutex(p->play_head_mutex);
+    pthread_mutex_unlock(&p->play_head_mutex);
 }
 
 static void sink_flush(struct GrooveSink *sink) {
     struct GroovePlayerPrivate *p = sink->userdata;
 
-    SDL_LockMutex(p->play_head_mutex);
+    pthread_mutex_lock(&p->play_head_mutex);
 
     groove_buffer_unref(p->audio_buf);
     p->audio_buf = NULL;
     p->audio_buf_index = 0;
     p->audio_buf_size = 0;
 
-    SDL_UnlockMutex(p->play_head_mutex);
+    pthread_mutex_unlock(&p->play_head_mutex);
 }
 
 struct GroovePlayer *groove_player_create(void) {
@@ -189,12 +191,12 @@ struct GroovePlayer *groove_player_create(void) {
     p->sink->purge = sink_purge;
     p->sink->flush = sink_flush;
 
-    p->play_head_mutex = SDL_CreateMutex();
-    if (!p->play_head_mutex) {
+    if (pthread_mutex_init(&p->play_head_mutex, NULL) != 0) {
         groove_player_destroy(player);
         av_log(NULL, AV_LOG_ERROR,"unable to create play head mutex: out of memory\n");
         return NULL;
     }
+    p->play_head_mutex_inited = 1;
 
     p->eventq = groove_queue_create();
     if (!p->eventq) {
@@ -222,8 +224,8 @@ void groove_player_destroy(struct GroovePlayer *player) {
 
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    if (p->play_head_mutex)
-        SDL_DestroyMutex(p->play_head_mutex);
+    if (p->play_head_mutex_inited)
+        pthread_mutex_destroy(&p->play_head_mutex);
 
     if (p->eventq)
         groove_queue_destroy(p->eventq);
@@ -316,7 +318,7 @@ void groove_player_position(struct GroovePlayer *player,
 {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    SDL_LockMutex(p->play_head_mutex);
+    pthread_mutex_lock(&p->play_head_mutex);
 
     if (item)
         *item = p->play_head;
@@ -324,7 +326,7 @@ void groove_player_position(struct GroovePlayer *player,
     if (seconds)
         *seconds = p->play_pos;
 
-    SDL_UnlockMutex(p->play_head_mutex);
+    pthread_mutex_unlock(&p->play_head_mutex);
 }
 
 int groove_player_event_get(struct GroovePlayer *player,
