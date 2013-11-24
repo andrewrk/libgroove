@@ -16,9 +16,8 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavformat/avio.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mutex.h>
 #include <string.h>
+#include <pthread.h>
 
 struct GrooveEncoderPrivate {
     struct GrooveEncoder externals;
@@ -34,16 +33,18 @@ struct GrooveEncoderPrivate {
     struct GroovePlaylistItem *purge_item;
 
     // encode_head_mutex applies to variables inside this block.
-    SDL_mutex *encode_head_mutex;
+    pthread_mutex_t encode_head_mutex;
+    char encode_head_mutex_inited;
     // encode_thread waits on this when the encoded audio buffer queue
     // is full.
-    SDL_cond *drain_cond;
+    pthread_cond_t drain_cond;
+    char drain_cond_inited;
     struct GroovePlaylistItem *encode_head;
     double encode_pos;
 
     struct GrooveAudioFormat encode_format;
 
-    SDL_Thread *thread_id;
+    pthread_t thread_id;
 
     AVIOContext *avio;
     unsigned char *avio_buf;
@@ -91,28 +92,28 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
     return 0;
 }
 
-static int encode_thread(void *arg) {
+static void *encode_thread(void *arg) {
     struct GrooveEncoder *encoder = arg;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     struct GrooveBuffer *buffer;
     while (!e->abort_request) {
-        SDL_LockMutex(e->encode_head_mutex);
+        pthread_mutex_lock(&e->encode_head_mutex);
 
         if (e->audioq_size >= encoder->encoded_buffer_size) {
-            SDL_CondWait(e->drain_cond, e->encode_head_mutex);
-            SDL_UnlockMutex(e->encode_head_mutex);
+            pthread_cond_wait(&e->drain_cond, &e->encode_head_mutex);
+            pthread_mutex_unlock(&e->encode_head_mutex);
             continue;
         }
 
         // we definitely want to unlock the mutex while we wait for the
         // next buffer. Otherwise there will be a deadlock when sink_flush or
         // sink_purge is called.
-        SDL_UnlockMutex(e->encode_head_mutex);
+        pthread_mutex_unlock(&e->encode_head_mutex);
 
         int result = groove_sink_buffer_get(e->sink, &buffer, 1);
 
-        SDL_LockMutex(e->encode_head_mutex);
+        pthread_mutex_lock(&e->encode_head_mutex);
 
         if (result == GROOVE_BUFFER_END) {
             // flush encoder with empty packets
@@ -133,12 +134,12 @@ static int encode_thread(void *arg) {
 
             groove_queue_put(e->audioq, end_of_q_sentinel);
 
-            SDL_UnlockMutex(e->encode_head_mutex);
+            pthread_mutex_unlock(&e->encode_head_mutex);
             continue;
         }
 
         if (result != GROOVE_BUFFER_YES) {
-            SDL_UnlockMutex(e->encode_head_mutex);
+            pthread_mutex_unlock(&e->encode_head_mutex);
             break;
         }
 
@@ -161,18 +162,17 @@ static int encode_thread(void *arg) {
         }
 
         encode_buffer(encoder, buffer);
-        SDL_UnlockMutex(e->encode_head_mutex);
+        pthread_mutex_unlock(&e->encode_head_mutex);
         groove_buffer_unref(buffer);
     }
-
-    return 0;
+    return NULL;
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
     struct GrooveEncoder *encoder = sink->userdata;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
-    SDL_LockMutex(e->encode_head_mutex);
+    pthread_mutex_lock(&e->encode_head_mutex);
     e->purge_item = item;
     groove_queue_purge(e->audioq);
     e->purge_item = NULL;
@@ -181,18 +181,18 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
         e->encode_head = NULL;
         e->encode_pos = -1.0;
     }
-    SDL_CondSignal(e->drain_cond);
-    SDL_UnlockMutex(e->encode_head_mutex);
+    pthread_cond_signal(&e->drain_cond);
+    pthread_mutex_unlock(&e->encode_head_mutex);
 }
 
 static void sink_flush(struct GrooveSink *sink) {
     struct GrooveEncoderPrivate *e = sink->userdata;
 
-    SDL_LockMutex(e->encode_head_mutex);
+    pthread_mutex_lock(&e->encode_head_mutex);
     groove_queue_flush(e->audioq);
     avcodec_flush_buffers(e->stream->codec);
-    SDL_CondSignal(e->drain_cond);
-    SDL_UnlockMutex(e->encode_head_mutex);
+    pthread_cond_signal(&e->drain_cond);
+    pthread_mutex_unlock(&e->encode_head_mutex);
 }
 
 static int audioq_purge(struct GrooveQueue* queue, void *obj) {
@@ -229,7 +229,7 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
     e->audioq_size -= buffer->size;
 
     if (e->audioq_size < encoder->encoded_buffer_size)
-        SDL_CondSignal(e->drain_cond);
+        pthread_cond_signal(&e->drain_cond);
 }
 
 static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
@@ -300,19 +300,19 @@ struct GrooveEncoder *groove_encoder_create(void) {
         return NULL;
     }
 
-    e->encode_head_mutex = SDL_CreateMutex();
-    if (!e->encode_head_mutex) {
+    if (pthread_mutex_init(&e->encode_head_mutex, NULL) != 0) {
         groove_encoder_destroy(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return NULL;
     }
+    e->encode_head_mutex_inited = 1;
 
-    e->drain_cond = SDL_CreateCond();
-    if (!e->drain_cond) {
+    if (pthread_cond_init(&e->drain_cond, NULL) != 0) {
         groove_encoder_destroy(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex condition\n");
         return NULL;
     }
+    e->drain_cond_inited = 1;
 
     e->audioq = groove_queue_create();
     if (!e->audioq) {
@@ -357,11 +357,11 @@ void groove_encoder_destroy(struct GrooveEncoder *encoder) {
     if (e->audioq)
         groove_queue_destroy(e->audioq);
 
-    if (e->encode_head_mutex)
-        SDL_DestroyMutex(e->encode_head_mutex);
+    if (e->encode_head_mutex_inited)
+        pthread_mutex_destroy(&e->encode_head_mutex);
 
-    if (e->drain_cond)
-        SDL_DestroyCond(e->drain_cond);
+    if (e->drain_cond_inited)
+        pthread_cond_destroy(&e->drain_cond);
 
     if (e->avio)
         av_free(e->avio);
@@ -585,9 +585,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
         return -1;
     }
 
-    e->thread_id = SDL_CreateThread(encode_thread, "encode", encoder);
-
-    if (!e->thread_id) {
+    if (pthread_create(&e->thread_id, NULL, encode_thread, encoder) != 0) {
         groove_encoder_detach(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to create encoder thread\n");
         return -1;
@@ -603,9 +601,8 @@ int groove_encoder_detach(struct GrooveEncoder *encoder) {
     groove_sink_detach(e->sink);
     groove_queue_flush(e->audioq);
     groove_queue_abort(e->audioq);
-    SDL_CondSignal(e->drain_cond);
-    SDL_WaitThread(e->thread_id, NULL);
-    e->thread_id = NULL;
+    pthread_cond_signal(&e->drain_cond);
+    pthread_join(e->thread_id, NULL);
 
     if (e->stream) {
         avcodec_close(e->stream->codec);
@@ -669,7 +666,7 @@ void groove_encoder_position(struct GrooveEncoder *encoder,
 {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
-    SDL_LockMutex(e->encode_head_mutex);
+    pthread_mutex_lock(&e->encode_head_mutex);
 
     if (item)
         *item = e->encode_head;
@@ -677,5 +674,5 @@ void groove_encoder_position(struct GrooveEncoder *encoder,
     if (seconds)
         *seconds = e->encode_pos;
 
-    SDL_UnlockMutex(e->encode_head_mutex);
+    pthread_mutex_unlock(&e->encode_head_mutex);
 }
