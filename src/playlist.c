@@ -499,7 +499,7 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
     }
 
     // handle seek requests
-    SDL_LockMutex(f->seek_mutex);
+    pthread_mutex_lock(&f->seek_mutex);
     if (f->seek_pos >= 0) {
         if (av_seek_frame(f->ic, f->audio_stream_index, f->seek_pos, 0) < 0) {
             av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->filename);
@@ -510,7 +510,7 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
         f->seek_pos = -1;
         f->eof = 0;
     }
-    SDL_UnlockMutex(f->seek_mutex);
+    pthread_mutex_unlock(&f->seek_mutex);
 
     if (f->eof) {
         if (f->audio_st->codec->codec->capabilities & CODEC_CAP_DELAY) {
@@ -626,10 +626,10 @@ static int decode_thread(void *arg) {
             if (p->decode_head) {
                 struct GrooveFile *next_file = p->decode_head->file;
                 struct GrooveFilePrivate *next_f = (struct GrooveFilePrivate *) next_file;
-                SDL_LockMutex(next_f->seek_mutex);
+                pthread_mutex_lock(&next_f->seek_mutex);
                 next_f->seek_pos = 0;
                 next_f->seek_flush = 0;
-                SDL_UnlockMutex(next_f->seek_mutex);
+                pthread_mutex_unlock(&next_f->seek_mutex);
             }
         }
 
@@ -918,12 +918,12 @@ void groove_playlist_seek(struct GroovePlaylist *playlist, struct GroovePlaylist
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     SDL_LockMutex(p->decode_head_mutex);
-    SDL_LockMutex(f->seek_mutex);
+    pthread_mutex_lock(&f->seek_mutex);
 
     f->seek_pos = ts;
     f->seek_flush = 1;
 
-    SDL_UnlockMutex(f->seek_mutex);
+    pthread_mutex_unlock(&f->seek_mutex);
 
     p->decode_head = item;
     SDL_CondSignal(p->decode_head_cond);
@@ -960,10 +960,10 @@ struct GroovePlaylistItem * groove_playlist_insert(struct GroovePlaylist *playli
         playlist->head = item;
         playlist->tail = item;
 
-        SDL_LockMutex(f->seek_mutex);
+        pthread_mutex_lock(&f->seek_mutex);
         f->seek_pos = 0;
         f->seek_flush = 0;
-        SDL_UnlockMutex(f->seek_mutex);
+        pthread_mutex_unlock(&f->seek_mutex);
 
         p->decode_head = playlist->head;
         SDL_CondSignal(p->decode_head_cond);

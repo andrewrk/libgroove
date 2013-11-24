@@ -26,9 +26,8 @@ struct GrooveFile *groove_file_open(char *filename) {
     f->audio_stream_index = -1;
     f->seek_pos = -1;
 
-    f->seek_mutex = SDL_CreateMutex();
-    if (!f->seek_mutex) {
-        groove_file_close(file);
+    if (pthread_mutex_init(&f->seek_mutex, NULL) != 0) {
+        av_free(f);
         av_log(NULL, AV_LOG_ERROR, "unable to create seek mutex\n");
         return NULL;
     }
@@ -129,8 +128,7 @@ void groove_file_close(struct GrooveFile *file) {
     if (f->ic)
         avformat_close_input(&f->ic);
 
-    if (f->seek_mutex)
-        SDL_DestroyMutex(f->seek_mutex);
+    pthread_mutex_destroy(&f->seek_mutex);
 
     av_free(f);
 }
