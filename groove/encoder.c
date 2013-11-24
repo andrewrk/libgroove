@@ -5,7 +5,7 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove.h"
+#include "encoder.h"
 #include "queue.h"
 #include "buffer.h"
 

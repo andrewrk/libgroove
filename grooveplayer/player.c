@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove.h"
-#include "queue.h"
+#include "player.h"
+#include <groove/queue.h>
 
 #include <libavutil/mem.h>
 #include <libavutil/log.h>

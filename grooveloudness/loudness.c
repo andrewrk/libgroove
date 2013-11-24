@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove.h"
-#include "queue.h"
+#include "loudness.h"
+#include <groove/queue.h>
 
 #include <ebur128.h>
 

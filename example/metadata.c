@@ -1,6 +1,6 @@
 /* read or update metadata in a media file */
 
-#include "groove.h"
+#include <groove/groove.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

@@ -1,6 +1,7 @@
 /* transcode one or more files into one output file */
 
-#include "groove.h"
+#include <groove/groove.h>
+#include <groove/encoder.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
