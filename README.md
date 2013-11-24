@@ -2,9 +2,6 @@
 
 Generic music player backend library.
 
-For documentation, see include/groove.h and the examples. Live chat is
-available in the #libgroove channel of irc.freenode.org.
-
 ## Features
 
  * Uses [libav](http://www.libav.org/) for robust decoding and encoding.
@@ -74,6 +71,24 @@ in your local package manager.
  2. Verify that all dependencies say "OK".
  3. `make`
  4. `sudo make install`
+
+## Documentation
+
+ * Check out the example programs in the example folder.
+ * Read some header files for the relevant APIs:
+   * See groove/groove.h for these APIs:
+     - global stuff
+     - GrooveFile
+     - GroovePlaylist
+     - GrooveBuffer
+     - GrooveSink
+   * groove/encoder.h
+     - GrooveEncoder
+   * grooveplayer/player.h
+     - GroovePlayer
+   * grooveloudness/loudness.h
+     - GrooveLoudnessDetector
+ * Join #libgroove on irc.freenode.org and ask questions.
 
 ## Projects Using libgroove
 
