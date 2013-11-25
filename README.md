@@ -33,22 +33,16 @@ Generic music player backend library.
 
 ## Dependencies
 
-You will need these to compile libgroove. All of these are almost certainly
-in your local package manager.
+You will need these to compile libgroove. Some dependencies are bundled
+so that you can still compile if they cannot be found on your system.
 
- * [libbz2-dev](http://www.bzip.org/)
- * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
- * [libmp3lame-dev](http://lame.sourceforge.net/)
-
-### Bundled Dependencies
-
-For convenience, if any of these libraries are missing from your system,
-libgroove will compile against a bundled version.
-
- * [libav](http://libav.org)
- * [libebur128](https://github.com/jiixyj/libebur128)
- * [libsdl2-dev](http://www.libsdl.org/)
+ * [libav](http://libav.org). (bundled) if using bundled version, needs these:
+   - [libbz2-dev](http://www.bzip.org/)
+   - [yasm](http://yasm.tortall.net/)
+   - [libmp3lame-dev](http://lame.sourceforge.net/)
+ * [libebur128](https://github.com/jiixyj/libebur128) (bundled)
+ * [libsdl2-dev](http://www.libsdl.org/) (bundled)
 
 ## Installation
 
@@ -59,13 +53,13 @@ libgroove will compile against a bundled version.
    ```
    sudo apt-add-repository ppa:andrewrk/libgroove
    sudo apt-get update
-   sudo apt-get install libgroove-dev
+   sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev
    ```
 
 ### From Source
 
  1. `mkdir build && cd build && cmake ../`
- 2. Verify that all dependencies say "OK".
+ 2. Verify that the configure output is to your liking.
  3. `make`
  4. `sudo make install`
 
