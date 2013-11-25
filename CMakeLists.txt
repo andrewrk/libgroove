@@ -45,13 +45,16 @@ endif(C99_FLAG_DETECTED)
 # check for ebur128
 if(DISABLE_LOUDNESS)
   set(STATUS_EBUR128 "not needed")
+  set(STATUS_DEP_LIBEBUR128 "not needed")
 else(DISABLE_LOUDNESS)
   find_package(ebur128)
   if(EBUR128_FOUND)
-    set(STATUS_EBUR128 "OK (system)")
+    set(STATUS_EBUR128 "OK")
+    set(STATUS_DEP_LIBEBUR128 "using system library")
     set(EBUR128_IS_BUNDLED FALSE)
   else(EBUR128_FOUND)
-    set(STATUS_EBUR128 "OK (bundled)")
+    set(STATUS_EBUR128 "not found - will use bundled version")
+    set(STATUS_DEP_LIBEBUR128 "ready to build")
     set(EBUR128_IS_BUNDLED TRUE)
 
     set(EBUR128_SRC "${PROJECT_SOURCE_DIR}/deps/ebur128")
@@ -63,13 +66,16 @@ endif(DISABLE_LOUDNESS)
 # check for SDL2
 if(DISABLE_PLAYER)
   set(STATUS_SDL2 "not needed")
+  set(STATUS_DEP_SDL2 "not needed")
 else(DISABLE_PLAYER)
   find_package(SDL2)
   if(SDL2_FOUND)
-    set(STATUS_SDL2 "OK (system)")
+    set(STATUS_SDL2 "OK")
+    set(STATUS_DEP_SDL2 "using system library")
     set(SDL2_IS_BUNDLED FALSE)
   else(SDL2_FOUND)
-    set(STATUS_SDL2 "OK (bundled)")
+    set(STATUS_SDL2 "not found - will use bundled version")
+    set(STATUS_DEP_SDL2 "ready to build")
     set(SDL2_IS_BUNDLED TRUE)
 
     set(SDL_SHARED OFF CACHE BOOL "test")
@@ -92,16 +98,106 @@ else(DISABLE_PLAYER)
   endif(SDL2_FOUND)
 endif(DISABLE_PLAYER)
 
-# check for bz2
-find_package(BZip2)
-if(BZIP2_FOUND)
-  set(STATUS_BZIP2 "OK")
-else(BZIP2_FOUND)
-  set(STATUS_BZIP2 "not found")
-  set(LIBGROOVE_STATUS "missing dependencies")
-  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
-  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
-endif(BZIP2_FOUND)
+# check for libav
+find_package(LibAV 10.0)
+if(LIBAV_AVCODEC_FOUND AND LIBAV_AVFILTER_FOUND AND LIBAV_AVFORMAT_FOUND AND LIBAV_AVUTIL_FOUND)
+  set(LIBAV_IS_BUNDLED FALSE)
+  set(STATUS_DEP_LIBAV "using system libraries")
+  set(STATUS_BZIP2 "not needed")
+  set(STATUS_YASM "not needed")
+  set(STATUS_MP3LAME "not needed")
+  set(STATUS_ZLIB "not needed")
+  set(STATUS_LIBAVCODEC "OK")
+  set(STATUS_LIBAVFILTER "OK")
+  set(STATUS_LIBAVFORMAT "OK")
+  set(STATUS_LIBAVUTIL "OK")
+else()
+  set(LIBAV_IS_BUNDLED TRUE)
+  set(STATUS_DEP_LIBAV "ready to build")
+
+  if(LIBAV_AVCODEC_FOUND)
+    set(STATUS_LIBAVCODEC "OK")
+  else()
+    set(STATUS_LIBAVCODEC "not found - will use bundled version")
+  endif()
+  if(LIBAV_AVFILTER_FOUND)
+    set(STATUS_LIBAVFILTER "OK")
+  else()
+    set(STATUS_LIBAVFILTER "not found - will use bundled version")
+  endif()
+  if(LIBAV_AVFORMAT_FOUND)
+    set(STATUS_LIBAVFORMAT "OK")
+  else()
+    set(STATUS_LIBAVFORMAT "not found - will use bundled version")
+  endif()
+  if(LIBAV_AVUTIL_FOUND)
+    set(STATUS_LIBAVUTIL "OK")
+  else()
+    set(STATUS_LIBAVUTIL "not found - will use bundled version")
+  endif()
+
+  # check for bz2
+  find_package(BZip2)
+  if(BZIP2_FOUND)
+    set(STATUS_BZIP2 "OK")
+  else(BZIP2_FOUND)
+    set(STATUS_BZIP2 "not found")
+    set(STATUS_DEP_LIBAV "missing dependencies, see below")
+    set(LIBGROOVE_STATUS "missing dependencies")
+    set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+    set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
+  endif(BZIP2_FOUND)
+
+  # check for yasm
+  find_package(Yasm)
+  if(${YASM_EXECUTABLE} STREQUAL "YASM_EXECUTABLE-NOTFOUND")
+    set(STATUS_YASM "not found")
+    set(STATUS_DEP_LIBAV "missing dependencies, see below")
+    set(LIBGROOVE_STATUS "missing dependencies")
+    set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+    set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
+  else()
+    set(STATUS_YASM "OK")
+  endif()
+  
+  # check for libmp3lame
+  find_package(mp3lame)
+  if(MP3LAME_FOUND)
+    set(STATUS_MP3LAME "OK")
+  else(MP3LAME_FOUND)
+    set(STATUS_DEP_LIBAV "missing dependencies, see below")
+    set(STATUS_MP3LAME "not found")
+  endif(MP3LAME_FOUND)
+
+  # check for zlib
+  find_package(ZLIB)
+  if(ZLIB_FOUND)
+    set(STATUS_ZLIB "OK")
+  else(ZLIB_FOUND)
+    set(STATUS_ZLIB "not found")
+    set(STATUS_DEP_LIBAV "missing dependencies, see below")
+    set(LIBGROOVE_STATUS "missing dependencies")
+    set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+    set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
+  endif(ZLIB_FOUND)
+
+  set(LIBAV_SRC "${PROJECT_SOURCE_DIR}/deps/libav")
+  set(LIBAV_BUILD "${PROJECT_BINARY_DIR}/deps/libav")
+  set(LIBAV_INSTALL "${LIBAV_BUILD}/install")
+
+  if(APPLE)
+  else(APPLE)
+    set(LIBGROOVE_LDFLAGS "-Wl,-Bsymbolic")
+  endif(APPLE)
+
+  ExternalProject_Add(libav
+    SOURCE_DIR ${LIBAV_SRC}
+    BINARY_DIR ${LIBAV_BUILD}
+    INSTALL_DIR ${LIBAV_INSTALL}
+    CONFIGURE_COMMAND ${LIBAV_SRC}/configure --prefix=${LIBAV_INSTALL} --enable-pic --enable-gpl --enable-libmp3lame
+    )
+
+endif()
 
 # check for pthreads
 find_package(Threads)
@@ -114,85 +210,49 @@ else(Threads_FOUND)
   set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
 endif(Threads_FOUND)
 
-# check for yasm
-find_package(Yasm)
-if(${YASM_EXECUTABLE} STREQUAL "YASM_EXECUTABLE-NOTFOUND")
-  set(STATUS_YASM "not found")
-  set(LIBGROOVE_STATUS "missing dependencies")
-  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
-  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
-else()
-  set(STATUS_YASM "OK")
-endif()
-
-# check for libmp3lame
-find_package(mp3lame)
-if(MP3LAME_FOUND)
-  set(STATUS_MP3LAME "OK")
-else(MP3LAME_FOUND)
-  set(STATUS_MP3LAME "not found")
-endif(MP3LAME_FOUND)
-
-# check for zlib
-find_package(ZLIB)
-if(ZLIB_FOUND)
-  set(STATUS_ZLIB "OK")
-else(ZLIB_FOUND)
-  set(STATUS_ZLIB "not found")
-  set(LIBGROOVE_STATUS "missing dependencies")
-  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
-  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
-endif(ZLIB_FOUND)
-
 configure_file (
   "${PROJECT_SOURCE_DIR}/groove/config.h.in"
   "${PROJECT_BINARY_DIR}/config.h"
   )
 
-
-set(LIBAV_SRC "${PROJECT_SOURCE_DIR}/deps/libav")
-set(LIBAV_BUILD "${PROJECT_BINARY_DIR}/deps/libav")
-set(LIBAV_INSTALL "${LIBAV_BUILD}/install")
 set(LIB_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT")
-if(APPLE)
-  set(LIBGROOVE_LDFLAGS " ")
-else(APPLE)
-  set(LIBGROOVE_LDFLAGS "-Wl,-Bsymbolic")
-endif(APPLE)
 set(EXAMPLE_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -g")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}")
-
-ExternalProject_Add(libav
-  SOURCE_DIR ${LIBAV_SRC}
-  BINARY_DIR ${LIBAV_BUILD}
-  INSTALL_DIR ${LIBAV_INSTALL}
-  CONFIGURE_COMMAND ${LIBAV_SRC}/configure --prefix=${LIBAV_INSTALL} --enable-pic --enable-gpl --enable-libmp3lame
-  )
-# until libav makes a release we're stuck bundling it.
-set(STATUS_LIBAV "OK (bundled)")
 
 add_library(groove SHARED ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
 set_target_properties(groove PROPERTIES
   SOVERSION ${LIBGROOVE_VERSION_MAJOR}
   VERSION ${LIBGROOVE_VERSION}
   COMPILE_FLAGS ${LIB_CFLAGS}
-  LINK_FLAGS ${LIBGROOVE_LDFLAGS}
   )
-target_link_libraries(groove
-  ${LIBAV_INSTALL}/lib/libavfilter.a
-  ${LIBAV_INSTALL}/lib/libavformat.a
-  ${LIBAV_INSTALL}/lib/libavcodec.a
-  ${LIBAV_INSTALL}/lib/libavresample.a
-  ${LIBAV_INSTALL}/lib/libswscale.a
-  ${LIBAV_INSTALL}/lib/libavutil.a
-  ${BZIP2_LIBRARIES}
-  ${ZLIB_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT})
-if(MP3LAME_FOUND)
-  target_link_libraries(groove ${MP3LAME_LIBRARY})
+if(LIBGROOVE_LDFLAGS)
+  set_target_properties(groove PROPERTIES LINK_FLAGS ${LIBGROOVE_LDFLAGS})
 endif()
-include_directories(${PROJECT_BINARY_DIR} ${LIBAV_INSTALL}/include)
-add_dependencies(groove libav)
+include_directories(${PROJECT_BINARY_DIR})
+if(LIBAV_IS_BUNDLED)
+  target_link_libraries(groove
+    ${LIBAV_INSTALL}/lib/libavfilter.a
+    ${LIBAV_INSTALL}/lib/libavformat.a
+    ${LIBAV_INSTALL}/lib/libavcodec.a
+    ${LIBAV_INSTALL}/lib/libavresample.a
+    ${LIBAV_INSTALL}/lib/libswscale.a
+    ${LIBAV_INSTALL}/lib/libavutil.a
+    ${BZIP2_LIBRARIES}
+    ${ZLIB_LIBRARIES})
+  if(MP3LAME_FOUND)
+    target_link_libraries(groove ${MP3LAME_LIBRARY})
+  endif()
+  include_directories(${LIBAV_INSTALL}/include)
+  add_dependencies(groove libav)
+else()
+  target_link_libraries(groove
+    ${LIBAV_AVCODEC_LIBRARIES}
+    ${LIBAV_AVFILTER_LIBRARIES}
+    ${LIBAV_AVFORMAT_LIBRARIES}
+    ${LIBAV_AVUTIL_LIBRARIES})
+  include_directories(${LIBAV_INCLUDE_DIRS})
+endif()
+target_link_libraries(groove ${CMAKE_THREAD_LIBS_INIT})
 
 install(FILES
   "groove/groove.h"
@@ -293,20 +353,36 @@ message("\n"
 )
 
 message(
-"Required Dependencies\n"
-"------------------\n"
-"* C99 Compiler                 : ${STATUS_C99}\n"
-"* yasm                         : ${STATUS_YASM}\n"
-"* threads                      : ${STATUS_THREADS}\n"
-"* SDL2                         : ${STATUS_SDL2}\n"
-"* ebur128                      : ${STATUS_EBUR128}\n"
-"* libav                        : ${STATUS_LIBAV}\n"
-"* bzip2                        : ${STATUS_BZIP2}\n"
-"* mp3lame                      : ${STATUS_MP3LAME}\n"
-"* zlib                         : ${STATUS_ZLIB}\n"
+"Bundled Dependencies\n"
+"--------------------\n"
+"* SDL2                         : ${STATUS_DEP_SDL2}\n"
+"* libav                        : ${STATUS_DEP_LIBAV}\n"
+"* libebur128                   : ${STATUS_DEP_LIBEBUR128}\n"
 )
 
 message(
+"System Dependencies\n"
+"-------------------\n"
+"* C99 Compiler                 : ${STATUS_C99}\n"
+"* threads                      : ${STATUS_THREADS}\n"
+"* SDL2                         : ${STATUS_SDL2}\n"
+"* ebur128                      : ${STATUS_EBUR128}\n"
+"* libavformat                  : ${STATUS_LIBAVFORMAT}\n"
+"* libavcodec                   : ${STATUS_LIBAVCODEC}\n"
+"* libavfilter                  : ${STATUS_LIBAVFILTER}\n"
+"* libavutil                    : ${STATUS_LIBAVUTIL}"
+)
+
+if(LIBAV_IS_BUNDLED)
+message(
+"* yasm                         : ${STATUS_YASM}\n"
+"* bzip2                        : ${STATUS_BZIP2}\n"
+"* mp3lame                      : ${STATUS_MP3LAME}\n"
+"* zlib                         : ${STATUS_ZLIB}"
+)
+endif()
+
+message("\n"
 "If everything is looks good, proceed with\n"
 "make\n"
 )
