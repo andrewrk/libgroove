@@ -1,6 +1,8 @@
 # libgroove
 
-Generic music player backend library.
+Audio dispatching library. Generic sink-based interface. Provides decoding,
+encoding, resampling, and gain adjustment. Perfect for the backend of a
+music player.
 
 ## Features
 
