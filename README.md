@@ -87,6 +87,8 @@ so that you can still compile if they cannot be found on your system.
 
 Feel free to make a pull request adding yours to this list.
 
+ * [waveform](https://github.com/superjoe30/waveform) - generate a waveform
+   visualization in PNG format.
  * [TrenchBowl](https://github.com/superjoe30/TrenchBowl) - a simple Qt GUI
    on top of libgroove.
  * [node-groove](https://github.com/superjoe30/node-groove) -
