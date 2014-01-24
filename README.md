@@ -24,7 +24,7 @@ music player.
    * **loudness scanner sink** - uses the [EBU R 128](http://tech.ebu.ch/loudness)
      standard to detect loudness. The values it produces are compatible with
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification).
-   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) accoustid fingerprint
+   * ([on the roadmap](https://github.com/andrewrk/libgroove/issues/19)) accoustid fingerprint
  * Thread-safe.
  * Example programs included:
    * `playlist` - play a series of songs with gapless playback
@@ -87,12 +87,12 @@ so that you can still compile if they cannot be found on your system.
 
 Feel free to make a pull request adding yours to this list.
 
- * [waveform](https://github.com/superjoe30/waveform) - generate a waveform
+ * [waveform](https://github.com/andrewrk/waveform) - generate a waveform
    visualization in PNG format.
- * [TrenchBowl](https://github.com/superjoe30/TrenchBowl) - a simple Qt GUI
+ * [TrenchBowl](https://github.com/andrewrk/TrenchBowl) - a simple Qt GUI
    on top of libgroove.
- * [node-groove](https://github.com/superjoe30/node-groove) -
+ * [node-groove](https://github.com/andrewrk/node-groove) -
    [Node.js](http://nodejs.org/) bindings to libgroove.
-   - [Groove Basin](https://github.com/superjoe30/groovebasin) - lazy
+   - [Groove Basin](https://github.com/andrewrk/groovebasin) - lazy
      multi-core replaygain scanning, web interface inspired by Amarok 1.4,
      http streaming, upload, download, dynamic playlist mode
