@@ -44,7 +44,7 @@ so that you can still compile if they cannot be found on your system.
    - [yasm](http://yasm.tortall.net/)
    - [libmp3lame-dev](http://lame.sourceforge.net/)
  * [libebur128](https://github.com/jiixyj/libebur128) (bundled)
- * [libsdl2-dev](http://www.libsdl.org/) (bundled)
+ * [portaudio19-dev](http://www.portaudio.com/)
 
 ## Installation
 

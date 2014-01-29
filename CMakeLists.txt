@@ -63,39 +63,18 @@ else(DISABLE_LOUDNESS)
   endif(EBUR128_FOUND)
 endif(DISABLE_LOUDNESS)
 
-# check for SDL2
+# check for PortAudio
 if(DISABLE_PLAYER)
-  set(STATUS_SDL2 "not needed")
-  set(STATUS_DEP_SDL2 "not needed")
+  set(STATUS_PORTAUDIO "not needed")
 else(DISABLE_PLAYER)
-  find_package(SDL2)
-  if(SDL2_FOUND)
-    set(STATUS_SDL2 "OK")
-    set(STATUS_DEP_SDL2 "using system library")
-    set(SDL2_IS_BUNDLED FALSE)
-  else(SDL2_FOUND)
-    set(STATUS_SDL2 "not found - will use bundled version")
-    set(STATUS_DEP_SDL2 "ready to build")
-    set(SDL2_IS_BUNDLED TRUE)
-
-    set(SDL_SHARED OFF CACHE BOOL "test")
-    set(SDL_VIDEO OFF CACHE BOOL "test")
-    set(SDL_RENDER OFF CACHE BOOL "test")
-    set(SDL_EVENTS OFF CACHE BOOL "test")
-    set(SDL_JOYSTICK OFF CACHE BOOL "test")
-    set(SDL_HAPTIC OFF CACHE BOOL "test")
-    set(SDL_POWER OFF CACHE BOOL "test")
-    set(SDL_TIMERS OFF CACHE BOOL "test")
-    set(SDL_LOADSO OFF CACHE BOOL "test")
-    set(SDL_CPUINFO OFF CACHE BOOL "test")
-    set(SDL_FILESYSTEM OFF CACHE BOOL "test")
-
-    set(EXTRA_CFLAGS "-fPIC" CACHE STRING "test")
-
-    set(SDL2_SRC "${PROJECT_SOURCE_DIR}/deps/SDL2")
-    add_subdirectory(${SDL2_SRC})
-    set(SDL2_INCLUDE_DIR ${SDL2_SRC})
-  endif(SDL2_FOUND)
+  find_package(Portaudio 2.0)
+  if(PORTAUDIO_FOUND)
+    set(STATUS_PORTAUDIO "OK")
+  else(PORTAUDIO_FOUND)
+    set(STATUS_PORTAUDIO "not found")
+    set(DISABLE_PLAYER true)
+    set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
+  endif(PORTAUDIO_FOUND)
 endif(DISABLE_PLAYER)
 
 # check for libav
@@ -300,13 +279,8 @@ else()
     )
   target_link_libraries(grooveplayer groove)
   add_dependencies(grooveplayer groove)
-  if(SDL2_IS_BUNDLED)
-    target_link_libraries(grooveplayer SDL2-static)
-    add_dependencies(grooveplayer SDL2-static)
-  else()
-    target_link_libraries(grooveplayer ${SDL2_LIBRARY})
-  endif()
-  include_directories(${SDL2_INCLUDE_DIR})
+  target_link_libraries(grooveplayer ${PORTAUDIO_LIBRARIES})
+  include_directories(${PORTAUDIO_INCLUDE_DIRS})
 
   install(FILES "grooveplayer/player.h" DESTINATION "include/grooveplayer")
   install(TARGETS grooveplayer DESTINATION lib)
@@ -317,9 +291,6 @@ else()
   set_target_properties(grooveplayer_static PROPERTIES
     OUTPUT_NAME grooveplayer
     COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
-  if(SDL2_IS_BUNDLED)
-    add_dependencies(grooveplayer_static SDL2-static)
-  endif()
   install(TARGETS grooveplayer_static DESTINATION lib)
 
 
@@ -390,7 +361,6 @@ message("\n"
 message(
 "Bundled Dependencies\n"
 "--------------------\n"
-"* SDL2                         : ${STATUS_DEP_SDL2}\n"
 "* libav                        : ${STATUS_DEP_LIBAV}\n"
 "* libebur128                   : ${STATUS_DEP_LIBEBUR128}\n"
 )
@@ -400,7 +370,7 @@ message(
 "-------------------\n"
 "* C99 Compiler                 : ${STATUS_C99}\n"
 "* threads                      : ${STATUS_THREADS}\n"
-"* SDL2                         : ${STATUS_SDL2}\n"
+"* portaudio                    : ${STATUS_PORTAUDIO}\n"
 "* ebur128                      : ${STATUS_EBUR128}\n"
 "* libavformat                  : ${STATUS_LIBAVFORMAT}\n"
 "* libavcodec                   : ${STATUS_LIBAVCODEC}\n"

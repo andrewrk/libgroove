@@ -32,6 +32,8 @@ union GroovePlayerEvent {
 struct GroovePlayer {
     /* set this to the device you want to open
      * NULL means default device
+     * deprecation warning: on the next major version bump device will be
+     * specified by index rather than name.
      */
     char *device_name;
 
@@ -45,7 +47,7 @@ struct GroovePlayer {
 
     /* how big the device buffer should be, in sample frames.
      * must be a power of 2.
-     * groove_player_create defaults this to 1024
+     * Defaults to the default value for the device.
      */
     int device_buffer_size;
 

@@ -10,9 +10,9 @@
 
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_audio.h>
+#include <portaudio.h>
 #include <pthread.h>
+#include <string.h>
 
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
@@ -29,41 +29,42 @@ struct GroovePlayerPrivate {
     // is reaching the device
     double play_pos;
 
-    SDL_AudioDeviceID device_id;
+    PaStream *stream;
     struct GrooveSink *sink;
 
     struct GrooveQueue *eventq;
 };
 
-static Uint16 groove_fmt_to_sdl_fmt(enum GrooveSampleFormat fmt) {
+static PaSampleFormat groove_fmt_to_portaudio_fmt(enum GrooveSampleFormat fmt) {
     switch (fmt) {
         case GROOVE_SAMPLE_FMT_U8:
-            return AUDIO_U8;
+            return paUInt8;
         case GROOVE_SAMPLE_FMT_S16:
-            return AUDIO_S16SYS;
+            return paInt16;
         case GROOVE_SAMPLE_FMT_S32:
-            return AUDIO_S32SYS;
+            return paInt32;
         case GROOVE_SAMPLE_FMT_FLT:
-            return AUDIO_F32SYS;
+            return paFloat32;
+
+        case GROOVE_SAMPLE_FMT_U8P:
+            return paUInt8|paNonInterleaved;
+        case GROOVE_SAMPLE_FMT_S16P:
+            return paInt16|paNonInterleaved;
+        case GROOVE_SAMPLE_FMT_S32P:
+            return paInt32|paNonInterleaved;
+        case GROOVE_SAMPLE_FMT_FLTP:
+            return paFloat32|paNonInterleaved;
+
+        case GROOVE_SAMPLE_FMT_DBLP:
+            av_log(NULL, AV_LOG_ERROR,
+                "unable to use selected format. using GROOVE_SAMPLE_FMT_S16P instead.\n");
+            return paInt16|paNonInterleaved;
+
         default:
             av_log(NULL, AV_LOG_ERROR,
                 "unable to use selected format. using GROOVE_SAMPLE_FMT_S16 instead.\n");
-            return AUDIO_S16SYS;
-    }
-}
+            return paInt16;
 
-static enum GrooveSampleFormat sdl_fmt_to_groove_fmt(Uint16 sdl_format) {
-    switch (sdl_format) {
-        case AUDIO_U8:
-            return GROOVE_SAMPLE_FMT_U8;
-        case AUDIO_S16SYS:
-            return GROOVE_SAMPLE_FMT_S16;
-        case AUDIO_S32SYS:
-            return GROOVE_SAMPLE_FMT_S32;
-        case AUDIO_F32SYS:
-            return GROOVE_SAMPLE_FMT_FLT;
-        default:
-            return GROOVE_SAMPLE_FMT_NONE;
     }
 }
 
@@ -78,8 +79,10 @@ static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType typ
         av_log(NULL, AV_LOG_ERROR, "unable to put event on queue: out of memory\n");
 }
 
-
-static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
+static int portaudio_audio_callback(const void *input, void *output_void,
+        unsigned long len, const PaStreamCallbackTimeInfo *timeInfo,
+        PaStreamCallbackFlags statusFlags, void *opaque)
+{
     struct GroovePlayerPrivate *p = opaque;
 
     struct GrooveSink *sink = p->sink;
@@ -87,6 +90,8 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
 
     double bytes_per_sec = sink->bytes_per_sec;
     int paused = !groove_playlist_playing(playlist);
+
+    unsigned char *output = (unsigned char *) output_void;
 
     pthread_mutex_lock(&p->play_head_mutex);
 
@@ -116,20 +121,21 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
         }
         if (paused || !p->audio_buf) {
             // fill with silence
-            memset(stream, 0, len);
+            memset(output, 0, len);
             break;
         }
         size_t len1 = p->audio_buf_size - p->audio_buf_index;
         if (len1 > len)
             len1 = len;
-        memcpy(stream, p->audio_buf->data[0] + p->audio_buf_index, len1);
+        memcpy(output, p->audio_buf->data[0] + p->audio_buf_index, len1);
         len -= len1;
-        stream += len1;
+        output += len1;
         p->audio_buf_index += len1;
         p->play_pos += len1 / bytes_per_sec;
     }
 
     pthread_mutex_unlock(&p->play_head_mutex);
+    return paContinue;
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
@@ -171,10 +177,11 @@ struct GroovePlayer *groove_player_create(void) {
         return NULL;
     }
 
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+    PaError err = Pa_Initialize();
+    if (err != paNoError) {
         av_free(p);
-        av_log(NULL, AV_LOG_ERROR, "unable to init SDL audio subsystem: %s\n",
-                SDL_GetError());
+        av_log(NULL, AV_LOG_ERROR, "unable to init PortAudio: %s\n",
+                Pa_GetErrorText(err));
         return NULL;
     }
 
@@ -206,11 +213,10 @@ struct GroovePlayer *groove_player_create(void) {
     }
 
     // set some nice defaults
-    player->target_audio_format.sample_rate = 44100;
+    player->target_audio_format.sample_rate = -1; // find out default in attach
     player->target_audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
     player->target_audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
-    // small because there is no way to clear the buffer.
-    player->device_buffer_size = 1024;
+    player->device_buffer_size = -1; // find out default in attach
     player->sink_buffer_size = 8192;
 
     return player;
@@ -220,7 +226,11 @@ void groove_player_destroy(struct GroovePlayer *player) {
     if (!player)
         return;
 
-    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    PaError err = Pa_Terminate();
+    if (err != paNoError) {
+        av_log(NULL, AV_LOG_WARNING, "unable to terminate PortAudio: %s\n",
+                Pa_GetErrorText(err));
+    }
 
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
@@ -238,25 +248,56 @@ void groove_player_destroy(struct GroovePlayer *player) {
 int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *playlist) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    SDL_AudioSpec wanted_spec, spec;
-    wanted_spec.format = groove_fmt_to_sdl_fmt(player->target_audio_format.sample_fmt);
-    wanted_spec.freq = player->target_audio_format.sample_rate;
-    wanted_spec.channels = groove_channel_layout_count(player->target_audio_format.channel_layout);
-    wanted_spec.samples = player->device_buffer_size;
-    wanted_spec.callback = sdl_audio_callback;
-    wanted_spec.userdata = player;
-
-    p->device_id = SDL_OpenAudioDevice(player->device_name, 0, &wanted_spec,
-            &spec, SDL_AUDIO_ALLOW_ANY_CHANGE);
-    if (p->device_id == 0) {
-        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
-        return -1;
+    // deprecation: on the next version bump, replace this with an index.
+    // figure out which device index has the name player->device_name
+    PaDeviceIndex device_index = -1;
+    const PaDeviceInfo *device_info = NULL;
+    if (player->device_name) {
+        int device_count = Pa_GetDeviceCount();
+        for (int i = 0; i < device_count; i += 1) {
+            device_info = Pa_GetDeviceInfo(i);
+            if (strcmp(device_info->name, player->device_name) == 0) {
+                device_index = i;
+                break;
+            }
+        }
+    }
+    if (device_index == -1) {
+        device_index = Pa_GetDefaultOutputDevice();
+        device_info = Pa_GetDeviceInfo(device_index);
     }
 
-    // save the actual spec back into the struct
-    player->actual_audio_format.sample_rate = spec.freq;
-    player->actual_audio_format.channel_layout = groove_channel_layout_default(spec.channels);
-    player->actual_audio_format.sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
+    player->actual_audio_format = player->target_audio_format;
+
+    if (player->actual_audio_format.sample_rate == -1) {
+        player->actual_audio_format.sample_rate = device_info->defaultSampleRate;
+    }
+
+    // TODO switch to a fallback sample format if the device reports it cannot open it
+
+    double latency;
+    if (player->device_buffer_size == -1) {
+        latency = device_info->defaultHighOutputLatency;
+        player->device_buffer_size = latency * player->actual_audio_format.sample_rate;
+    } else {
+        latency = player->device_buffer_size / (double) player->target_audio_format.sample_rate;
+    }
+
+    PaStreamParameters params;
+    params.device = device_index;
+    params.channelCount = groove_channel_layout_count(player->actual_audio_format.channel_layout);
+    params.sampleFormat = groove_fmt_to_portaudio_fmt(player->actual_audio_format.sample_fmt);
+    params.suggestedLatency = latency;
+    params.hostApiSpecificStreamInfo = NULL;
+
+    PaStreamFlags flags = paClipOff|paDitherOff;
+    int err = Pa_OpenStream(&p->stream, NULL, &params, player->actual_audio_format.sample_rate,
+            paFramesPerBufferUnspecified, flags, portaudio_audio_callback, player);
+    if (err != paNoError) {
+        p->stream = NULL;
+        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", Pa_GetErrorText(err));
+        return -1;
+    }
 
     // based on spec that we got, attach a sink with those properties
     p->sink->buffer_size = player->sink_buffer_size;
@@ -268,7 +309,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
         return -1;
     }
 
-    int err = groove_sink_attach(p->sink, playlist);
+    err = groove_sink_attach(p->sink, playlist);
     if (err < 0) {
         groove_player_detach(player);
         av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
@@ -279,7 +320,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
 
     groove_queue_reset(p->eventq);
 
-    SDL_PauseAudioDevice(p->device_id, 0);
+    Pa_StartStream(p->stream);
 
     return 0;
 }
@@ -293,9 +334,9 @@ int groove_player_detach(struct GroovePlayer *player) {
     if (p->sink->playlist) {
         groove_sink_detach(p->sink);
     }
-    if (p->device_id > 0) {
-        SDL_CloseAudioDevice(p->device_id);
-        p->device_id = 0;
+    if (p->stream) {
+        Pa_CloseStream(p->stream);
+        p->stream = NULL;
     }
     player->playlist = NULL;
 
@@ -306,11 +347,12 @@ int groove_player_detach(struct GroovePlayer *player) {
 }
 
 int groove_device_count(void) {
-    return SDL_GetNumAudioDevices(0);
+    return Pa_GetDeviceCount();
 }
 
-const char * groove_device_name(int index) {
-    return SDL_GetAudioDeviceName(index, 0);
+const char *groove_device_name(int index) {
+    const PaDeviceInfo *info = Pa_GetDeviceInfo(index);
+    return info->name;
 }
 
 void groove_player_position(struct GroovePlayer *player,
