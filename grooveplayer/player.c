@@ -335,7 +335,16 @@ int groove_player_detach(struct GroovePlayer *player) {
         groove_sink_detach(p->sink);
     }
     if (p->stream) {
-        Pa_CloseStream(p->stream);
+        PaErrorCode err = Pa_StopStream(p->stream);
+        if (err != paNoError) {
+            av_log(NULL, AV_LOG_ERROR, "unable to stop stream: %s\n",
+                    Pa_GetErrorText(err));
+        }
+        err = Pa_CloseStream(p->stream);
+        if (err != paNoError) {
+            av_log(NULL, AV_LOG_ERROR, "unable to close stream: %s\n",
+                    Pa_GetErrorText(err));
+        }
         p->stream = NULL;
     }
     player->playlist = NULL;
