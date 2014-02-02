@@ -415,8 +415,8 @@ following image formats are supported:
     @tab YUV, JPEG and some extension is not supported yet.
 @item Truevision Targa  @tab X @tab X
     @tab Targa (.TGA) image format
-@item WebP         @tab @tab X
-    @tab WebP image format
+@item WebP         @tab E @tab X
+    @tab WebP image format, encoding supported through external library libwebp
 @item XBM  @tab X @tab
     @tab X BitMap image format
 @item XWD  @tab X @tab X
@@ -729,6 +729,7 @@ following image formats are supported:
     @tab QuickTime fourcc 'alac'
 @item ATRAC1                 @tab     @tab  X
 @item ATRAC3                 @tab     @tab  X
+@item ATRAC3+                @tab     @tab  X
 @item Bink Audio             @tab     @tab  X
     @tab Used in Bink and Smacker files in many games.
 @item Delphine Software International CIN audio  @tab     @tab  X
@@ -827,7 +828,6 @@ following image formats are supported:
 @item Vorbis                 @tab  E  @tab  X
     @tab A native but very primitive encoder exists.
 @item Voxware MetaSound      @tab     @tab  X
-    @tab imperfect and incomplete support
 @item WavPack                @tab  E  @tab  X
     @tab supported through external library libwavpack
 @item Westwood Audio (SND1)  @tab     @tab  X

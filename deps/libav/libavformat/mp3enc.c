@@ -84,6 +84,7 @@ typedef struct MP3Context {
     ID3v2EncContext id3;
     int id3v2_version;
     int write_id3v1;
+    int write_xing;
 
     /* xing header */
     int64_t xing_offset;
@@ -121,7 +122,7 @@ static void mp3_write_xing(AVFormatContext *s)
     int xing_offset;
     int ver = 0;
 
-    if (!s->pb->seekable)
+    if (!s->pb->seekable || !mp3->write_xing)
         return;
 
     for (i = 0; i < FF_ARRAY_ELEMS(avpriv_mpa_freq_tab); i++) {
@@ -318,9 +319,11 @@ AVOutputFormat ff_mp2_muxer = {
 
 static const AVOption options[] = {
     { "id3v2_version", "Select ID3v2 version to write. Currently 3 and 4 are supported.",
-      offsetof(MP3Context, id3v2_version), AV_OPT_TYPE_INT, {.i64 = 4}, 3, 4, AV_OPT_FLAG_ENCODING_PARAM},
+      offsetof(MP3Context, id3v2_version), AV_OPT_TYPE_INT, {.i64 = 4}, 0, 4, AV_OPT_FLAG_ENCODING_PARAM},
     { "write_id3v1", "Enable ID3v1 writing. ID3v1 tags are written in UTF-8 which may not be supported by most software.",
       offsetof(MP3Context, write_id3v1), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM},
+    { "write_xing",  "Write the Xing header containing file duration.",
+      offsetof(MP3Context, write_xing),  AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM},
     { NULL },
 };
 
@@ -389,6 +392,14 @@ static int mp3_write_header(struct AVFormatContext *s)
     MP3Context  *mp3 = s->priv_data;
     int ret, i;
 
+    if (mp3->id3v2_version      &&
+        mp3->id3v2_version != 3 &&
+        mp3->id3v2_version != 4) {
+        av_log(s, AV_LOG_ERROR, "Invalid ID3v2 version requested: %d. Only "
+               "3, 4 or 0 (disabled) are allowed.\n", mp3->id3v2_version);
+        return AVERROR(EINVAL);
+    }
+
     /* check the streams -- we want exactly one audio and arbitrary number of
      * video (attached pictures) */
     mp3->audio_stream_idx = -1;
@@ -412,13 +423,22 @@ static int mp3_write_header(struct AVFormatContext *s)
     }
     mp3->pics_to_write = s->nb_streams - 1;
 
-    ff_id3v2_start(&mp3->id3, s->pb, mp3->id3v2_version, ID3v2_DEFAULT_MAGIC);
-    ret = ff_id3v2_write_metadata(s, &mp3->id3);
-    if (ret < 0)
-        return ret;
+    if (mp3->pics_to_write && !mp3->id3v2_version) {
+        av_log(s, AV_LOG_ERROR, "Attached pictures were requested, but the "
+               "ID3v2 header is disabled.\n");
+        return AVERROR(EINVAL);
+    }
+
+    if (mp3->id3v2_version) {
+        ff_id3v2_start(&mp3->id3, s->pb, mp3->id3v2_version, ID3v2_DEFAULT_MAGIC);
+        ret = ff_id3v2_write_metadata(s, &mp3->id3);
+        if (ret < 0)
+            return ret;
+    }
 
     if (!mp3->pics_to_write) {
-        ff_id3v2_finish(&mp3->id3, s->pb);
+        if (mp3->id3v2_version)
+            ff_id3v2_finish(&mp3->id3, s->pb);
         mp3_write_xing(s);
     }
 

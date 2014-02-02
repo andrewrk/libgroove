@@ -667,7 +667,13 @@ typedef struct RcOverride{
 #define CODEC_FLAG_PASS1           0x0200   ///< Use internal 2pass ratecontrol in first pass mode.
 #define CODEC_FLAG_PASS2           0x0400   ///< Use internal 2pass ratecontrol in second pass mode.
 #define CODEC_FLAG_GRAY            0x2000   ///< Only decode/encode grayscale.
-#define CODEC_FLAG_EMU_EDGE        0x4000   ///< Don't draw edges.
+#if FF_API_EMU_EDGE
+/**
+ * @deprecated edges are not used/required anymore. I.e. this flag is now always
+ * set.
+ */
+#define CODEC_FLAG_EMU_EDGE        0x4000
+#endif
 #define CODEC_FLAG_PSNR            0x8000   ///< error[?] variables will be set during encoding.
 #define CODEC_FLAG_TRUNCATED       0x00010000 /** Input bitstream might be truncated at a random
                                                   location instead of only at frame boundaries. */
@@ -2000,9 +2006,6 @@ typedef struct AVCodecContext {
      * If AV_GET_BUFFER_FLAG_REF is set in flags then the frame may be reused
      * (read and/or written to if it is writable) later by libavcodec.
      *
-     * If CODEC_FLAG_EMU_EDGE is not set in s->flags, the buffer must contain an
-     * edge of the size returned by avcodec_get_edge_width() on all sides.
-     *
      * avcodec_align_dimensions2() should be used to find the required width and
      * height, as they normally need to be rounded up to the next multiple of 16.
      *
@@ -2662,6 +2665,11 @@ typedef struct AVCodecContext {
 #define FF_PROFILE_JPEG2000_DCINEMA_2K              3
 #define FF_PROFILE_JPEG2000_DCINEMA_4K              4
 
+
+#define FF_PROFILE_HEVC_MAIN                        1
+#define FF_PROFILE_HEVC_MAIN_10                     2
+#define FF_PROFILE_HEVC_MAIN_STILL_PICTURE          3
+
     /**
      * level
      * - encoding: Set by user.
@@ -3103,13 +3111,15 @@ int avcodec_copy_context(AVCodecContext *dest, const AVCodecContext *src);
  */
 attribute_deprecated
 AVFrame *avcodec_alloc_frame(void);
-#endif
 
 /**
  * Set the fields of the given AVFrame to default values.
  *
  * @param frame The AVFrame of which the fields should be set to default values.
+ *
+ * @deprecated use av_frame_unref()
  */
+attribute_deprecated
 void avcodec_get_frame_defaults(AVFrame *frame);
 
 /**
@@ -3121,8 +3131,12 @@ void avcodec_get_frame_defaults(AVFrame *frame);
  * @warning this function does NOT free the data buffers themselves
  * (it does not know how, since they might have been allocated with
  *  a custom get_buffer()).
+ *
+ * @deprecated use av_frame_free()
  */
+attribute_deprecated
 void avcodec_free_frame(AVFrame **frame);
+#endif
 
 /**
  * Initialize the AVCodecContext to use the given AVCodec. Prior to using this
@@ -3393,14 +3407,20 @@ attribute_deprecated int avcodec_default_reget_buffer(AVCodecContext *s, AVFrame
  */
 int avcodec_default_get_buffer2(AVCodecContext *s, AVFrame *frame, int flags);
 
+#if FF_API_EMU_EDGE
 /**
  * Return the amount of padding in pixels which the get_buffer callback must
  * provide around the edge of the image for codecs which do not have the
  * CODEC_FLAG_EMU_EDGE flag.
  *
  * @return Required padding in pixels.
+ *
+ * @deprecated CODEC_FLAG_EMU_EDGE is deprecated, so this function is no longer
+ * needed
  */
+attribute_deprecated
 unsigned avcodec_get_edge_width(void);
+#endif
 
 /**
  * Modify width and height values so that they will result in a memory
@@ -3408,8 +3428,6 @@ unsigned avcodec_get_edge_width(void);
  * padding.
  *
  * May only be used if a codec with CODEC_CAP_DR1 has been opened.
- * If CODEC_FLAG_EMU_EDGE is not set, the dimensions must have been increased
- * according to avcodec_get_edge_width() before.
  */
 void avcodec_align_dimensions(AVCodecContext *s, int *width, int *height);
 
@@ -3419,8 +3437,6 @@ void avcodec_align_dimensions(AVCodecContext *s, int *width, int *height);
  * line sizes are a multiple of the respective linesize_align[i].
  *
  * May only be used if a codec with CODEC_CAP_DR1 has been opened.
- * If CODEC_FLAG_EMU_EDGE is not set, the dimensions must have been increased
- * according to avcodec_get_edge_width() before.
  */
 void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
                                int linesize_align[AV_NUM_DATA_POINTERS]);

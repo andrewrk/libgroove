@@ -46,24 +46,24 @@ static void decode_nal_sei_decoded_picture_hash(HEVCContext *s)
     }
 }
 
-static void decode_nal_sei_frame_packing_arrangement(HEVCLocalContext *lc)
+static void decode_nal_sei_frame_packing_arrangement(HEVCContext *s)
 {
-    GetBitContext *gb = &lc->gb;
-    int cancel, type, quincunx;
+    GetBitContext *gb = &s->HEVClc.gb;
 
     get_ue_golomb(gb);                  // frame_packing_arrangement_id
-    cancel = get_bits1(gb);             // frame_packing_cancel_flag
-    if (cancel == 0) {
-        type     = get_bits(gb, 7);     // frame_packing_arrangement_type
-        quincunx = get_bits1(gb);       // quincunx_sampling_flag
-        skip_bits(gb, 6);               // content_interpretation_type
+    s->sei_frame_packing_present = !get_bits1(gb);
+
+    if (s->sei_frame_packing_present) {
+        s->frame_packing_arrangement_type = get_bits(gb, 7);
+        s->quincunx_subsampling           = get_bits1(gb);
+        s->content_interpretation_type    = get_bits(gb, 6);
 
         // the following skips spatial_flipping_flag frame0_flipped_flag
         // field_views_flag current_frame_is_frame0_flag
         // frame0_self_contained_flag frame1_self_contained_flag
         skip_bits(gb, 6);
 
-        if (quincunx == 0 && type != 5)
+        if (!s->quincunx_subsampling && s->frame_packing_arrangement_type != 5)
             skip_bits(gb, 16);  // frame[01]_grid_position_[xy]
         skip_bits(gb, 8);       // frame_packing_arrangement_reserved_byte
         skip_bits1(gb);         // frame_packing_arrangement_persistance_flag
@@ -93,7 +93,7 @@ static int decode_nal_sei_message(HEVCContext *s)
         if (payload_type == 256)
             decode_nal_sei_decoded_picture_hash(s);
         else if (payload_type == 45)
-            decode_nal_sei_frame_packing_arrangement(&s->HEVClc);
+            decode_nal_sei_frame_packing_arrangement(s);
         else {
             av_log(s->avctx, AV_LOG_DEBUG, "Skipped PREFIX SEI %d\n", payload_type);
             skip_bits(gb, 8 * payload_size);

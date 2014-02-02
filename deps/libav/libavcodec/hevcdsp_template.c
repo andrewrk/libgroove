@@ -50,7 +50,7 @@ static void FUNC(transquant_bypass4x4)(uint8_t *_dst, int16_t *coeffs,
 
     for (y = 0; y < 4; y++) {
         for (x = 0; x < 4; x++) {
-            dst[x] += *coeffs;
+            dst[x] = av_clip_pixel(dst[x] + *coeffs);
             coeffs++;
         }
         dst += stride;
@@ -67,7 +67,7 @@ static void FUNC(transquant_bypass8x8)(uint8_t *_dst, int16_t *coeffs,
 
     for (y = 0; y < 8; y++) {
         for (x = 0; x < 8; x++) {
-            dst[x] += *coeffs;
+            dst[x] = av_clip_pixel(dst[x] + *coeffs);
             coeffs++;
         }
         dst += stride;
@@ -84,7 +84,7 @@ static void FUNC(transquant_bypass16x16)(uint8_t *_dst, int16_t *coeffs,
 
     for (y = 0; y < 16; y++) {
         for (x = 0; x < 16; x++) {
-            dst[x] += *coeffs;
+            dst[x] = av_clip_pixel(dst[x] + *coeffs);
             coeffs++;
         }
         dst += stride;
@@ -101,7 +101,7 @@ static void FUNC(transquant_bypass32x32)(uint8_t *_dst, int16_t *coeffs,
 
     for (y = 0; y < 32; y++) {
         for (x = 0; x < 32; x++) {
-            dst[x] += *coeffs;
+            dst[x] = av_clip_pixel(dst[x] + *coeffs);
             coeffs++;
         }
         dst += stride;
@@ -393,7 +393,7 @@ static void FUNC(sao_band_filter)(uint8_t *_dst, uint8_t *_src,
         offset_table[(k + sao_left_class) & 31] = sao_offset_val[k + 1];
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
-            dst[x] = av_clip_pixel(src[x] + offset_table[av_clip_pixel(src[x] >> shift)]);
+            dst[x] = av_clip_pixel(src[x] + offset_table[src[x] >> shift]);
         dst += stride;
         src += stride;
     }

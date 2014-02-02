@@ -84,8 +84,12 @@ av_cold int ff_mjpeg_decode_init(AVCodecContext *avctx)
 {
     MJpegDecodeContext *s = avctx->priv_data;
 
-    if (!s->picture_ptr)
-        s->picture_ptr = &s->picture;
+    if (!s->picture_ptr) {
+        s->picture = av_frame_alloc();
+        if (!s->picture)
+            return AVERROR(ENOMEM);
+        s->picture_ptr = s->picture;
+    }
 
     s->avctx = avctx;
     ff_hpeldsp_init(&s->hdsp, avctx->flags);
@@ -361,6 +365,12 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             s->avctx->pix_fmt = AV_PIX_FMT_GRAY8;
         else
             s->avctx->pix_fmt = AV_PIX_FMT_GRAY16;
+    }
+
+    s->pix_desc = av_pix_fmt_desc_get(s->avctx->pix_fmt);
+    if (!s->pix_desc) {
+        av_log(s->avctx, AV_LOG_ERROR, "Could not get a pixel format descriptor.\n");
+        return AVERROR_BUG;
     }
 
     av_frame_unref(s->picture_ptr);
@@ -820,26 +830,12 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
     if (mb_bitmask)
         init_get_bits(&mb_bitmask_gb, mb_bitmask, s->mb_width * s->mb_height);
 
-    if (s->flipped && s->avctx->flags & CODEC_FLAG_EMU_EDGE) {
-        av_log(s->avctx, AV_LOG_ERROR,
-               "Can not flip image with CODEC_FLAG_EMU_EDGE set!\n");
-        s->flipped = 0;
-    }
-
     for (i = 0; i < nb_components; i++) {
         int c   = s->comp_index[i];
         data[c] = s->picture_ptr->data[c];
         reference_data[c] = reference ? reference->data[c] : NULL;
         linesize[c] = s->linesize[c];
         s->coefs_finished[c] |= 1;
-        if (s->flipped) {
-            // picture should be flipped upside-down for this codec
-            int offset = (linesize[c] * (s->v_scount[i] *
-                         (8 * s->mb_height - ((s->height / s->v_max) & 7)) - 1));
-            data[c]           += offset;
-            reference_data[c] += offset;
-            linesize[c]       *= -1;
-        }
     }
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
@@ -1460,6 +1456,7 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
 int ff_mjpeg_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                           AVPacket *avpkt)
 {
+    AVFrame     *frame = data;
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     MJpegDecodeContext *s = avctx->priv_data;
@@ -1581,8 +1578,17 @@ eoi_parser:
                 if (s->bottom_field == !s->interlace_polarity)
                     goto not_the_end;
             }
-            if ((ret = av_frame_ref(data, s->picture_ptr)) < 0)
+            if ((ret = av_frame_ref(frame, s->picture_ptr)) < 0)
                 return ret;
+            if (s->flipped) {
+                int i;
+                for (i = 0; frame->data[i]; i++) {
+                    int h = frame->height >> ((i == 1 || i == 2) ?
+                                              s->pix_desc->log2_chroma_h : 0);
+                    frame->data[i] += frame->linesize[i] * (h - 1);
+                    frame->linesize[i] *= -1;
+                }
+            }
             *got_frame = 1;
 
             if (!s->lossless &&
@@ -1651,7 +1657,10 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
     MJpegDecodeContext *s = avctx->priv_data;
     int i, j;
 
-    if (s->picture_ptr)
+    if (s->picture) {
+        av_frame_free(&s->picture);
+        s->picture_ptr = NULL;
+    } else if (s->picture_ptr)
         av_frame_unref(s->picture_ptr);
 
     av_free(s->buffer);

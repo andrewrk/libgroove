@@ -16,7 +16,7 @@ HEVC_SAMPLES =                  \
     CAINIT_G_SHARP_3            \
     CAINIT_H_SHARP_3            \
     CIP_A_Panasonic_3           \
-    cip_B_NEC_2                 \
+    cip_B_NEC_3                 \
     CIP_C_Panasonic_2           \
     DBLK_A_SONY_3               \
     DBLK_B_SONY_3               \
@@ -38,15 +38,16 @@ HEVC_SAMPLES =                  \
     ENTP_B_LG_2                 \
     ENTP_C_LG_3                 \
     EXT_A_ericsson_3            \
-    ipcm_A_NEC_2                \
-    ipcm_B_NEC_2                \
-    ipcm_C_NEC_2                \
-    ipcm_D_NEC_2                \
+    ipcm_A_NEC_3                \
+    ipcm_B_NEC_3                \
+    ipcm_C_NEC_3                \
+    ipcm_D_NEC_3                \
+    ipcm_E_NEC_2                \
     IPRED_A_docomo_2            \
     IPRED_B_Nokia_3             \
     IPRED_C_Mitsubishi_2        \
     LS_A_Orange_2               \
-    LS_B_ORANGE_3               \
+    LS_B_ORANGE_4               \
     MAXBINS_A_TI_4              \
     MAXBINS_B_TI_4              \
     MAXBINS_C_TI_4              \
@@ -83,6 +84,7 @@ HEVC_SAMPLES =                  \
     RPS_C_ericsson_4            \
     RPS_D_ericsson_5            \
     RPS_E_qualcomm_5            \
+    RPS_F_docomo_1              \
     RQT_A_HHI_4                 \
     RQT_B_HHI_4                 \
     RQT_C_HHI_4                 \
@@ -107,10 +109,11 @@ HEVC_SAMPLES =                  \
     STRUCT_B_Samsung_4          \
     TILES_A_Cisco_2             \
     TILES_B_Cisco_1             \
-    TMVP_A_MS_2                 \
+    TMVP_A_MS_3                 \
     TSCL_A_VIDYO_5              \
     TSCL_B_VIDYO_4              \
-    TSKIP_A_MS_2                \
+    TSKIP_A_MS_3                \
+    TUSIZE_A_Samsung_1          \
     WP_A_Toshiba_3              \
     WP_B_Toshiba_3              \
     WPP_A_ericsson_MAIN_2       \

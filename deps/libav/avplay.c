@@ -23,6 +23,8 @@
 #include <inttypes.h>
 #include <math.h>
 #include <limits.h>
+#include <stdint.h>
+
 #include "libavutil/avstring.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/mathematics.h"
@@ -1844,8 +1846,7 @@ static int audio_decode_frame(VideoState *is, double *pts_ptr)
             if (!is->frame) {
                 if (!(is->frame = av_frame_alloc()))
                     return AVERROR(ENOMEM);
-            } else
-                avcodec_get_frame_defaults(is->frame);
+            }
 
             if (flush_complete)
                 break;
@@ -2150,7 +2151,7 @@ static void stream_component_close(VideoState *is, int stream_index)
             avresample_free(&is->avr);
         av_freep(&is->audio_buf1);
         is->audio_buf = NULL;
-        avcodec_free_frame(&is->frame);
+        av_frame_free(&is->frame);
 
         if (is->rdft) {
             av_rdft_end(is->rdft);

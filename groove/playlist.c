@@ -160,7 +160,6 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
 
     // NOTE: the audio packet can contain several frames
     while (pkt_temp->size > 0 || (!pkt_temp->data && new_packet)) {
-        avcodec_get_frame_defaults(in_frame);
         new_packet = 0;
 
         len1 = avcodec_decode_audio4(dec, in_frame, &got_frame, pkt_temp);
@@ -881,7 +880,7 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
     every_sink(playlist, groove_sink_detach, 0);
 
     avfilter_graph_free(&p->filter_graph);
-    avcodec_free_frame(&p->in_frame);
+    av_frame_free(&p->in_frame);
 
     if (p->decode_head_mutex_inited)
         pthread_mutex_destroy(&p->decode_head_mutex);

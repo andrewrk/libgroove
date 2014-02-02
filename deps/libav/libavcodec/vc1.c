@@ -367,7 +367,7 @@ int ff_vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitCo
 
     v->overlap         = get_bits1(gb); //common
 
-    v->s.resync_marker = get_bits1(gb);
+    v->resync_marker   = get_bits1(gb);
     v->rangered        = get_bits1(gb);
     if (v->rangered && v->profile == PROFILE_SIMPLE) {
         av_log(avctx, AV_LOG_INFO,
@@ -408,7 +408,7 @@ int ff_vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitCo
            "DQuant=%i, Quantizer mode=%i, Max B frames=%i\n",
            v->profile, v->frmrtq_postproc, v->bitrtq_postproc,
            v->s.loop_filter, v->multires, v->fastuvmc, v->extended_mv,
-           v->rangered, v->vstransform, v->overlap, v->s.resync_marker,
+           v->rangered, v->vstransform, v->overlap, v->resync_marker,
            v->dquant, v->quantizer_mode, avctx->max_b_frames);
     return 0;
 }
@@ -614,6 +614,10 @@ static void rotate_luts(VC1Context *v)
     INIT_LUT(32, 0, v->curr_luty[0], v->curr_lutuv[0], 0);
     INIT_LUT(32, 0, v->curr_luty[1], v->curr_lutuv[1], 0);
     v->curr_use_ic = 0;
+    if (v->curr_luty == v->next_luty) {
+        // If we just initialized next_lut, clear next_use_ic to match.
+        v->next_use_ic = 0;
+    }
 }
 
 int ff_vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
@@ -838,6 +842,7 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
     int mbmodetab, imvtab, icbptab, twomvbptab, fourmvbptab; /* useful only for debugging */
     int field_mode, fcm;
 
+    v->numref          = 0;
     v->p_frame_skipped = 0;
     if (v->second_field) {
         v->s.pict_type = (v->fptype & 1) ? AV_PICTURE_TYPE_P : AV_PICTURE_TYPE_I;
@@ -864,11 +869,13 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
     v->fcm = fcm;
 
     if (v->field_mode) {
+        v->s.mb_height = FFALIGN(v->s.height + 15 >> 4, 2);
         v->fptype = get_bits(gb, 3);
         v->s.pict_type = (v->fptype & 2) ? AV_PICTURE_TYPE_P : AV_PICTURE_TYPE_I;
         if (v->fptype & 4) // B-picture
             v->s.pict_type = (v->fptype & 2) ? AV_PICTURE_TYPE_BI : AV_PICTURE_TYPE_B;
     } else {
+        v->s.mb_height = v->s.height + 15 >> 4;
         switch (get_unary(gb, 0, 4)) {
         case 0:
             v->s.pict_type = AV_PICTURE_TYPE_P;
@@ -1180,7 +1187,6 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
             if (v->bfraction == 0) {
                 return -1;
             }
-            return -1; // This codepath is still incomplete thus it is disabled
         }
         if (v->extended_mv)
             v->mvrange = get_unary(gb, 0, 3);

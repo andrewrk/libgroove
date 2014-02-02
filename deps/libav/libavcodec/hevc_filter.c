@@ -90,7 +90,7 @@ static int get_qPy_pred(HEVCContext *s, int xC, int yC,
     int qPy_pred, qPy_a, qPy_b;
 
     // qPy_pred
-    if (lc->first_qp_group) {
+    if (lc->first_qp_group || (!xQgBase && !yQgBase)) {
         lc->first_qp_group = !lc->tu.is_cu_qp_delta_coded;
         qPy_pred = s->sh.slice_qp;
     } else {
@@ -158,8 +158,8 @@ void ff_hevc_set_qPy(HEVCContext *s, int xC, int yC,
 
     if (s->HEVClc.tu.cu_qp_delta != 0) {
         int off = s->sps->qp_bd_offset;
-        s->HEVClc.qp_y = ((qp_y + s->HEVClc.tu.cu_qp_delta + 52 + 2 * off) %
-                          (52 + off)) - off;
+        s->HEVClc.qp_y = FFUMOD(qp_y + s->HEVClc.tu.cu_qp_delta + 52 + 2 * off,
+                                52 + off) - off;
     } else
         s->HEVClc.qp_y = qp_y;
 }

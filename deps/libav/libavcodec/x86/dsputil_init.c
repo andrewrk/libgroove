@@ -19,10 +19,12 @@
 #include "config.h"
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
+#include "libavutil/internal.h"
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/dsputil.h"
 #include "libavcodec/simple_idct.h"
+#include "libavcodec/version.h"
 #include "dsputil_x86.h"
 #include "idct_xvid.h"
 
@@ -81,19 +83,6 @@ int32_t ff_scalarproduct_and_madd_int16_sse2(int16_t *v1, const int16_t *v2,
 int32_t ff_scalarproduct_and_madd_int16_ssse3(int16_t *v1, const int16_t *v2,
                                               const int16_t *v3,
                                               int order, int mul);
-
-void ff_apply_window_int16_round_mmxext(int16_t *output, const int16_t *input,
-                                        const int16_t *window, unsigned int len);
-void ff_apply_window_int16_round_sse2(int16_t *output, const int16_t *input,
-                                      const int16_t *window, unsigned int len);
-void ff_apply_window_int16_mmxext(int16_t *output, const int16_t *input,
-                                  const int16_t *window, unsigned int len);
-void ff_apply_window_int16_sse2(int16_t *output, const int16_t *input,
-                                const int16_t *window, unsigned int len);
-void ff_apply_window_int16_ssse3(int16_t *output, const int16_t *input,
-                                 const int16_t *window, unsigned int len);
-void ff_apply_window_int16_ssse3_atom(int16_t *output, const int16_t *input,
-                                      const int16_t *window, unsigned int len);
 
 void ff_bswap32_buf_ssse3(uint32_t *dst, const uint32_t *src, int w);
 void ff_bswap32_buf_sse2(uint32_t *dst, const uint32_t *src, int w);
@@ -595,12 +584,6 @@ static av_cold void dsputil_init_mmxext(DSPContext *c, AVCodecContext *avctx,
 
     c->scalarproduct_int16          = ff_scalarproduct_int16_mmxext;
     c->scalarproduct_and_madd_int16 = ff_scalarproduct_and_madd_int16_mmxext;
-
-    if (avctx->flags & CODEC_FLAG_BITEXACT) {
-        c->apply_window_int16 = ff_apply_window_int16_mmxext;
-    } else {
-        c->apply_window_int16 = ff_apply_window_int16_round_mmxext;
-    }
 #endif /* HAVE_MMXEXT_EXTERNAL */
 }
 
@@ -610,19 +593,20 @@ static av_cold void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx,
 #if HAVE_SSE_INLINE
     const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
-    if (!high_bit_depth) {
+    c->vector_clipf = ff_vector_clipf_sse;
+
 #if FF_API_XVMC
-        if (!(CONFIG_MPEG_XVMC_DECODER && avctx->xvmc_acceleration > 1)) {
-            /* XvMCCreateBlocks() may not allocate 16-byte aligned blocks */
+FF_DISABLE_DEPRECATION_WARNINGS
+    /* XvMCCreateBlocks() may not allocate 16-byte aligned blocks */
+    if (CONFIG_MPEG_XVMC_DECODER && avctx->xvmc_acceleration > 1)
+        return;
+FF_ENABLE_DEPRECATION_WARNINGS
 #endif /* FF_API_XVMC */
+
+    if (!high_bit_depth) {
         c->clear_block  = ff_clear_block_sse;
         c->clear_blocks = ff_clear_blocks_sse;
-#if FF_API_XVMC
-        }
-#endif /* FF_API_XVMC */
     }
-
-    c->vector_clipf = ff_vector_clipf_sse;
 #endif /* HAVE_SSE_INLINE */
 }
 
@@ -648,11 +632,6 @@ static av_cold void dsputil_init_sse2(DSPContext *c, AVCodecContext *avctx,
     } else {
         c->vector_clip_int32 = ff_vector_clip_int32_sse2;
     }
-    if (avctx->flags & CODEC_FLAG_BITEXACT) {
-        c->apply_window_int16 = ff_apply_window_int16_sse2;
-    } else if (!(cpu_flags & AV_CPU_FLAG_SSE2SLOW)) {
-        c->apply_window_int16 = ff_apply_window_int16_round_sse2;
-    }
     c->bswap_buf = ff_bswap32_buf_sse2;
 #endif /* HAVE_SSE2_EXTERNAL */
 }
@@ -665,10 +644,6 @@ static av_cold void dsputil_init_ssse3(DSPContext *c, AVCodecContext *avctx,
     if (cpu_flags & AV_CPU_FLAG_SSE4) // not really SSE4, just slow on Conroe
         c->add_hfyu_left_prediction = ff_add_hfyu_left_prediction_sse4;
 
-    if (cpu_flags & AV_CPU_FLAG_ATOM)
-        c->apply_window_int16 = ff_apply_window_int16_ssse3_atom;
-    else
-        c->apply_window_int16 = ff_apply_window_int16_ssse3;
     if (!(cpu_flags & (AV_CPU_FLAG_SSE42 | AV_CPU_FLAG_3DNOW))) // cachesplit
         c->scalarproduct_and_madd_int16 = ff_scalarproduct_and_madd_int16_ssse3;
     c->bswap_buf = ff_bswap32_buf_ssse3;

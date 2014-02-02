@@ -7,13 +7,13 @@ version 10:
 - reference-counting for AVFrame and AVPacket data
 - avconv now fails when input options are used for output file
   or vice versa
-- new avconv options -filter_script and -filter_complex_script, which allow a
+- avconv options -filter_script and -filter_complex_script, which allow a
   filtergraph description to be read from a file
 - uniform options syntax across all filters
-- new interlace filter
+- interlace filter
 - JPEG 2000 decoder
-- new asetpts filter (same as setpts, but for audio)
-- new trim and atrim filters
+- asetpts filter (same as setpts, but for audio)
+- trim and atrim filters
 - avconv -t and -ss (output-only) options are now sample-accurate when
   transcoding audio
 - Matroska muxer can now put the index at the beginning of the file.
@@ -32,7 +32,7 @@ version 10:
   the -noaccurate_seek option.
 - avconv -t option can now be used for inputs, to limit the duration of
   data read from an input file
-- incomplete Voxware MetaSound decoder
+- Voxware MetaSound decoder
 - WebP decoder
 - Error Resilient AAC syntax (ER AAC LC) decoding
 - Low Delay AAC (ER AAC LD) decoding
@@ -48,6 +48,13 @@ version 10:
 - setsar/setdar filters now support variables in ratio expressions
 - dar variable in the scale filter now returns the actual DAR (i.e. a * sar)
 - VP9 decoder
+- support for decoding through VDPAU in avconv (the -hwaccel option)
+- remove mp3_header_(de)compress bitstream filters
+- stereoscopic 3d metadata handling
+- png standalone parser
+- WebP encoding via libwebp
+- ATRAC3+ decoder
+- framepack filter
 
 
 version 9:

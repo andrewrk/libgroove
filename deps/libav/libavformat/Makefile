@@ -23,8 +23,6 @@ OBJS = allformats.o         \
        url.o                \
        utils.o              \
 
-OBJS-$(HAVE_MSVCRT) += file_open.o
-
 OBJS-$(CONFIG_NETWORK)                   += network.o
 OBJS-$(CONFIG_RIFFDEC)                   += riffdec.o
 OBJS-$(CONFIG_RIFFENC)                   += riffenc.o
@@ -388,11 +386,12 @@ OBJS-$(CONFIG_TLS_PROTOCOL)              += tls.o
 OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
 OBJS-$(CONFIG_UNIX_PROTOCOL)             += unix.o
 
+OBJS-$(HAVE_LIBC_MSVCRT)                 += file_open.o
+
 SKIPHEADERS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh.h
 SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h
 
 EXAMPLES  = metadata                                                    \
-            output                                                      \
 
 TESTPROGS = seek                                                        \
             srtp                                                        \
@@ -404,6 +403,3 @@ TOOLS     = aviocat                                                     \
             ismindex                                                    \
             pktdumper                                                   \
             probetest                                                   \
-
-$(SUBDIR)output-example$(EXESUF): ELIBS = $(patsubst %,$(LD_LIB),swscale avutil)
-$(SUBDIR)output-example$(EXESUF): $(call PATH_LIBNAME,swscale)

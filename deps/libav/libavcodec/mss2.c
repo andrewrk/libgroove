@@ -377,13 +377,6 @@ static int decode_wmv9(AVCodecContext *avctx, const uint8_t *buf, int buf_size,
 
     ff_mpeg_flush(avctx);
 
-    if (s->current_picture_ptr == NULL || s->current_picture_ptr->f.data[0]) {
-        int i = ff_find_unused_picture(s, 0);
-        if (i < 0)
-            return i;
-        s->current_picture_ptr = &s->picture[i];
-    }
-
     init_get_bits(&s->gb, buf, buf_size * 8);
 
     s->loop_filter = avctx->skip_loop_filter < AVDISCARD_ALL;
@@ -747,8 +740,6 @@ static av_cold int wmv9_init(AVCodecContext *avctx)
     int ret;
 
     v->s.avctx    = avctx;
-    avctx->flags |= CODEC_FLAG_EMU_EDGE;
-    v->s.flags   |= CODEC_FLAG_EMU_EDGE;
 
     if ((ret = ff_vc1_init_common(v)) < 0)
         return ret;
@@ -779,7 +770,7 @@ static av_cold int wmv9_init(AVCodecContext *avctx)
 
     v->overlap         = 0;
 
-    v->s.resync_marker = 0;
+    v->resync_marker   = 0;
     v->rangered        = 0;
 
     v->s.max_b_frames = avctx->max_b_frames = 0;
