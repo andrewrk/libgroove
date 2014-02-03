@@ -43,6 +43,8 @@ struct GroovePlaylistPrivate {
     int abort_request;
 
     AVPacket audio_pkt_temp;
+    AVPacket audio_pkt_next;
+    int audio_pkt_err_next;
     AVFrame *in_frame;
     int paused;
     int last_paused;
@@ -137,6 +139,51 @@ static struct GrooveBuffer * frame_to_groove_buffer(struct GroovePlaylist *playl
     return buffer;
 }
 
+static double abs_dbl(double x) {
+    return (x < 0) ? -x : x;
+}
+
+static double get_sample_dbl(AVFrame *frame, int index, int channel) {
+    switch (frame->format) {
+        case AV_SAMPLE_FMT_U8:          ///< unsigned 8 bits
+        case AV_SAMPLE_FMT_S16:         ///< signed 16 bits
+        case AV_SAMPLE_FMT_S32:         ///< signed 32 bits
+        case AV_SAMPLE_FMT_FLT:         ///< float
+        case AV_SAMPLE_FMT_DBL:         ///< double
+        case AV_SAMPLE_FMT_U8P:         ///< unsigned 8 bits: planar
+            av_log(NULL, AV_LOG_ERROR, "Unrecognized sample format\n");
+            return 0;
+        case AV_SAMPLE_FMT_S16P:
+            {
+                int16_t *samples = (int16_t *)frame->data[channel];
+                double sample = samples[index];
+                double max = INT16_MAX;
+                return sample / max;
+            }
+        case AV_SAMPLE_FMT_S32P:        ///< signed 32 bits: planar
+        case AV_SAMPLE_FMT_FLTP:        ///< float: planar
+        case AV_SAMPLE_FMT_DBLP:        ///< double: planar
+        default:
+            av_log(NULL, AV_LOG_ERROR, "Unrecognized sample format\n");
+            return 0;
+    }
+}
+
+static void perform_mp3_heuristics(AVFrame *frame) {
+    int channel_count = av_get_channel_layout_nb_channels(frame->channel_layout);
+    int frame_pointer = frame->nb_samples - 1;
+    while (frame_pointer > 0) {
+        for (int ch = 0; ch < channel_count; ch += 1) {
+            double sample = abs_dbl(get_sample_dbl(frame, frame_pointer, ch));
+            if (sample >= 0.001) {
+                frame->nb_samples = frame_pointer + 1;
+                return;
+            }
+        }
+        frame_pointer -= 1;
+    }
+    frame->nb_samples = frame_pointer + 1;
+}
 
 // decode one audio packet and return its uncompressed size
 static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile *file) {
@@ -158,6 +205,9 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
     int new_packet = 1;
     AVFrame *in_frame = p->in_frame;
 
+    int mp3_heuristics = dec->codec_id == AV_CODEC_ID_MP3 &&
+        p->audio_pkt_err_next == AVERROR_EOF;
+
     // NOTE: the audio packet can contain several frames
     while (pkt_temp->size > 0 || (!pkt_temp->data && new_packet)) {
         new_packet = 0;
@@ -166,6 +216,9 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
         if (len1 < 0) {
             // if error, we skip the frame
             pkt_temp->size = 0;
+            av_strerror(len1, p->strbuf, sizeof(p->strbuf));
+            av_log(NULL, AV_LOG_ERROR, "error decoding audio: %s\n",
+                    p->strbuf);
             return -1;
         }
 
@@ -177,6 +230,15 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
             if (!pkt_temp->data && dec->codec->capabilities & CODEC_CAP_DELAY)
                 return 0;
             continue;
+        }
+
+        if (mp3_heuristics) {
+            int before_count = in_frame->nb_samples;
+            perform_mp3_heuristics(in_frame);
+            av_log(NULL, AV_LOG_WARNING, "Chopped off %d frames for gapless MP3\n",
+                    before_count - in_frame->nb_samples);
+            if (in_frame->nb_samples == 0)
+                return 0;
         }
 
         // push the audio data from decoded frame into the filtergraph
@@ -508,6 +570,10 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
             every_sink_flush(playlist);
         }
         avcodec_flush_buffers(f->audio_st->codec);
+        if (p->audio_pkt_next.size != -1) {
+            av_free_packet(&p->audio_pkt_next);
+            p->audio_pkt_next.size = -1;
+        }
         f->seek_pos = -1;
         f->eof = 0;
     }
@@ -527,7 +593,12 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
         // this file is complete. move on
         return -1;
     }
-    int err = av_read_frame(f->ic, pkt);
+    if (p->audio_pkt_next.size == -1) {
+        p->audio_pkt_err_next = av_read_frame(f->ic, &p->audio_pkt_next);
+    }
+    int err = p->audio_pkt_err_next;
+    f->audio_pkt = p->audio_pkt_next;
+    p->audio_pkt_err_next = av_read_frame(f->ic, &p->audio_pkt_next);
     if (err < 0) {
         // treat all errors as EOF, but log non-EOF errors.
         if (err != AVERROR_EOF) {
@@ -856,6 +927,8 @@ struct GroovePlaylist * groove_playlist_create(void) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate frame\n");
         return NULL;
     }
+
+    p->audio_pkt_next.size = -1; // signal that it is not initialized
 
     if (pthread_create(&p->thread_id, NULL, decode_thread, playlist) != 0) {
         groove_playlist_destroy(playlist);
