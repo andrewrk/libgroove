@@ -1,6 +1,4 @@
 /*
- * copyright (c) 2005 Michael Niedermayer <michaelni@gmx.at>
- *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -18,23 +16,35 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVUTIL_INTFLOAT_READWRITE_H
-#define AVUTIL_INTFLOAT_READWRITE_H
+#ifndef AVUTIL_AARCH64_BSWAP_H
+#define AVUTIL_AARCH64_BSWAP_H
 
 #include <stdint.h>
-#include "attributes.h"
+#include "config.h"
+#include "libavutil/attributes.h"
 
-/* IEEE 80 bits extended float */
-typedef struct AVExtFloat  {
-    uint8_t exponent[2];
-    uint8_t mantissa[8];
-} AVExtFloat;
+#if HAVE_INLINE_ASM
 
-attribute_deprecated double av_int2dbl(int64_t v) av_const;
-attribute_deprecated float av_int2flt(int32_t v) av_const;
-attribute_deprecated double av_ext2dbl(const AVExtFloat ext) av_const;
-attribute_deprecated int64_t av_dbl2int(double d) av_const;
-attribute_deprecated int32_t av_flt2int(float d) av_const;
-attribute_deprecated AVExtFloat av_dbl2ext(double d) av_const;
+#define av_bswap16 av_bswap16
+static av_always_inline av_const unsigned av_bswap16(unsigned x)
+{
+    __asm__("rev16 %w0, %w0" : "+r"(x));
+    return x;
+}
 
-#endif /* AVUTIL_INTFLOAT_READWRITE_H */
+#define av_bswap32 av_bswap32
+static av_always_inline av_const uint32_t av_bswap32(uint32_t x)
+{
+    __asm__("rev %w0, %w0" : "+r"(x));
+    return x;
+}
+
+#define av_bswap64 av_bswap64
+static av_always_inline av_const uint64_t av_bswap64(uint64_t x)
+{
+    __asm__("rev %0, %0" : "+r"(x));
+    return x;
+}
+
+#endif /* HAVE_INLINE_ASM */
+#endif /* AVUTIL_AARCH64_BSWAP_H */

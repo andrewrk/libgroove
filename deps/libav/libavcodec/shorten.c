@@ -119,9 +119,7 @@ static av_cold int shorten_decode_init(AVCodecContext *avctx)
 
 static int allocate_buffers(ShortenContext *s)
 {
-    int i, chan;
-    int *coeffs;
-    void *tmp_ptr;
+    int i, chan, err;
 
     for (chan = 0; chan < s->channels; chan++) {
         if (FFMAX(1, s->nmean) >= UINT_MAX / sizeof(int32_t)) {
@@ -135,26 +133,21 @@ static int allocate_buffers(ShortenContext *s)
             return AVERROR_INVALIDDATA;
         }
 
-        tmp_ptr =
-            av_realloc(s->offset[chan], sizeof(int32_t) * FFMAX(1, s->nmean));
-        if (!tmp_ptr)
-            return AVERROR(ENOMEM);
-        s->offset[chan] = tmp_ptr;
+        if ((err = av_reallocp(&s->offset[chan],
+                               sizeof(int32_t) *
+                               FFMAX(1, s->nmean))) < 0)
+            return err;
 
-        tmp_ptr = av_realloc(s->decoded_base[chan], (s->blocksize + s->nwrap) *
-                             sizeof(s->decoded_base[0][0]));
-        if (!tmp_ptr)
-            return AVERROR(ENOMEM);
-        s->decoded_base[chan] = tmp_ptr;
+        if ((err = av_reallocp(&s->decoded_base[chan], (s->blocksize + s->nwrap) *
+                               sizeof(s->decoded_base[0][0]))) < 0)
+            return err;
         for (i = 0; i < s->nwrap; i++)
             s->decoded_base[chan][i] = 0;
         s->decoded[chan] = s->decoded_base[chan] + s->nwrap;
     }
 
-    coeffs = av_realloc(s->coeffs, s->nwrap * sizeof(*s->coeffs));
-    if (!coeffs)
-        return AVERROR(ENOMEM);
-    s->coeffs = coeffs;
+    if ((err = av_reallocp(&s->coeffs, s->nwrap * sizeof(*s->coeffs))) < 0)
+        return err;
 
     return 0;
 }
@@ -438,7 +431,7 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
         void *tmp_ptr;
         s->max_framesize = 1024; // should hopefully be enough for the first header
         tmp_ptr = av_fast_realloc(s->bitstream, &s->allocated_bitstream_size,
-                                  s->max_framesize);
+                                  s->max_framesize + FF_INPUT_BUFFER_PADDING_SIZE);
         if (!tmp_ptr) {
             av_log(avctx, AV_LOG_ERROR, "error allocating bitstream buffer\n");
             return AVERROR(ENOMEM);

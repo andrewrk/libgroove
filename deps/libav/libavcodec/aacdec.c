@@ -103,6 +103,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 #if ARCH_ARM
@@ -1064,7 +1065,6 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
     ff_mdct_init(&ac->mdct_ltp,   11, 0, -2.0 * 32768.0);
     // window initialization
     ff_kbd_window_init(ff_aac_kbd_long_1024, 4.0, 1024);
-    ff_kbd_window_init(ff_aac_kbd_long_512,  4.0, 512);
     ff_kbd_window_init(ff_aac_kbd_short_128, 6.0, 128);
     ff_init_ff_sine_windows(10);
     ff_init_ff_sine_windows( 9);
@@ -1177,13 +1177,14 @@ static int decode_ics_info(AACContext *ac, IndividualChannelStream *ics,
         if (aot == AOT_ER_AAC_LD || aot == AOT_ER_AAC_ELD) {
             ics->swb_offset        =     ff_swb_offset_512[ac->oc[1].m4ac.sampling_index];
             ics->num_swb           =    ff_aac_num_swb_512[ac->oc[1].m4ac.sampling_index];
+            ics->tns_max_bands     =  ff_tns_max_bands_512[ac->oc[1].m4ac.sampling_index];
             if (!ics->num_swb || !ics->swb_offset)
                 return AVERROR_BUG;
         } else {
             ics->swb_offset        =    ff_swb_offset_1024[ac->oc[1].m4ac.sampling_index];
             ics->num_swb           =   ff_aac_num_swb_1024[ac->oc[1].m4ac.sampling_index];
+            ics->tns_max_bands     = ff_tns_max_bands_1024[ac->oc[1].m4ac.sampling_index];
         }
-        ics->tns_max_bands         = ff_tns_max_bands_1024[ac->oc[1].m4ac.sampling_index];
         if (aot != AOT_ER_AAC_ELD) {
             ics->predictor_present     = get_bits1(gb);
             ics->predictor_reset_group = 0;
@@ -2428,14 +2429,20 @@ static void imdct_and_windowing_ld(AACContext *ac, SingleChannelElement *sce)
     float *in    = sce->coeffs;
     float *out   = sce->ret;
     float *saved = sce->saved;
-    const float *lwindow_prev = ics->use_kb_window[1] ? ff_aac_kbd_long_512 : ff_sine_512;
     float *buf  = ac->buf_mdct;
 
     // imdct
     ac->mdct.imdct_half(&ac->mdct_ld, buf, in);
 
     // window overlapping
-    ac->fdsp.vector_fmul_window(out, saved, buf, lwindow_prev, 256);
+    if (ics->use_kb_window[1]) {
+        // AAC LD uses a low overlap sine window instead of a KBD window
+        memcpy(out, saved, 192 * sizeof(float));
+        ac->fdsp.vector_fmul_window(out + 192, saved + 192, buf, ff_sine_128, 64);
+        memcpy(                     out + 320, buf + 64, 192 * sizeof(float));
+    } else {
+        ac->fdsp.vector_fmul_window(out, saved, buf, ff_sine_512, 256);
+    }
 
     // buffer update
     memcpy(saved, buf + 256, 256 * sizeof(float));

@@ -89,7 +89,7 @@ static int parse_header(OutputStream *os, const uint8_t *buf, int buf_size)
         if (size > buf_size)
             return AVERROR_INVALIDDATA;
         if (type == 8 || type == 9) {
-            if (os->nb_extra_packets > FF_ARRAY_ELEMS(os->extra_packets))
+            if (os->nb_extra_packets >= FF_ARRAY_ELEMS(os->extra_packets))
                 return AVERROR_INVALIDDATA;
             os->extra_packet_sizes[os->nb_extra_packets] = size;
             os->extra_packets[os->nb_extra_packets] = av_malloc(size);
@@ -412,7 +412,9 @@ static int hds_write_header(AVFormatContext *s)
 
         snprintf(os->temp_filename, sizeof(os->temp_filename),
                  "%s/stream%d_temp", s->filename, i);
-        init_file(s, os, 0);
+        ret = init_file(s, os, 0);
+        if (ret < 0)
+            goto fail;
 
         if (!os->has_video && c->min_frag_duration <= 0) {
             av_log(s, AV_LOG_WARNING,
@@ -509,7 +511,7 @@ static int hds_write_packet(AVFormatContext *s, AVPacket *pkt)
     HDSContext *c = s->priv_data;
     AVStream *st = s->streams[pkt->stream_index];
     OutputStream *os = &c->streams[s->streams[pkt->stream_index]->id];
-    int64_t end_dts = (os->fragment_index) * c->min_frag_duration;
+    int64_t end_dts = os->fragment_index * (int64_t) c->min_frag_duration;
     int ret;
 
     if (st->first_dts == AV_NOPTS_VALUE)

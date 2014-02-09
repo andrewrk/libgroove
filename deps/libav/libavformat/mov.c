@@ -24,6 +24,7 @@
  */
 
 #include <limits.h>
+#include <stdint.h>
 
 //#define MOV_EXPORT_ALL_METADATA
 
@@ -1716,6 +1717,7 @@ static int mov_read_stts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (entries >= UINT_MAX / sizeof(*sc->stts_data))
         return AVERROR(EINVAL);
 
+    av_free(sc->stts_data);
     sc->stts_data = av_malloc(entries * sizeof(*sc->stts_data));
     if (!sc->stts_data)
         return AVERROR(ENOMEM);
@@ -2136,10 +2138,6 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             st->sample_aspect_ratio = av_d2q(((double)st->codec->height * sc->width) /
                                              ((double)st->codec->width * sc->height), INT_MAX);
         }
-
-        if (st->duration != AV_NOPTS_VALUE && st->duration > 0)
-            av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
-                      sc->time_scale*st->nb_frames, st->duration, INT_MAX);
     }
 
     // done for ai5q, ai52, ai55, ai1q, ai12 and ai15.
@@ -2828,6 +2826,14 @@ static int mov_read_close(AVFormatContext *s)
         av_freep(&sc->drefs);
         if (sc->pb && sc->pb != s->pb)
             avio_close(sc->pb);
+
+        av_freep(&sc->chunk_offsets);
+        av_freep(&sc->stsc_data);
+        av_freep(&sc->sample_sizes);
+        av_freep(&sc->keyframes);
+        av_freep(&sc->stts_data);
+        av_freep(&sc->stps_data);
+        av_freep(&sc->rap_group);
     }
 
     if (mov->dv_demux) {

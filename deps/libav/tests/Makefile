@@ -47,9 +47,11 @@ ENCMUX  = $(call ALLYES, $(1:%=%_ENCODER) $(2)_MUXER)
 
 DEMMUX  = $(call ALLYES, $(1)_DEMUXER $(2)_MUXER)
 
-FILTERDEMDEC       = $(call ALLYES, $(1)_FILTER $(2)_DEMUXER $(3)_DECODER)
-FILTERDEMDECMUX    = $(call ALLYES, $(1)_FILTER $(2)_DEMUXER $(3)_DECODER $(4)_MUXER)
-FILTERDEMDECENCMUX = $(call ALLYES, $(1)_FILTER $(2)_DEMUXER $(3)_DECODER $(4)_ENCODER $(5)_MUXER)
+FILTERDEMDEC       = $(call ALLYES, $(1:%=%_FILTER) $(2)_DEMUXER $(3)_DECODER)
+FILTERDEMDECMUX    = $(call ALLYES, $(1:%=%_FILTER) $(2)_DEMUXER $(3)_DECODER $(4)_MUXER)
+FILTERDEMDECENCMUX = $(call ALLYES, $(1:%=%_FILTER) $(2)_DEMUXER $(3)_DECODER $(4)_ENCODER $(5)_MUXER)
+
+PARSERDEMDEC       = $(call ALLYES, $(1)_PARSER $(2)_DEMUXER $(3)_DECODER)
 
 include $(SRC_PATH)/tests/fate/acodec.mak
 include $(SRC_PATH)/tests/fate/vcodec.mak
@@ -106,6 +108,7 @@ include $(SRC_PATH)/tests/fate/vpx.mak
 include $(SRC_PATH)/tests/fate/vqf.mak
 include $(SRC_PATH)/tests/fate/wavpack.mak
 include $(SRC_PATH)/tests/fate/wma.mak
+include $(SRC_PATH)/tests/fate/xvid.mak
 
 FATE_AVCONV += $(FATE_AVCONV-yes)
 FATE-$(CONFIG_AVCONV) += $(FATE_AVCONV)

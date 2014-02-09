@@ -1,6 +1,8 @@
 # libgroove
 
-Generic music player backend library.
+Audio dispatching library. Generic sink-based interface. Provides decoding,
+encoding, resampling, and gain adjustment. Perfect for the backend of a
+music player.
 
 ## Features
 
@@ -22,7 +24,7 @@ Generic music player backend library.
    * **loudness scanner sink** - uses the [EBU R 128](http://tech.ebu.ch/loudness)
      standard to detect loudness. The values it produces are compatible with
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification).
-   * ([on the roadmap](https://github.com/superjoe30/libgroove/issues/19)) accoustid fingerprint
+   * ([on the roadmap](https://github.com/andrewrk/libgroove/issues/19)) accoustid fingerprint
  * Thread-safe.
  * Example programs included:
    * `playlist` - play a series of songs with gapless playback
@@ -33,22 +35,16 @@ Generic music player backend library.
 
 ## Dependencies
 
-You will need these to compile libgroove. All of these are almost certainly
-in your local package manager.
+You will need these to compile libgroove. Some dependencies are bundled
+so that you can still compile if they cannot be found on your system.
 
- * [libbz2-dev](http://www.bzip.org/)
- * [yasm](http://yasm.tortall.net/)
  * [cmake](http://www.cmake.org/)
- * [libmp3lame-dev](http://lame.sourceforge.net/)
-
-### Bundled Dependencies
-
-For convenience, if any of these libraries are missing from your system,
-libgroove will compile against a bundled version.
-
- * [libav](http://libav.org)
- * [libebur128](https://github.com/jiixyj/libebur128)
- * [libsdl2-dev](http://www.libsdl.org/)
+ * [libav](http://libav.org). (bundled) if using bundled version, needs these:
+   - [libbz2-dev](http://www.bzip.org/)
+   - [yasm](http://yasm.tortall.net/)
+   - [libmp3lame-dev](http://lame.sourceforge.net/)
+ * [libebur128](https://github.com/jiixyj/libebur128) (bundled)
+ * [libsdl2-dev](http://www.libsdl.org/) (bundled)
 
 ## Installation
 
@@ -59,13 +55,13 @@ libgroove will compile against a bundled version.
    ```
    sudo apt-add-repository ppa:andrewrk/libgroove
    sudo apt-get update
-   sudo apt-get install libgroove-dev
+   sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev
    ```
 
 ### From Source
 
  1. `mkdir build && cd build && cmake ../`
- 2. Verify that all dependencies say "OK".
+ 2. Verify that the configure output is to your liking.
  3. `make`
  4. `sudo make install`
 
@@ -91,10 +87,12 @@ libgroove will compile against a bundled version.
 
 Feel free to make a pull request adding yours to this list.
 
- * [TrenchBowl](https://github.com/superjoe30/TrenchBowl) - a simple Qt GUI
+ * [waveform](https://github.com/andrewrk/waveform) - generate a waveform
+   visualization in PNG format.
+ * [TrenchBowl](https://github.com/andrewrk/TrenchBowl) - a simple Qt GUI
    on top of libgroove.
- * [node-groove](https://github.com/superjoe30/node-groove) -
+ * [node-groove](https://github.com/andrewrk/node-groove) -
    [Node.js](http://nodejs.org/) bindings to libgroove.
-   - [Groove Basin](https://github.com/superjoe30/groovebasin) - lazy
+   - [Groove Basin](https://github.com/andrewrk/groovebasin) - lazy
      multi-core replaygain scanning, web interface inspired by Amarok 1.4,
      http streaming, upload, download, dynamic playlist mode

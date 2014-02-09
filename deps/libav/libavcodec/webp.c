@@ -277,9 +277,25 @@ static int huff_reader_get_symbol(HuffReader *r, GetBitContext *gb)
 static int huff_reader_build_canonical(HuffReader *r, int *code_lengths,
                                        int alphabet_size)
 {
-    int len, sym, code, ret;
+    int len = 0, sym, code = 0, ret;
     int max_code_length = 0;
     uint16_t *codes;
+
+    /* special-case 1 symbol since the vlc reader cannot handle it */
+    for (sym = 0; sym < alphabet_size; sym++) {
+        if (code_lengths[sym] > 0) {
+            len++;
+            code = sym;
+            if (len > 1)
+                break;
+        }
+    }
+    if (len == 1) {
+        r->nb_symbols = 1;
+        r->simple_symbols[0] = code;
+        r->simple = 1;
+        return 0;
+    }
 
     for (sym = 0; sym < alphabet_size; sym++)
         max_code_length = FFMAX(max_code_length, code_lengths[sym]);
@@ -1129,10 +1145,8 @@ static int vp8_lossless_decode_frame(AVCodecContext *avctx, AVFrame *p,
     if (is_alpha_chunk)
         s->image[IMAGE_ROLE_ARGB].is_alpha_primary = 1;
     ret = decode_entropy_coded_image(s, IMAGE_ROLE_ARGB, w, h);
-    if (ret < 0) {
-        av_frame_free(&p);
+    if (ret < 0)
         goto free_and_return;
-    }
 
     /* apply transformations */
     for (i = s->nb_transforms - 1; i >= 0; i--) {
@@ -1150,10 +1164,8 @@ static int vp8_lossless_decode_frame(AVCodecContext *avctx, AVFrame *p,
             ret = apply_color_indexing_transform(s);
             break;
         }
-        if (ret < 0) {
-            av_frame_free(&p);
+        if (ret < 0)
             goto free_and_return;
-        }
     }
 
     *got_frame   = 1;

@@ -4,14 +4,46 @@ since the last major version increase.
 The last version increases were:
 libavcodec:    2013-03-xx
 libavdevice:   2013-03-xx
-libavfilter:   2012-06-22
+libavfilter:   2013-12-xx
 libavformat:   2013-03-xx
 libavresample: 2012-10-05
 libswscale:    2011-06-20
-libavutil:     2012-10-22
+libavutil:     2013-12-xx
 
 
 API changes, most recent first:
+
+2014-02-xx - xxxxxxx - lavf 55.11.0 - avformat.h
+  Add AVFormatContext.max_interleave_delta for controlling amount of buffering
+  when interleaving.
+
+2014-01-xx - xxxxxxx - lavc 55.32.1 - avcodec.h
+  Edges are not required anymore on video buffers allocated by get_buffer2()
+  (i.e. as if the CODEC_FLAG_EMU_EDGE flag was always on). Deprecate
+  CODEC_FLAG_EMU_EDGE and avcodec_get_edge_width().
+
+2013-12-xx - xxxxxxx - lavu 53.2.0 - frame.h
+  Add AV_FRAME_DATA_MATRIXENCODING value to the AVFrameSideDataType enum, which
+  identifies AVMatrixEncoding data.
+
+2013-12-xx - xxxxxxx - lavu 53.1.0 - channel_layout.h
+  Add values for various Dolby flags to the AVMatrixEncoding enum.
+
+2013-12-xx - xxxxxxx - lavc 55.30.0 - avcodec.h
+  Add HEVC profiles
+
+2013-12-xx - xxxxxxx - lavc 55.28.1 - avcodec.h
+  av_frame_alloc(), av_frame_unref() and av_frame_free() now can and should be
+  used instead of avcodec_alloc_frame(), avcodec_get_frame_defaults() and
+  avcodec_free_frame() respectively. The latter three functions are deprecated.
+
+2013-11-xx - xxxxxxx- - lavu 52.20.0 - frame.h
+  Add AV_FRAME_DATA_STEREO3D value to the AVFrameSideDataType enum and
+  stereo3d.h API, that identify codec-independent stereo3d information.
+
+2013-11-xx - xxxxxxx- - lavu 52.19.0 - frame.h
+  Add AV_FRAME_DATA_A53_CC value to the AVFrameSideDataType enum, which
+  identifies ATSC A53 Part 4 Closed Captions data.
 
 2013-11-xx - xxxxxxx - lavu 52.18.0 - mem.h
   Move av_fast_malloc() and av_fast_realloc() for libavcodec to libavutil.

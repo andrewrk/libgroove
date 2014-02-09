@@ -43,6 +43,8 @@
  * Only tracks with associated descriptors will be decoded. "Highly Desirable" SMPTE 377M D.1
  */
 
+#include <stdint.h>
+
 #include "libavutil/aes.h"
 #include "libavutil/mathematics.h"
 #include "libavcodec/bytestream.h"
@@ -132,6 +134,9 @@ typedef struct {
     int width;
     int height; /* Field height, not frame height */
     int frame_layout; /* See MXFFrameLayout enum */
+#define MXF_TFF 1
+#define MXF_BFF 2
+    int field_dominance;
     int channels;
     int bits_per_sample;
     unsigned int component_depth;
@@ -310,7 +315,7 @@ static int mxf_get_d10_aes3_packet(AVIOContext *pb, AVStream *st, AVPacket *pkt,
     data_ptr = pkt->data;
     end_ptr = pkt->data + length;
     buf_ptr = pkt->data + 4; /* skip SMPTE 331M header */
-    for (; buf_ptr + st->codec->channels*4 < end_ptr; ) {
+    for (; end_ptr - buf_ptr >= st->codec->channels * 4; ) {
         for (i = 0; i < st->codec->channels; i++) {
             uint32_t sample = bytestream_get_le32(&buf_ptr);
             if (st->codec->bits_per_coded_sample == 24)
@@ -415,9 +420,6 @@ static int mxf_read_partition_pack(void *arg, AVIOContext *pb, int tag, int size
     uint64_t footer_partition;
     uint32_t nb_essence_containers;
     int err;
-
-    if (mxf->partitions_count+1 >= UINT_MAX / sizeof(*mxf->partitions))
-        return AVERROR(ENOMEM);
 
     if ((err = av_reallocp_array(&mxf->partitions, mxf->partitions_count + 1,
                                  sizeof(*mxf->partitions))) < 0) {
@@ -550,8 +552,6 @@ static int mxf_add_metadata_set(MXFContext *mxf, void *metadata_set)
 {
     int err;
 
-    if (mxf->metadata_sets_count+1 >= UINT_MAX / sizeof(*mxf->metadata_sets))
-        return AVERROR(ENOMEM);
     if ((err = av_reallocp_array(&mxf->metadata_sets, mxf->metadata_sets_count + 1,
                                  sizeof(*mxf->metadata_sets))) < 0) {
         mxf->metadata_sets_count = 0;
@@ -833,6 +833,9 @@ static int mxf_read_generic_descriptor(void *arg, AVIOContext *pb, int tag, int 
         descriptor->aspect_ratio.num = avio_rb32(pb);
         descriptor->aspect_ratio.den = avio_rb32(pb);
         break;
+    case 0x3212:
+        descriptor->field_dominance = avio_r8(pb);
+        break;
     case 0x3301:
         descriptor->component_depth = avio_rb32(pb);
         break;
@@ -861,6 +864,8 @@ static int mxf_read_generic_descriptor(void *arg, AVIOContext *pb, int tag, int 
     default:
         /* Private uid used by SONY C0023S01.mxf */
         if (IS_KLV_KEY(uid, mxf_sony_mpeg4_extradata)) {
+            av_free(descriptor->extradata);
+            descriptor->extradata_size = 0;
             descriptor->extradata = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
             if (!descriptor->extradata)
                 return AVERROR(ENOMEM);
@@ -972,19 +977,23 @@ static int mxf_get_sorted_table_segments(MXFContext *mxf, int *nb_sorted_segment
     /* sort segments by {BodySID, IndexSID, IndexStartPosition}, remove duplicates while we're at it */
     for (i = 0; i < nb_segments; i++) {
         int best = -1, best_body_sid = -1, best_index_sid = -1, best_index_start = -1;
+        uint64_t best_index_duration = 0;
 
         for (j = 0; j < nb_segments; j++) {
             MXFIndexTableSegment *s = unsorted_segments[j];
 
             /* Require larger BosySID, IndexSID or IndexStartPosition then the previous entry. This removes duplicates.
              * We want the smallest values for the keys than what we currently have, unless this is the first such entry this time around.
+             * If we come across an entry with the same IndexStartPosition but larger IndexDuration, then we'll prefer it over the one we currently have.
              */
             if ((i == 0     || s->body_sid > last_body_sid || s->index_sid > last_index_sid || s->index_start_position > last_index_start) &&
-                (best == -1 || s->body_sid < best_body_sid || s->index_sid < best_index_sid || s->index_start_position < best_index_start)) {
+                (best == -1 || s->body_sid < best_body_sid || s->index_sid < best_index_sid || s->index_start_position < best_index_start ||
+                (s->index_start_position == best_index_start && s->index_duration > best_index_duration))) {
                 best             = j;
                 best_body_sid    = s->body_sid;
                 best_index_sid   = s->index_sid;
                 best_index_start = s->index_start_position;
+                best_index_duration = s->index_duration;
             }
         }
 
@@ -1237,9 +1246,9 @@ static int mxf_compute_index_tables(MXFContext *mxf)
         }
     }
 
-    if (mxf->nb_index_tables > INT_MAX / sizeof(MXFIndexTable) ||
-        !(mxf->index_tables = av_mallocz(mxf->nb_index_tables *
-                                         sizeof(MXFIndexTable)))) {
+    mxf->index_tables = av_mallocz_array(mxf->nb_index_tables,
+                                         sizeof(*mxf->index_tables));
+    if (!mxf->index_tables) {
         av_log(mxf->fc, AV_LOG_ERROR, "failed to allocate index tables\n");
         ret = AVERROR(ENOMEM);
         goto finish_decoding_index;
@@ -1258,10 +1267,10 @@ static int mxf_compute_index_tables(MXFContext *mxf)
     for (i = j = 0; j < mxf->nb_index_tables; i += mxf->index_tables[j++].nb_segments) {
         MXFIndexTable *t = &mxf->index_tables[j];
 
-        if (t->nb_segments >
-            (INT_MAX / sizeof(MXFIndexTableSegment *)) ||
-            !(t->segments = av_mallocz(t->nb_segments *
-                                       sizeof(MXFIndexTableSegment*)))) {
+        t->segments = av_mallocz_array(t->nb_segments,
+                                       sizeof(*t->segments));
+
+        if (!t->segments) {
             av_log(mxf->fc, AV_LOG_ERROR, "failed to allocate IndexTableSegment"
                    " pointer array\n");
             ret = AVERROR(ENOMEM);
@@ -1419,6 +1428,15 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
         if (st->duration == -1)
             st->duration = AV_NOPTS_VALUE;
         st->start_time = component->start_position;
+        if (material_track->edit_rate.num <= 0 ||
+            material_track->edit_rate.den <= 0) {
+            av_log(mxf->fc, AV_LOG_WARNING,
+                   "Invalid edit rate (%d/%d) found on stream #%d, "
+                   "defaulting to 25/1\n",
+                   material_track->edit_rate.num,
+                   material_track->edit_rate.den, st->index);
+            material_track->edit_rate = (AVRational){25, 1};
+        }
         avpriv_set_pts_info(st, 64, material_track->edit_rate.den, material_track->edit_rate.num);
 
         PRINT_KEY(mxf->fc, "data definition   ul", source_track->sequence->data_definition_ul);
@@ -1482,6 +1500,7 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                            "SegmentedFrame layout isn't currently supported\n");
                     break;
                 case FullFrame:
+                    st->codec->field_order = AV_FIELD_PROGRESSIVE;
                     break;
                 case OneField:
                     /* Every other line is stored and needs to be duplicated. */
@@ -1494,6 +1513,19 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                      * It's also for compatibility with the old behavior. */
                 case SeparateFields:
                 case MixedFields:
+                    switch (descriptor->field_dominance) {
+                    case MXF_TFF:
+                        st->codec->field_order = AV_FIELD_TT;
+                        break;
+                    case MXF_BFF:
+                        st->codec->field_order = AV_FIELD_BB;
+                        break;
+                    default:
+                        avpriv_request_sample(mxf->fc,
+                                              "Field dominance %d support",
+                                              descriptor->field_dominance);
+                        break;
+                    }
                     /* Turn field height into frame height. */
                     st->codec->height *= 2;
                 default:
@@ -1554,8 +1586,10 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
         }
         if (descriptor->extradata) {
             st->codec->extradata = av_mallocz(descriptor->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
-            if (st->codec->extradata)
+            if (st->codec->extradata) {
                 memcpy(st->codec->extradata, descriptor->extradata, descriptor->extradata_size);
+                st->codec->extradata_size = descriptor->extradata_size;
+            }
         } else if (st->codec->codec_id == AV_CODEC_ID_H264) {
             ret = ff_generate_avci_extradata(st);
             if (ret < 0)
@@ -1642,6 +1676,9 @@ static int mxf_read_local_tags(MXFContext *mxf, KLVPacket *klv, MXFMetadataReadF
         /* Accept the 64k local set limit being exceeded (Avid). Don't accept
          * it extending past the end of the KLV though (zzuf5.mxf). */
         if (avio_tell(pb) > klv_end) {
+            if (ctx_size)
+                av_free(ctx);
+
             av_log(mxf->fc, AV_LOG_ERROR,
                    "local tag %#04x extends past end of local set @ %#"PRIx64"\n",
                    tag, klv->offset);
@@ -2163,6 +2200,9 @@ static int mxf_read_close(AVFormatContext *s)
 
     for (i = 0; i < mxf->metadata_sets_count; i++) {
         switch (mxf->metadata_sets[i]->type) {
+        case Descriptor:
+            av_freep(&((MXFDescriptor *)mxf->metadata_sets[i])->extradata);
+            break;
         case MultipleDescriptor:
             av_freep(&((MXFDescriptor *)mxf->metadata_sets[i])->sub_descriptors_refs);
             break;
@@ -2233,8 +2273,10 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
         sample_time = 0;
     seconds = av_rescale(sample_time, st->time_base.num, st->time_base.den);
 
-    if ((ret = avio_seek(s->pb, (s->bit_rate * seconds) >> 3, SEEK_SET)) < 0)
-        return ret;
+    seekpos = avio_seek(s->pb, (s->bit_rate * seconds) >> 3, SEEK_SET);
+    if (seekpos < 0)
+        return seekpos;
+
     ff_update_cur_dts(s, st, sample_time);
     mxf->current_edit_unit = sample_time;
     } else {

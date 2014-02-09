@@ -48,7 +48,6 @@ fate-vp8-size-change$(1): REF = $(SRC_PATH)/tests/ref/fate/vp8-size-change
 endef
 
 $(call FATE_VP8_FULL)
-$(call FATE_VP8_FULL,-emu-edge,-flags +emu_edge)
 
 FATE_SAMPLES_AVCONV-$(CONFIG_VP8_DECODER) += $(FATE_VP8-yes)
 fate-vp8: $(FATE_VP8-yes)
@@ -79,7 +78,6 @@ $(eval $(call FATE_VP9_SUITE,tiling-pedestrian,$(1),$(2)))
 endef
 
 $(eval $(call FATE_VP9_FULL))
-$(eval $(call FATE_VP9_FULL,-emu-edge,-flags +emu_edge))
 
 FATE_SAMPLES_AVCONV-$(CONFIG_VP9_DECODER) += $(FATE_VP9-yes)
 fate-vp9: $(FATE_VP9-yes)

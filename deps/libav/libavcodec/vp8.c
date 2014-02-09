@@ -45,7 +45,6 @@ static void free_buffers(VP8Context *s)
             pthread_mutex_destroy(&s->thread_data[i].lock);
 #endif
             av_freep(&s->thread_data[i].filter_strength);
-            av_freep(&s->thread_data[i].edge_emu_buffer);
         }
     av_freep(&s->thread_data);
     av_freep(&s->macroblocks_base);
@@ -960,16 +959,6 @@ int check_tm_pred8x8_mode(int mode, int mb_x, int mb_y)
 }
 
 static av_always_inline
-int check_intra_pred8x8_mode(int mode, int mb_x, int mb_y)
-{
-    if (mode == DC_PRED8x8) {
-        return check_dc_pred8x8_mode(mode, mb_x, mb_y);
-    } else {
-        return mode;
-    }
-}
-
-static av_always_inline
 int check_intra_pred8x8_mode_emuedge(int mode, int mb_x, int mb_y)
 {
     switch (mode) {
@@ -1033,23 +1022,18 @@ static av_always_inline
 void intra_predict(VP8Context *s, VP8ThreadData *td, uint8_t *dst[3],
                    VP8Macroblock *mb, int mb_x, int mb_y)
 {
-    AVCodecContext *avctx = s->avctx;
     int x, y, mode, nnz;
     uint32_t tr;
 
     // for the first row, we need to run xchg_mb_border to init the top edge to 127
     // otherwise, skip it if we aren't going to deblock
-    if (!(avctx->flags & CODEC_FLAG_EMU_EDGE && !mb_y) && (s->deblock_filter || !mb_y) && td->thread_nr == 0)
+    if (mb_y && (s->deblock_filter || !mb_y) && td->thread_nr == 0)
         xchg_mb_border(s->top_border[mb_x+1], dst[0], dst[1], dst[2],
                        s->linesize, s->uvlinesize, mb_x, mb_y, s->mb_width,
                        s->filter.simple, 1);
 
     if (mb->mode < MODE_I4x4) {
-        if (avctx->flags & CODEC_FLAG_EMU_EDGE) { // tested
-            mode = check_intra_pred8x8_mode_emuedge(mb->mode, mb_x, mb_y);
-        } else {
-            mode = check_intra_pred8x8_mode(mb->mode, mb_x, mb_y);
-        }
+        mode = check_intra_pred8x8_mode_emuedge(mb->mode, mb_x, mb_y);
         s->hpc.pred16x16[mode](dst[0], s->linesize);
     } else {
         uint8_t *ptr = dst[0];
@@ -1062,7 +1046,7 @@ void intra_predict(VP8Context *s, VP8ThreadData *td, uint8_t *dst[3],
 
         // if we're on the right edge of the frame, said edge is extended
         // from the top macroblock
-        if (!(!mb_y && avctx->flags & CODEC_FLAG_EMU_EDGE) &&
+        if (mb_y &&
             mb_x == s->mb_width-1) {
             tr = tr_right[-1]*0x01010101u;
             tr_right = (uint8_t *)&tr;
@@ -1078,41 +1062,37 @@ void intra_predict(VP8Context *s, VP8ThreadData *td, uint8_t *dst[3],
                 uint8_t *dst = ptr+4*x;
                 DECLARE_ALIGNED(4, uint8_t, copy_dst)[5*8];
 
-                if ((y == 0 || x == 3) && mb_y == 0 && avctx->flags & CODEC_FLAG_EMU_EDGE) {
+                if ((y == 0 || x == 3) && mb_y == 0) {
                     topright = tr_top;
                 } else if (x == 3)
                     topright = tr_right;
 
-                if (avctx->flags & CODEC_FLAG_EMU_EDGE) { // mb_x+x or mb_y+y is a hack but works
-                    mode = check_intra_pred4x4_mode_emuedge(intra4x4[x], mb_x + x, mb_y + y, &copy);
-                    if (copy) {
-                        dst = copy_dst + 12;
-                        linesize = 8;
-                        if (!(mb_y + y)) {
-                            copy_dst[3] = 127U;
-                            AV_WN32A(copy_dst+4, 127U * 0x01010101U);
-                        } else {
-                            AV_COPY32(copy_dst+4, ptr+4*x-s->linesize);
-                            if (!(mb_x + x)) {
-                                copy_dst[3] = 129U;
-                            } else {
-                                copy_dst[3] = ptr[4*x-s->linesize-1];
-                            }
-                        }
+                mode = check_intra_pred4x4_mode_emuedge(intra4x4[x], mb_x + x, mb_y + y, &copy);
+                if (copy) {
+                    dst = copy_dst + 12;
+                    linesize = 8;
+                    if (!(mb_y + y)) {
+                        copy_dst[3] = 127U;
+                        AV_WN32A(copy_dst+4, 127U * 0x01010101U);
+                    } else {
+                        AV_COPY32(copy_dst+4, ptr+4*x-s->linesize);
                         if (!(mb_x + x)) {
-                            copy_dst[11] =
-                            copy_dst[19] =
-                            copy_dst[27] =
-                            copy_dst[35] = 129U;
+                            copy_dst[3] = 129U;
                         } else {
-                            copy_dst[11] = ptr[4*x              -1];
-                            copy_dst[19] = ptr[4*x+s->linesize  -1];
-                            copy_dst[27] = ptr[4*x+s->linesize*2-1];
-                            copy_dst[35] = ptr[4*x+s->linesize*3-1];
+                            copy_dst[3] = ptr[4*x-s->linesize-1];
                         }
                     }
-                } else {
-                    mode = intra4x4[x];
+                    if (!(mb_x + x)) {
+                        copy_dst[11] =
+                        copy_dst[19] =
+                        copy_dst[27] =
+                        copy_dst[35] = 129U;
+                    } else {
+                        copy_dst[11] = ptr[4*x              -1];
+                        copy_dst[19] = ptr[4*x+s->linesize  -1];
+                        copy_dst[27] = ptr[4*x+s->linesize*2-1];
+                        copy_dst[35] = ptr[4*x+s->linesize*3-1];
+                    }
                 }
                 s->hpc.pred4x4[mode](dst, topright, linesize);
                 if (copy) {
@@ -1137,15 +1117,11 @@ void intra_predict(VP8Context *s, VP8ThreadData *td, uint8_t *dst[3],
         }
     }
 
-    if (avctx->flags & CODEC_FLAG_EMU_EDGE) {
-        mode = check_intra_pred8x8_mode_emuedge(mb->chroma_pred_mode, mb_x, mb_y);
-    } else {
-        mode = check_intra_pred8x8_mode(mb->chroma_pred_mode, mb_x, mb_y);
-    }
+    mode = check_intra_pred8x8_mode_emuedge(mb->chroma_pred_mode, mb_x, mb_y);
     s->hpc.pred8x8[mode](dst[1], s->uvlinesize);
     s->hpc.pred8x8[mode](dst[2], s->uvlinesize);
 
-    if (!(avctx->flags & CODEC_FLAG_EMU_EDGE && !mb_y) && (s->deblock_filter || !mb_y) && td->thread_nr == 0)
+    if (mb_y && (s->deblock_filter || !mb_y) && td->thread_nr == 0)
         xchg_mb_border(s->top_border[mb_x+1], dst[0], dst[1], dst[2],
                        s->linesize, s->uvlinesize, mb_x, mb_y, s->mb_width,
                        s->filter.simple, 0);
@@ -1184,6 +1160,7 @@ void vp8_mc_luma(VP8Context *s, VP8ThreadData *td, uint8_t *dst,
     uint8_t *src = ref->f->data[0];
 
     if (AV_RN32A(mv)) {
+        int src_linesize = linesize;
 
         int mx = (mv->x << 1)&7, mx_idx = subpel_idx[0][mx];
         int my = (mv->y << 1)&7, my_idx = subpel_idx[0][my];
@@ -1198,12 +1175,13 @@ void vp8_mc_luma(VP8Context *s, VP8ThreadData *td, uint8_t *dst,
             y_off < my_idx || y_off >= height - block_h - subpel_idx[2][my]) {
             s->vdsp.emulated_edge_mc(td->edge_emu_buffer,
                                      src - my_idx * linesize - mx_idx,
-                                     linesize, linesize,
+                                     EDGE_EMU_LINESIZE, linesize,
                                      block_w + subpel_idx[1][mx], block_h + subpel_idx[1][my],
                                      x_off - mx_idx, y_off - my_idx, width, height);
-            src = td->edge_emu_buffer + mx_idx + linesize * my_idx;
+            src = td->edge_emu_buffer + mx_idx + EDGE_EMU_LINESIZE * my_idx;
+            src_linesize = EDGE_EMU_LINESIZE;
         }
-        mc_func[my_idx][mx_idx](dst, linesize, src, linesize, block_h, mx, my);
+        mc_func[my_idx][mx_idx](dst, linesize, src, src_linesize, block_h, mx, my);
     } else {
         ff_thread_await_progress(ref, (3 + y_off + block_h) >> 4, 0);
         mc_func[0][0](dst, linesize, src + y_off * linesize + x_off, linesize, block_h, 0, 0);
@@ -1250,19 +1228,19 @@ void vp8_mc_chroma(VP8Context *s, VP8ThreadData *td, uint8_t *dst1, uint8_t *dst
             y_off < my_idx || y_off >= height - block_h - subpel_idx[2][my]) {
             s->vdsp.emulated_edge_mc(td->edge_emu_buffer,
                                      src1 - my_idx * linesize - mx_idx,
-                                     linesize, linesize,
+                                     EDGE_EMU_LINESIZE, linesize,
                                      block_w + subpel_idx[1][mx], block_h + subpel_idx[1][my],
                                      x_off - mx_idx, y_off - my_idx, width, height);
-            src1 = td->edge_emu_buffer + mx_idx + linesize * my_idx;
-            mc_func[my_idx][mx_idx](dst1, linesize, src1, linesize, block_h, mx, my);
+            src1 = td->edge_emu_buffer + mx_idx + EDGE_EMU_LINESIZE * my_idx;
+            mc_func[my_idx][mx_idx](dst1, linesize, src1, EDGE_EMU_LINESIZE, block_h, mx, my);
 
             s->vdsp.emulated_edge_mc(td->edge_emu_buffer,
                                      src2 - my_idx * linesize - mx_idx,
-                                     linesize, linesize,
+                                     EDGE_EMU_LINESIZE, linesize,
                                      block_w + subpel_idx[1][mx], block_h + subpel_idx[1][my],
                                      x_off - mx_idx, y_off - my_idx, width, height);
-            src2 = td->edge_emu_buffer + mx_idx + linesize * my_idx;
-            mc_func[my_idx][mx_idx](dst2, linesize, src2, linesize, block_h, mx, my);
+            src2 = td->edge_emu_buffer + mx_idx + EDGE_EMU_LINESIZE* my_idx;
+            mc_func[my_idx][mx_idx](dst2, linesize, src2, EDGE_EMU_LINESIZE, block_h, mx, my);
         } else {
             mc_func[my_idx][mx_idx](dst1, linesize, src1, linesize, block_h, mx, my);
             mc_func[my_idx][mx_idx](dst2, linesize, src2, linesize, block_h, mx, my);
@@ -1667,7 +1645,7 @@ static void vp8_decode_mb_row_no_filter(AVCodecContext *avctx, void *tdata,
     VP8Context *s = avctx->priv_data;
     VP8ThreadData *prev_td, *next_td, *td = &s->thread_data[threadnr];
     int mb_y = td->thread_mb_pos>>16;
-    int i, y, mb_x, mb_xy = mb_y*s->mb_width;
+    int mb_x, mb_xy = mb_y*s->mb_width;
     int num_jobs = s->num_jobs;
     VP8Frame *curframe = s->curframe, *prev_frame = s->prev_frame;
     VP56RangeCoder *c = &s->coeff_partition[mb_y & (s->num_coeff_partitions-1)];
@@ -1695,15 +1673,6 @@ static void vp8_decode_mb_row_no_filter(AVCodecContext *avctx, void *tdata,
     }
 
     memset(td->left_nnz, 0, sizeof(td->left_nnz));
-    // left edge of 129 for intra prediction
-    if (!(avctx->flags & CODEC_FLAG_EMU_EDGE)) {
-        for (i = 0; i < 3; i++)
-            for (y = 0; y < 16>>!!i; y++)
-                dst[i][y*curframe->tf.f->linesize[i]-1] = 129;
-        if (mb_y == 1) {
-            s->top_border[0][15] = s->top_border[0][23] = s->top_border[0][31] = 129;
-        }
-    }
 
     s->mv_min.x = -MARGIN;
     s->mv_max.x = ((s->mb_width  - 1) << 6) + MARGIN;
@@ -1950,10 +1919,6 @@ int ff_vp8_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     s->linesize   = curframe->tf.f->linesize[0];
     s->uvlinesize = curframe->tf.f->linesize[1];
 
-    if (!s->thread_data[0].edge_emu_buffer)
-        for (i = 0; i < MAX_THREADS; i++)
-            s->thread_data[i].edge_emu_buffer = av_malloc(21*s->linesize);
-
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
     /* Zero macroblock structures for top/top-left prediction from outside the frame. */
     if (!s->mb_layout)
@@ -1961,12 +1926,6 @@ int ff_vp8_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     if (!s->mb_layout && s->keyframe)
         memset(s->intra4x4_pred_mode_top, DC_PRED, s->mb_width*4);
 
-    // top edge of 127 for intra prediction
-    if (!(avctx->flags & CODEC_FLAG_EMU_EDGE)) {
-        s->top_border[0][15] = s->top_border[0][23] = 127;
-        s->top_border[0][31] = 127;
-        memset(s->top_border[1], 127, s->mb_width*sizeof(*s->top_border));
-    }
     memset(s->ref_count, 0, sizeof(s->ref_count));
 
 

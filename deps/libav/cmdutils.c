@@ -20,6 +20,7 @@
  */
 
 #include <string.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <math.h>
@@ -57,7 +58,7 @@
 struct SwsContext *sws_opts;
 AVDictionary *format_opts, *codec_opts, *resample_opts;
 
-static const int this_year = 2013;
+static const int this_year = 2014;
 
 void init_opts(void)
 {

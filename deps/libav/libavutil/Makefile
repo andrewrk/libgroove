@@ -24,10 +24,10 @@ HEADERS = adler32.h                                                     \
           hmac.h                                                        \
           imgutils.h                                                    \
           intfloat.h                                                    \
-          intfloat_readwrite.h                                          \
           intreadwrite.h                                                \
           lfg.h                                                         \
           log.h                                                         \
+          macros.h                                                      \
           mathematics.h                                                 \
           md5.h                                                         \
           mem.h                                                         \
@@ -41,6 +41,7 @@ HEADERS = adler32.h                                                     \
           rational.h                                                    \
           samplefmt.h                                                   \
           sha.h                                                         \
+          stereo3d.h                                                    \
           time.h                                                        \
           version.h                                                     \
           xtea.h                                                        \
@@ -75,7 +76,6 @@ OBJS = adler32.o                                                        \
        frame.o                                                          \
        hmac.o                                                           \
        imgutils.o                                                       \
-       intfloat_readwrite.o                                             \
        intmath.o                                                        \
        lfg.o                                                            \
        lls.o                                                            \
@@ -93,6 +93,7 @@ OBJS = adler32.o                                                        \
        rc4.o                                                            \
        samplefmt.o                                                      \
        sha.o                                                            \
+       stereo3d.o                                                       \
        time.o                                                           \
        tree.o                                                           \
        utils.o                                                          \

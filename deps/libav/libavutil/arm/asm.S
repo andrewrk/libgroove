@@ -54,7 +54,7 @@
 T       .thumb
 ELF     .eabi_attribute 25, 1           @ Tag_ABI_align_preserved
 
-.macro  function name, export=0
+.macro  function name, export=0, align=2
         .set            .Lpic_idx, 0
         .set            .Lpic_gp, 0
     .macro endfunc
@@ -69,14 +69,17 @@ ELF     .size   \name, . - \name
         .purgem endfunc
     .endm
         .text
-        .align          2
+        .align          \align
     .if \export
         .global EXTERN_ASM\name
+ELF     .type   EXTERN_ASM\name, %function
+        .func   EXTERN_ASM\name
 EXTERN_ASM\name:
-    .endif
+    .else
 ELF     .type   \name, %function
         .func   \name
 \name:
+    .endif
 .endm
 
 .macro  const   name, align=2

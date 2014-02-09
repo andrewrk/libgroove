@@ -35,7 +35,7 @@
 #include "mjpeg.h"
 
 enum ChunkType {
-    FRAME_INFO = 0xC8,
+    DISPLAY_INFO = 0xC8,
     TILE_DATA,
     CURSOR_POS,
     CURSOR_SHAPE,
@@ -236,16 +236,14 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
                            int swapuv)
 {
     GetBitContext gb;
-    uint8_t *tmp;
     int mb_w, mb_h, mb_x, mb_y, i, j;
     int bx, by;
     int unesc_size;
     int ret;
 
-    tmp = av_realloc(c->buf, src_size + FF_INPUT_BUFFER_PADDING_SIZE);
-    if (!tmp)
-        return AVERROR(ENOMEM);
-    c->buf = tmp;
+    if ((ret = av_reallocp(&c->buf,
+                           src_size + FF_INPUT_BUFFER_PADDING_SIZE)) < 0)
+        return ret;
     jpg_unescape(src, src_size, c->buf, &unesc_size);
     memset(c->buf + unesc_size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     init_get_bits(&gb, c->buf, unesc_size * 8);
@@ -478,8 +476,7 @@ static int g2m_load_cursor(AVCodecContext *avctx, G2MContext *c,
     uint32_t bits;
     uint32_t cur_size, cursor_w, cursor_h, cursor_stride;
     uint32_t cursor_hot_x, cursor_hot_y;
-    int cursor_fmt;
-    uint8_t *tmp;
+    int cursor_fmt, err;
 
     cur_size      = bytestream2_get_be32(gb);
     cursor_w      = bytestream2_get_byte(gb);
@@ -514,13 +511,11 @@ static int g2m_load_cursor(AVCodecContext *avctx, G2MContext *c,
         return AVERROR_PATCHWELCOME;
     }
 
-    tmp = av_realloc(c->cursor, cursor_stride * cursor_h);
-    if (!tmp) {
+    if ((err = av_reallocp(&c->cursor, cursor_stride * cursor_h)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Cannot allocate cursor buffer\n");
-        return AVERROR(ENOMEM);
+        return err;
     }
 
-    c->cursor        = tmp;
     c->cursor_w      = cursor_w;
     c->cursor_h      = cursor_h;
     c->cursor_hot_x  = cursor_hot_x;
@@ -684,10 +679,10 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             break;
         }
         switch (chunk_type) {
-        case FRAME_INFO:
+        case DISPLAY_INFO:
             c->got_header = 0;
             if (chunk_size < 21) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid frame info size %d\n",
+                av_log(avctx, AV_LOG_ERROR, "Invalid display info size %d\n",
                        chunk_size);
                 break;
             }
@@ -712,7 +707,8 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->tile_width  = bytestream2_get_be32(&bc);
             c->tile_height = bytestream2_get_be32(&bc);
-            if (!c->tile_width || !c->tile_height) {
+            if (!c->tile_width || !c->tile_height ||
+                ((c->tile_width | c->tile_height) & 0xF)) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid tile dimensions %dx%d\n",
                        c->tile_width, c->tile_height);
@@ -733,7 +729,7 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
         case TILE_DATA:
             if (!c->tiles_x || !c->tiles_y) {
                 av_log(avctx, AV_LOG_WARNING,
-                       "No frame header - skipping tile\n");
+                       "No display info - skipping tile\n");
                 bytestream2_skip(&bc, bytestream2_get_bytes_left(&bc));
                 break;
             }

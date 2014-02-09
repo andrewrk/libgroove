@@ -60,6 +60,8 @@ typedef struct SubStream {
     uint8_t     ch_assign[MAX_CHANNELS];
     /// The channel layout for this substream
     uint64_t    ch_layout;
+    /// The matrix encoding mode for this substream
+    enum AVMatrixEncoding matrix_encoding;
 
     /// Channel coding parameters for channels in the substream
     ChannelParams channel_params[MAX_CHANNELS];
@@ -374,6 +376,46 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
         m->substream[substr].ch_layout = mh.channel_layout_thd_stream1;
     }
 
+    /* Parse the TrueHD decoder channel modifiers and set each substream's
+     * AVMatrixEncoding accordingly.
+     *
+     * The meaning of the modifiers depends on the channel layout:
+     *
+     * - THD_CH_MODIFIER_LTRT, THD_CH_MODIFIER_LBINRBIN only apply to 2-channel
+     *
+     * - THD_CH_MODIFIER_MONO applies to 1-channel or 2-channel (dual mono)
+     *
+     * - THD_CH_MODIFIER_SURROUNDEX, THD_CH_MODIFIER_NOTSURROUNDEX only apply to
+     *   layouts with an Ls/Rs channel pair
+     */
+    for (substr = 0; substr < MAX_SUBSTREAMS; substr++)
+        m->substream[substr].matrix_encoding = AV_MATRIX_ENCODING_NONE;
+    if (m->avctx->codec_id == AV_CODEC_ID_TRUEHD) {
+        if (mh.num_substreams > 2 &&
+            mh.channel_layout_thd_stream2 & AV_CH_SIDE_LEFT &&
+            mh.channel_layout_thd_stream2 & AV_CH_SIDE_RIGHT &&
+            mh.channel_modifier_thd_stream2 == THD_CH_MODIFIER_SURROUNDEX)
+            m->substream[2].matrix_encoding = AV_MATRIX_ENCODING_DOLBYEX;
+
+        if (mh.num_substreams > 1 &&
+            mh.channel_layout_thd_stream1 & AV_CH_SIDE_LEFT &&
+            mh.channel_layout_thd_stream1 & AV_CH_SIDE_RIGHT &&
+            mh.channel_modifier_thd_stream1 == THD_CH_MODIFIER_SURROUNDEX)
+            m->substream[1].matrix_encoding = AV_MATRIX_ENCODING_DOLBYEX;
+
+        if (mh.num_substreams > 0)
+            switch (mh.channel_modifier_thd_stream0) {
+            case THD_CH_MODIFIER_LTRT:
+                m->substream[0].matrix_encoding = AV_MATRIX_ENCODING_DOLBY;
+                break;
+            case THD_CH_MODIFIER_LBINRBIN:
+                m->substream[0].matrix_encoding = AV_MATRIX_ENCODING_DOLBYHEADPHONE;
+                break;
+            default:
+                break;
+            }
+    }
+
     return 0;
 }
 
@@ -462,8 +504,8 @@ FF_DISABLE_DEPRECATION_WARNINGS
     } else
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
-    if (m->avctx->request_channel_layout == s->ch_layout &&
-        m->max_decoded_substream > substr) {
+    if (m->avctx->request_channel_layout && (s->ch_layout & m->avctx->request_channel_layout) ==
+        m->avctx->request_channel_layout && m->max_decoded_substream > substr) {
         av_log(m->avctx, AV_LOG_DEBUG,
                "Extracting %d-channel downmix (0x%"PRIx64") from substream %d. "
                "Further substreams will be skipped.\n",
@@ -1018,6 +1060,10 @@ static int output_data(MLPDecodeContext *m, unsigned int substr,
             else      *data_16++ = sample >> 8;
         }
     }
+
+    /* Update matrix encoding side data */
+    if ((ret = ff_side_data_update_matrix_encoding(frame, s->matrix_encoding)) < 0)
+        return ret;
 
     *got_frame_ptr = 1;
 

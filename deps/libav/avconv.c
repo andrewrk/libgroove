@@ -27,6 +27,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <limits.h>
+#include <stdint.h>
+
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
@@ -180,7 +182,7 @@ static void avconv_cleanup(int ret)
             bsfc = next;
         }
         output_streams[i]->bitstream_filters = NULL;
-        avcodec_free_frame(&output_streams[i]->filtered_frame);
+        av_frame_free(&output_streams[i]->filtered_frame);
 
         av_parser_close(output_streams[i]->parser);
 
@@ -198,6 +200,7 @@ static void avconv_cleanup(int ret)
         av_frame_free(&input_streams[i]->filter_frame);
         av_dict_free(&input_streams[i]->opts);
         av_freep(&input_streams[i]->filters);
+        av_freep(&input_streams[i]->hwaccel_device);
         av_freep(&input_streams[i]);
     }
 
@@ -639,8 +642,7 @@ static int poll_filter(OutputStream *ost)
 
     if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
         return AVERROR(ENOMEM);
-    } else
-        avcodec_get_frame_defaults(ost->filtered_frame);
+    }
     filtered_frame = ost->filtered_frame;
 
     if (ost->enc->type == AVMEDIA_TYPE_AUDIO &&
@@ -1165,6 +1167,13 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
         return ret;
     }
 
+    if (ist->hwaccel_retrieve_data && decoded_frame->format == ist->hwaccel_pix_fmt) {
+        err = ist->hwaccel_retrieve_data(ist->st->codec, decoded_frame);
+        if (err < 0)
+            goto fail;
+    }
+    ist->hwaccel_retrieved_pix_fmt = decoded_frame->format;
+
     decoded_frame->pts = guess_correct_pts(&ist->pts_ctx, decoded_frame->pkt_pts,
                                            decoded_frame->pkt_dts);
     pkt->size = 0;
@@ -1212,6 +1221,7 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
             break;
     }
 
+fail:
     av_frame_unref(ist->filter_frame);
     av_frame_unref(decoded_frame);
     return err < 0 ? err : ret;
@@ -1359,6 +1369,63 @@ static void print_sdp(void)
     av_freep(&avc);
 }
 
+static const HWAccel *get_hwaccel(enum AVPixelFormat pix_fmt)
+{
+    int i;
+    for (i = 0; hwaccels[i].name; i++)
+        if (hwaccels[i].pix_fmt == pix_fmt)
+            return &hwaccels[i];
+    return NULL;
+}
+
+static enum AVPixelFormat get_format(AVCodecContext *s, const enum AVPixelFormat *pix_fmts)
+{
+    InputStream *ist = s->opaque;
+    const enum AVPixelFormat *p;
+    int ret;
+
+    for (p = pix_fmts; *p != -1; p++) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(*p);
+        const HWAccel *hwaccel;
+
+        if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL))
+            break;
+
+        hwaccel = get_hwaccel(*p);
+        if (!hwaccel ||
+            (ist->active_hwaccel_id && ist->active_hwaccel_id != hwaccel->id) ||
+            (ist->hwaccel_id != HWACCEL_AUTO && ist->hwaccel_id != hwaccel->id))
+            continue;
+
+        ret = hwaccel->init(s);
+        if (ret < 0) {
+            if (ist->hwaccel_id == hwaccel->id) {
+                av_log(NULL, AV_LOG_FATAL,
+                       "%s hwaccel requested for input stream #%d:%d, "
+                       "but cannot be initialized.\n", hwaccel->name,
+                       ist->file_index, ist->st->index);
+                exit_program(1);
+            }
+            continue;
+        }
+        ist->active_hwaccel_id = hwaccel->id;
+        ist->hwaccel_pix_fmt   = *p;
+        break;
+    }
+
+    return *p;
+}
+
+static int get_buffer(AVCodecContext *s, AVFrame *frame, int flags)
+{
+    InputStream *ist = s->opaque;
+
+    if (ist->hwaccel_get_buffer && frame->format == ist->hwaccel_pix_fmt)
+        return ist->hwaccel_get_buffer(s, frame, flags);
+
+    return avcodec_default_get_buffer2(s, frame, flags);
+}
+
 static int init_input_stream(int ist_index, char *error, int error_len)
 {
     int i, ret;
@@ -1380,6 +1447,11 @@ static int init_input_stream(int ist_index, char *error, int error_len)
                 break;
             }
         }
+
+        ist->st->codec->opaque      = ist;
+        ist->st->codec->get_format  = get_format;
+        ist->st->codec->get_buffer2 = get_buffer;
+        ist->st->codec->thread_safe_callbacks = 1;
 
         av_opt_set_int(ist->st->codec, "refcounted_frames", 1, 0);
 
@@ -1619,10 +1691,19 @@ static int transcode_init(void)
                 (video_sync_method ==  VSYNC_CFR ||
                  (video_sync_method ==  VSYNC_AUTO &&
                   !(oc->oformat->flags & (AVFMT_NOTIMESTAMPS | AVFMT_VARIABLE_FPS))))) {
-                ost->frame_rate = ist->framerate.num ? ist->framerate :
-                                  ist->st->avg_frame_rate.num ?
-                                  ist->st->avg_frame_rate :
-                                  (AVRational){25, 1};
+                if (ist->framerate.num)
+                    ost->frame_rate = ist->framerate;
+                else if (ist->st->avg_frame_rate.num)
+                    ost->frame_rate = ist->st->avg_frame_rate;
+                else {
+                    av_log(NULL, AV_LOG_WARNING, "Constant framerate requested "
+                           "for the output stream #%d:%d, but no information "
+                           "about the input framerate is available. Falling "
+                           "back to a default value of 25fps. Use the -r option "
+                           "if you want a different framerate.\n",
+                           ost->file_index, ost->index);
+                    ost->frame_rate = (AVRational){ 25, 1 };
+                }
 
                 if (ost->enc && ost->enc->supported_framerates && !ost->force_fps) {
                     int idx = av_find_nearest_q_idx(ost->frame_rate, ost->enc->supported_framerates);
@@ -2272,6 +2353,8 @@ static int transcode(void)
         ist = input_streams[i];
         if (ist->decoding_needed) {
             avcodec_close(ist->st->codec);
+            if (ist->hwaccel_uninit)
+                ist->hwaccel_uninit(ist->st->codec);
         }
     }
 
