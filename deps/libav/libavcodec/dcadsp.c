@@ -24,8 +24,17 @@
 #include "libavutil/intreadwrite.h"
 #include "dcadsp.h"
 
-static void dca_lfe_fir_c(float *out, const float *in, const float *coefs,
-                          int decifactor, float scale)
+static void int8x8_fmul_int32_c(float *dst, const int8_t *src, int scale)
+{
+    float fscale = scale / 16.0;
+    int i;
+    for (i = 0; i < 8; i++)
+        dst[i] = src[i] * fscale;
+}
+
+static inline void
+dca_lfe_fir(float *out, const float *in, const float *coefs,
+            int decifactor, float scale)
 {
     float *out2 = out + decifactor;
     const float *cf0 = coefs;
@@ -74,9 +83,24 @@ static void dca_qmf_32_subbands(float samples_in[32][8], int sb_act,
     }
 }
 
+static void dca_lfe_fir0_c(float *out, const float *in, const float *coefs,
+                           float scale)
+{
+    dca_lfe_fir(out, in, coefs, 32, scale);
+}
+
+static void dca_lfe_fir1_c(float *out, const float *in, const float *coefs,
+                           float scale)
+{
+    dca_lfe_fir(out, in, coefs, 64, scale);
+}
+
 av_cold void ff_dcadsp_init(DCADSPContext *s)
 {
-    s->lfe_fir = dca_lfe_fir_c;
+    s->lfe_fir[0] = dca_lfe_fir0_c;
+    s->lfe_fir[1] = dca_lfe_fir1_c;
     s->qmf_32_subbands = dca_qmf_32_subbands;
+    s->int8x8_fmul_int32 = int8x8_fmul_int32_c;
     if (ARCH_ARM) ff_dcadsp_init_arm(s);
+    if (ARCH_X86) ff_dcadsp_init_x86(s);
 }

@@ -55,6 +55,8 @@ version 10:
 - WebP encoding via libwebp
 - ATRAC3+ decoder
 - framepack filter
+- Mirillis FIC video decoder
+- Support DNx444
 
 
 version 9:

@@ -232,6 +232,9 @@ static int init_muxer(AVFormatContext *s, AVDictionary **options)
             av_log(s, AV_LOG_WARNING,
                    "Codec for stream %d does not use global headers "
                    "but container format requires global headers\n", i);
+
+        if (codec->codec_type != AVMEDIA_TYPE_ATTACHMENT)
+            s->internal->nb_interleaved_streams++;
     }
 
     if (!s->priv_data && of->priv_data_size > 0) {
@@ -429,9 +432,32 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
+static int check_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    if (!pkt)
+        return 0;
+
+    if (pkt->stream_index < 0 || pkt->stream_index >= s->nb_streams) {
+        av_log(s, AV_LOG_ERROR, "Invalid packet stream index: %d\n",
+               pkt->stream_index);
+        return AVERROR(EINVAL);
+    }
+
+    if (s->streams[pkt->stream_index]->codec->codec_type == AVMEDIA_TYPE_ATTACHMENT) {
+        av_log(s, AV_LOG_ERROR, "Received a packet for an attachment stream.\n");
+        return AVERROR(EINVAL);
+    }
+
+    return 0;
+}
+
 int av_write_frame(AVFormatContext *s, AVPacket *pkt)
 {
     int ret;
+
+    ret = check_packet(s, pkt);
+    if (ret < 0)
+        return ret;
 
     if (!pkt) {
         if (s->oformat->flags & AVFMT_ALLOW_FLUSH)
@@ -515,10 +541,41 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
         ff_interleave_add_packet(s, pkt, interleave_compare_dts);
     }
 
-    for (i = 0; i < s->nb_streams; i++)
-        stream_count += !!s->streams[i]->last_in_packet_buffer;
+    if (s->max_interleave_delta > 0 && s->packet_buffer && !flush) {
+        AVPacket *top_pkt = &s->packet_buffer->pkt;
+        int64_t delta_dts = INT64_MIN;
+        int64_t top_dts = av_rescale_q(top_pkt->dts,
+                                       s->streams[top_pkt->stream_index]->time_base,
+                                       AV_TIME_BASE_Q);
 
-    if (stream_count && (s->nb_streams == stream_count || flush)) {
+        for (i = 0; i < s->nb_streams; i++) {
+            int64_t last_dts;
+            const AVPacketList *last = s->streams[i]->last_in_packet_buffer;
+
+            if (!last)
+                continue;
+
+            last_dts = av_rescale_q(last->pkt.dts,
+                                    s->streams[i]->time_base,
+                                    AV_TIME_BASE_Q);
+            delta_dts = FFMAX(delta_dts, last_dts - top_dts);
+            stream_count++;
+        }
+
+        if (delta_dts > s->max_interleave_delta) {
+            av_log(s, AV_LOG_DEBUG,
+                   "Delay between the first packet and last packet in the "
+                   "muxing queue is %"PRId64" > %"PRId64": forcing output\n",
+                   delta_dts, s->max_interleave_delta);
+            flush = 1;
+        }
+    } else {
+        for (i = 0; i < s->nb_streams; i++)
+            stream_count += !!s->streams[i]->last_in_packet_buffer;
+    }
+
+
+    if (stream_count && (s->internal->nb_interleaved_streams == stream_count || flush)) {
         pktl = s->packet_buffer;
         *out = pktl->pkt;
 
@@ -559,6 +616,10 @@ static int interleave_packet(AVFormatContext *s, AVPacket *out, AVPacket *in, in
 int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
 {
     int ret, flush = 0;
+
+    ret = check_packet(s, pkt);
+    if (ret < 0)
+        return ret;
 
     if (pkt) {
         AVStream *st = s->streams[pkt->stream_index];

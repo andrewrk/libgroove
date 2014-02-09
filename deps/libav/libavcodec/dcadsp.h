@@ -23,17 +23,19 @@
 #include "synth_filter.h"
 
 typedef struct DCADSPContext {
-    void (*lfe_fir)(float *out, const float *in, const float *coefs,
-                    int decifactor, float scale);
+    void (*lfe_fir[2])(float *out, const float *in, const float *coefs,
+                       float scale);
     void (*qmf_32_subbands)(float samples_in[32][8], int sb_act,
                             SynthFilterContext *synth, FFTContext *imdct,
                             float synth_buf_ptr[512],
                             int *synth_buf_offset, float synth_buf2[32],
                             const float window[512], float *samples_out,
                             float raXin[32], float scale);
+    void (*int8x8_fmul_int32)(float *dst, const int8_t *src, int scale);
 } DCADSPContext;
 
 void ff_dcadsp_init(DCADSPContext *s);
 void ff_dcadsp_init_arm(DCADSPContext *s);
+void ff_dcadsp_init_x86(DCADSPContext *s);
 
 #endif /* AVCODEC_DCADSP_H */
