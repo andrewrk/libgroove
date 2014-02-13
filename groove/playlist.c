@@ -428,7 +428,9 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
 
     err = avfilter_graph_config(p->filter_graph, NULL);
     if (err < 0) {
-        av_log(NULL, AV_LOG_ERROR, "error configuring the filter graph\n");
+        av_strerror(err, p->strbuf, sizeof(p->strbuf));
+        av_log(NULL, AV_LOG_ERROR, "error configuring the filter graph: %s\n",
+                p->strbuf);
         return err;
     }
 
