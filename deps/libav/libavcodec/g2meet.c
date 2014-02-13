@@ -253,19 +253,25 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
     mb_h  = (height + 15) >> 4;
 
     if (!num_mbs)
-        num_mbs = mb_w * mb_h;
+        num_mbs = mb_w * mb_h * 4;
 
     for (i = 0; i < 3; i++)
         c->prev_dc[i] = 1024;
     bx = by = 0;
+    c->dsp.clear_blocks(c->block[0]);
     for (mb_y = 0; mb_y < mb_h; mb_y++) {
         for (mb_x = 0; mb_x < mb_w; mb_x++) {
-            if (mask && !mask[mb_x]) {
+            if (mask && !mask[mb_x * 2] && !mask[mb_x * 2 + 1] &&
+                !mask[mb_x * 2 +     mask_stride] &&
+                !mask[mb_x * 2 + 1 + mask_stride]) {
                 bx += 16;
                 continue;
             }
             for (j = 0; j < 2; j++) {
                 for (i = 0; i < 2; i++) {
+                    if (mask && !mask[mb_x * 2 + i + j * mask_stride])
+                        continue;
+                    num_mbs--;
                     if ((ret = jpg_decode_block(c, &gb, 0,
                                                 c->block[i + j * 2])) != 0)
                         return ret;
@@ -290,14 +296,14 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
                 }
             }
 
-            if (!--num_mbs)
+            if (!num_mbs)
                 return 0;
             bx += 16;
         }
         bx  = 0;
         by += 16;
         if (mask)
-            mask += mask_stride;
+            mask += mask_stride * 2;
     }
 
     return 0;
@@ -403,7 +409,7 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
 
     nblocks = *src++ + 1;
     cblocks = 0;
-    bstride = FFALIGN(width, 16) >> 4;
+    bstride = FFALIGN(width, 16) >> 3;
     // blocks are coded LSB and we need normal bitreader for JPEG data
     bits = 0;
     for (i = 0; i < (FFALIGN(height, 16) >> 4); i++) {
@@ -418,14 +424,17 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
             cblocks += coded;
             if (cblocks > nblocks)
                 return AVERROR_INVALIDDATA;
-            c->kempf_flags[j + i * bstride] = coded;
+            c->kempf_flags[j * 2 +      i * 2      * bstride] =
+            c->kempf_flags[j * 2 + 1 +  i * 2      * bstride] =
+            c->kempf_flags[j * 2 +     (i * 2 + 1) * bstride] =
+            c->kempf_flags[j * 2 + 1 + (i * 2 + 1) * bstride] = coded;
         }
     }
 
     memset(c->jpeg_tile, 0, c->tile_stride * height);
     jpg_decode_data(&c->jc, width, height, src, src_end - src,
                     c->jpeg_tile, c->tile_stride,
-                    c->kempf_flags, bstride, nblocks, 0);
+                    c->kempf_flags, bstride, nblocks * 4, 0);
 
     kempf_restore_buf(c->kempf_buf, dlen, dst, c->framebuf_stride,
                       c->jpeg_tile, c->tile_stride,
@@ -645,7 +654,7 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
     int magic;
     int got_header = 0;
     uint32_t chunk_size;
-    int chunk_type;
+    int chunk_type, chunk_start;
     int i;
     int ret;
 
@@ -671,8 +680,9 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     while (bytestream2_get_bytes_left(&bc) > 5) {
-        chunk_size = bytestream2_get_le32(&bc) - 1;
-        chunk_type = bytestream2_get_byte(&bc);
+        chunk_size  = bytestream2_get_le32(&bc) - 1;
+        chunk_type  = bytestream2_get_byte(&bc);
+        chunk_start = bytestream2_tell(&bc);
         if (chunk_size > bytestream2_get_bytes_left(&bc)) {
             av_log(avctx, AV_LOG_ERROR, "Invalid chunk size %d type %02X\n",
                    chunk_size, chunk_type);
@@ -718,8 +728,6 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             c->tiles_x = (c->width  + c->tile_width  - 1) / c->tile_width;
             c->tiles_y = (c->height + c->tile_height - 1) / c->tile_height;
             c->bpp = bytestream2_get_byte(&bc);
-            chunk_size -= 21;
-            bytestream2_skip(&bc, chunk_size);
             if (g2m_init_buffers(c)) {
                 ret = AVERROR(ENOMEM);
                 goto header_fail;
@@ -730,7 +738,6 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             if (!c->tiles_x || !c->tiles_y) {
                 av_log(avctx, AV_LOG_WARNING,
                        "No display info - skipping tile\n");
-                bytestream2_skip(&bc, bytestream2_get_bytes_left(&bc));
                 break;
             }
             if (chunk_size < 2) {
@@ -746,7 +753,6 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
                        c->tile_x, c->tile_y, c->tiles_x, c->tiles_y);
                 break;
             }
-            chunk_size -= 2;
             ret = 0;
             switch (c->compression) {
             case COMPR_EPIC_J_B:
@@ -756,13 +762,12 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             case COMPR_KEMPF_J_B:
                 ret = kempf_decode_tile(c, c->tile_x, c->tile_y,
                                         buf + bytestream2_tell(&bc),
-                                        chunk_size);
+                                        chunk_size - 2);
                 break;
             }
             if (ret && c->framebuf)
                 av_log(avctx, AV_LOG_ERROR, "Error decoding tile %d,%d\n",
                        c->tile_x, c->tile_y);
-            bytestream2_skip(&bc, chunk_size);
             break;
         case CURSOR_POS:
             if (chunk_size < 5) {
@@ -772,7 +777,6 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->cursor_x = bytestream2_get_be16(&bc);
             c->cursor_y = bytestream2_get_be16(&bc);
-            bytestream2_skip(&bc, chunk_size - 4);
             break;
         case CURSOR_SHAPE:
             if (chunk_size < 8) {
@@ -783,17 +787,17 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             bytestream2_init(&tbc, buf + bytestream2_tell(&bc),
                              chunk_size - 4);
             g2m_load_cursor(avctx, c, &tbc);
-            bytestream2_skip(&bc, chunk_size);
             break;
         case CHUNK_CC:
         case CHUNK_CD:
-            bytestream2_skip(&bc, chunk_size);
             break;
         default:
             av_log(avctx, AV_LOG_WARNING, "Skipping chunk type %02X\n",
                    chunk_type);
-            bytestream2_skip(&bc, chunk_size);
         }
+
+        /* navigate to next chunk */
+        bytestream2_skip(&bc, chunk_start + chunk_size - bytestream2_tell(&bc));
     }
     if (got_header)
         c->got_header = 1;
