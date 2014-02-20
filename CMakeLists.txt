@@ -246,11 +246,11 @@ if(LIBAV_IS_BUNDLED)
   include_directories(${LIBAV_INSTALL}/include)
   add_dependencies(groove libav)
 else()
-  target_link_libraries(groove
+  target_link_libraries(groove LINK_PRIVATE
     ${LIBAV_AVCODEC_LIBRARIES}
     ${LIBAV_AVFILTER_LIBRARIES}
-    ${LIBAV_AVFORMAT_LIBRARIES}
-    ${LIBAV_AVUTIL_LIBRARIES})
+    ${LIBAV_AVFORMAT_LIBRARIES})
+  target_link_libraries(groove LINK_PUBLIC ${LIBAV_AVUTIL_LIBRARIES})
   include_directories(${LIBAV_INCLUDE_DIRS})
 endif()
 target_link_libraries(groove ${CMAKE_THREAD_LIBS_INIT})
@@ -305,7 +305,7 @@ else()
     target_link_libraries(grooveplayer SDL2-static)
     add_dependencies(grooveplayer SDL2-static)
   else()
-    target_link_libraries(grooveplayer ${SDL2_LIBRARY})
+    target_link_libraries(grooveplayer LINK_PRIVATE ${SDL2_LIBRARY})
   endif()
   include_directories(${SDL2_INCLUDE_DIR})
 
@@ -348,10 +348,10 @@ else()
     target_link_libraries(grooveloudness ebur128_static)
     add_dependencies(grooveloudness ebur128_static)
     if(SPEEXDSP_FOUND)
-      target_link_libraries(groove ${SPEEXDSP_LIBRARIES})
+      target_link_libraries(grooveloudness ${SPEEXDSP_LIBRARIES})
     endif(SPEEXDSP_FOUND)
   else()
-    target_link_libraries(groove ${EBUR128_LIBRARY})
+    target_link_libraries(grooveloudness LINK_PRIVATE ${EBUR128_LIBRARY})
   endif()
   include_directories(${EBUR128_INCLUDE_DIR})
 
