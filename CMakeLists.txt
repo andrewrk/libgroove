@@ -253,7 +253,7 @@ else()
   target_link_libraries(groove LINK_PUBLIC ${LIBAV_AVUTIL_LIBRARIES})
   include_directories(${LIBAV_INCLUDE_DIRS})
 endif()
-target_link_libraries(groove ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(groove LINK_PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 
 add_library(groove_static STATIC ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
@@ -299,7 +299,7 @@ else()
     VERSION ${LIBGROOVE_VERSION}
     COMPILE_FLAGS ${LIB_CFLAGS}
     )
-  target_link_libraries(grooveplayer groove)
+  target_link_libraries(grooveplayer LINK_PUBLIC groove)
   add_dependencies(grooveplayer groove)
   if(SDL2_IS_BUNDLED)
     target_link_libraries(grooveplayer SDL2-static)
@@ -342,7 +342,7 @@ else()
     VERSION ${LIBGROOVE_VERSION}
     COMPILE_FLAGS ${LIB_CFLAGS}
     )
-  target_link_libraries(grooveloudness groove ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries(grooveloudness LINK_PUBLIC groove ${CMAKE_THREAD_LIBS_INIT})
   add_dependencies(grooveloudness groove)
   if(EBUR128_IS_BUNDLED)
     target_link_libraries(grooveloudness ebur128_static)
