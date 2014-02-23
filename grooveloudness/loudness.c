@@ -61,9 +61,9 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
 
     ebur128_state *cur_track_state = d->all_track_states[d->cur_track_index];
     ebur128_loudness_global(cur_track_state, &info->loudness);
-    ebur128_sample_peak(cur_track_state, 0, &info->peak);
+    ebur128_true_peak(cur_track_state, 0, &info->peak);
     double out;
-    ebur128_sample_peak(cur_track_state, 1, &out);
+    ebur128_true_peak(cur_track_state, 1, &out);
     if (out > info->peak) info->peak = out;
     if (info->peak > d->album_peak) d->album_peak = info->peak;
 
@@ -165,7 +165,7 @@ static void *detect_thread(void *arg) {
                 }
             }
             d->all_track_states[d->cur_track_index] = ebur128_init(2, 44100,
-                    EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
+                    EBUR128_MODE_TRUE_PEAK|EBUR128_MODE_I);
             if (!d->all_track_states[d->cur_track_index]) {
                 av_log(NULL, AV_LOG_ERROR, "unable to allocate EBU R128 track context\n");
             }
