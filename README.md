@@ -57,6 +57,7 @@ so that you can still compile if they cannot be found on your system.
    sudo apt-get update
    sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev
    ```
+ * [Debian experimental](http://serverfault.com/questions/22414)
 
 ### From Source
 
