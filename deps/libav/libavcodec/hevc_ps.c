@@ -499,8 +499,8 @@ static void decode_vui(HEVCContext *s, HEVCSPS *sps)
 
     vui->vui_timing_info_present_flag = get_bits1(gb);
     if (vui->vui_timing_info_present_flag) {
-        vui->vui_num_units_in_tick               = get_bits(gb, 32);
-        vui->vui_time_scale                      = get_bits(gb, 32);
+        vui->vui_num_units_in_tick               = get_bits_long(gb, 32);
+        vui->vui_time_scale                      = get_bits_long(gb, 32);
         vui->vui_poc_proportional_to_timing_flag = get_bits1(gb);
         if (vui->vui_poc_proportional_to_timing_flag)
             vui->vui_num_ticks_poc_diff_one_minus1 = get_ue_golomb_long(gb);
@@ -609,8 +609,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 {
     const AVPixFmtDescriptor *desc;
     GetBitContext *gb = &s->HEVClc.gb;
-    int ret    = 0;
-    int sps_id = 0;
+    int ret = 0;
+    unsigned int sps_id = 0;
     int log2_diff_max_min_transform_block_size;
     int bit_depth_chroma, start, vui_present, sublayer_ordering_info;
     int i;
@@ -988,8 +988,8 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     int pic_area_in_ctbs, pic_area_in_min_cbs, pic_area_in_min_tbs;
     int log2_diff_ctb_min_tb_size;
     int i, j, x, y, ctb_addr_rs, tile_id;
-    int ret    = 0;
-    int pps_id = 0;
+    int ret = 0;
+    unsigned int pps_id = 0;
 
     AVBufferRef *pps_buf;
     HEVCPPS *pps = av_mallocz(sizeof(*pps));
@@ -1029,7 +1029,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
         goto err;
     }
     if (!s->sps_list[pps->sps_id]) {
-        av_log(s->avctx, AV_LOG_ERROR, "SPS does not exist \n");
+        av_log(s->avctx, AV_LOG_ERROR, "SPS %u does not exist.\n", pps->sps_id);
         ret = AVERROR_INVALIDDATA;
         goto err;
     }

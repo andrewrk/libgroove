@@ -212,7 +212,10 @@ External library support:
   --enable-x11grab         enable X11 grabbing [no]
   --enable-zlib            enable zlib [autodetect]
 
-Advanced options (experts only):
+Toolchain options:
+  --arch=ARCH              select architecture [$arch]
+  --cpu=CPU                select the minimum required CPU (affects
+                           instruction selection, may crash on older CPUs)
   --cross-prefix=PREFIX    use PREFIX for compilation tools [$cross_prefix]
   --enable-cross-compile   assume a cross-compiler is used
   --sysroot=PATH           root of cross-build tree
@@ -222,12 +225,15 @@ Advanced options (experts only):
   --target-path=DIR        path to view of build directory on target
   --target-samples=DIR     path to samples directory on target
   --toolchain=NAME         set tool defaults according to NAME
+  --pkg-config=PKGCONFIG   use pkg-config tool PKGCONFIG [$pkg_config_default]
   --nm=NM                  use nm tool
   --ar=AR                  use archive tool AR [$ar_default]
   --as=AS                  use assembler AS [$as_default]
   --cc=CC                  use C compiler CC [$cc_default]
   --dep-cc=DEPCC           use dependency generator DEPCC [$cc_default]
   --ld=LD                  use linker LD
+  --pkg-config=PKGCONF     use pkg-config PKGCONF [$pkg_config_default]
+  --pkg-config-flags=FLAGS pass additional flags to pkgconf []
   --host-cc=HOSTCC         use host C compiler HOSTCC
   --host-cflags=HCFLAGS    use HCFLAGS when compiling for host
   --host-cppflags=HCPPFLAGS use HCPPFLAGS when compiling for host
@@ -241,20 +247,19 @@ Advanced options (experts only):
   --extra-version=STRING   version string suffix []
   --optflags=OPTFLAGS      override optimization-related compiler flags
   --build-suffix=SUFFIX    library name suffix []
-  --malloc-prefix=PREFIX   prefix malloc and related names with PREFIX
-  --arch=ARCH              select architecture [$arch]
-  --cpu=CPU                select the minimum required CPU (affects
-                           instruction selection, may crash on older CPUs)
   --enable-pic             build position-independent code
-  --enable-sram            allow use of on-chip SRAM
   --enable-thumb           compile for Thumb instruction set
+  --enable-lto             use link-time optimization
+
+Advanced options (experts only):
+  --malloc-prefix=PREFIX   prefix malloc and related names with PREFIX
   --disable-symver         disable symbol versioning
   --enable-hardcoded-tables use hardcoded tables instead of runtime generation
   --disable-safe-bitstream-reader
                            disable buffer boundary checking in bitreaders
                            (faster, but may crash)
   --enable-memalign-hack   emulate memalign, interferes with memory debuggers
-  --enable-lto             use link-time optimization
+  --enable-sram            allow use of on-chip SRAM
 
 Optimization options (experts only):
   --disable-asm            disable all assembler optimizations
@@ -270,6 +275,8 @@ Optimization options (experts only):
   --disable-sse4           disable SSE4 optimizations
   --disable-sse42          disable SSE4.2 optimizations
   --disable-avx            disable AVX optimizations
+  --disable-xop            disable XOP optimizations
+  --disable-fma3           disable FMA3 optimizations
   --disable-fma4           disable FMA4 optimizations
   --disable-avx2           disable AVX2 optimizations
   --disable-armv5te        disable armv5te optimizations
@@ -277,7 +284,6 @@ Optimization options (experts only):
   --disable-armv6t2        disable armv6t2 optimizations
   --disable-vfp            disable VFP optimizations
   --disable-neon           disable NEON optimizations
-  --disable-vis            disable VIS optimizations
   --disable-inline-asm     disable use of inline assembler
   --disable-yasm           disable use of yasm assembler
 
@@ -921,8 +927,8 @@ check_pkg_config(){
     funcs="$3"
     shift 3
     check_cmd $pkg_config --exists --print-errors $pkg || return
-    pkg_cflags=$($pkg_config --cflags $pkg)
-    pkg_libs=$($pkg_config --libs $pkg)
+    pkg_cflags=$($pkg_config --cflags $pkg_config_flags $pkg)
+    pkg_libs=$($pkg_config --libs $pkg_config_flags $pkg)
     check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" &&
         set_safe ${pkg}_cflags $pkg_cflags   &&
         set_safe ${pkg}_libs   $pkg_libs
@@ -990,6 +996,16 @@ check_builtin(){
     shift 3
     disable "$name"
     check_code ld "$headers" "$builtin" "$@" && enable "$name"
+}
+
+check_compile_assert(){
+    log check_compile_assert "$@"
+    name=$1
+    headers=$2
+    condition=$3
+    shift 3
+    disable "$name"
+    check_code cc "$headers" "char c[2 * !!($condition) - 1]" "$@" && enable "$name"
 }
 
 require(){
@@ -1095,6 +1111,9 @@ COMPONENT_LIST="
 "
 
 EXAMPLE_LIST="
+    avcodec_example
+    filter_audio_example
+    metadata_example
     output_example
     transcode_aac_example
 "
@@ -1143,6 +1162,7 @@ HWACCEL_LIST="
     vda
     vdpau
 "
+
 LIBRARY_LIST="
     avcodec
     avdevice
@@ -1181,8 +1201,8 @@ CONFIG_LIST="
     neon_clobber_test
     network
     nonfree
-    pod2man
     pic
+    pod2man
     rdft
     runtime_cpudetect
     safe_bitstream_reader
@@ -1197,18 +1217,18 @@ CONFIG_LIST="
     xmm_clobber_test
 "
 
-THREADS_LIST='
+THREADS_LIST="
     pthreads
     w32threads
-'
+"
 
-ATOMICS_LIST='
+ATOMICS_LIST="
     atomics_gcc
     atomics_suncc
     atomics_win32
-'
+"
 
-ARCH_LIST='
+ARCH_LIST="
     aarch64
     alpha
     arm
@@ -1233,24 +1253,24 @@ ARCH_LIST='
     x86
     x86_32
     x86_64
-'
+"
 
-ARCH_EXT_LIST_ARM='
+ARCH_EXT_LIST_ARM="
     armv5te
     armv6
     armv6t2
     neon
     vfp
     vfpv3
-'
+"
 
-ARCH_EXT_LIST_X86='
+ARCH_EXT_LIST_X86_SIMD="
     amd3dnow
     amd3dnowext
     avx
     avx2
+    fma3
     fma4
-    i686
     mmx
     mmxext
     sse
@@ -1259,26 +1279,32 @@ ARCH_EXT_LIST_X86='
     sse4
     sse42
     ssse3
-'
+    xop
+"
+
+ARCH_EXT_LIST_X86="
+    $ARCH_EXT_LIST_X86_SIMD
+    cpunop
+    i686
+"
 
 ARCH_EXT_LIST="
     $ARCH_EXT_LIST_ARM
     $ARCH_EXT_LIST_X86
     altivec
     ppc4xx
-    vis
 "
 
-HAVE_LIST_CMDLINE='
+HAVE_LIST_CMDLINE="
     inline_asm
     symver
     yasm
-'
+"
 
-HAVE_LIST_PUB='
+HAVE_LIST_PUB="
     bigendian
     fast_unaligned
-'
+"
 
 MATH_FUNCS="
     atanf
@@ -1311,18 +1337,17 @@ HAVE_LIST="
     $ARCH_EXT_LIST
     $(add_suffix _external $ARCH_EXT_LIST)
     $(add_suffix _inline   $ARCH_EXT_LIST)
+    $ATOMICS_LIST
     $HAVE_LIST_CMDLINE
     $HAVE_LIST_PUB
-    $THREADS_LIST
-    $ATOMICS_LIST
     $MATH_FUNCS
+    $THREADS_LIST
     aligned_malloc
     aligned_stack
     alsa_asoundlib_h
     altivec_h
     arpa_inet_h
     asm_mod_q
-    asm_mod_y
     atomic_cas_ptr
     atomics_native
     attribute_may_alias
@@ -1331,7 +1356,6 @@ HAVE_LIST="
     cdio_paranoia_paranoia_h
     closesocket
     CommandLineToArgvW
-    cpunop
     CryptGenRandom
     dcbzl
     dev_bktr_ioctl_bt848_h
@@ -1350,6 +1374,7 @@ HAVE_LIST="
     fast_clz
     fast_cmov
     fcntl
+    flt_lim
     fork
     getaddrinfo
     gethrtime
@@ -1357,16 +1382,16 @@ HAVE_LIST="
     GetProcessAffinityMask
     GetProcessMemoryInfo
     GetProcessTimes
-    GetSystemTimeAsFileTime
     getrusage
     getservbyport
+    GetSystemTimeAsFileTime
     gettimeofday
     gnu_as
     gsm_h
     ibm_asm
     inet_aton
-    io_h
     inline_asm_labels
+    io_h
     isatty
     jack_port_get_latency_range
     ldbrx
@@ -1377,6 +1402,8 @@ HAVE_LIST="
     local_aligned_8
     localtime_r
     loongson
+    mach_absolute_time
+    mach_mach_time_h
     machine_ioctl_bt848_h
     machine_ioctl_meteor_h
     machine_rw_barrier
@@ -1404,7 +1431,6 @@ HAVE_LIST="
     soundcard_h
     strerror_r
     strptime
-    strtok_r
     struct_addrinfo
     struct_group_source_req
     struct_ip_mreq_source
@@ -1418,8 +1444,6 @@ HAVE_LIST="
     symver_asm_label
     symver_gnu_asm
     sync_val_compare_and_swap
-    sysconf
-    sysctl
     sys_mman_h
     sys_param_h
     sys_resource_h
@@ -1428,6 +1452,8 @@ HAVE_LIST="
     sys_time_h
     sys_un_h
     sys_videoio_h
+    sysconf
+    sysctl
     threads
     unistd_h
     usleep
@@ -1489,7 +1515,7 @@ CMDLINE_SELECT="
     optimizations
 "
 
-PATHS_LIST='
+PATHS_LIST="
     bindir
     datadir
     docdir
@@ -1498,7 +1524,7 @@ PATHS_LIST='
     mandir
     prefix
     shlibdir
-'
+"
 
 CMDLINE_SET="
     $PATHS_LIST
@@ -1523,6 +1549,7 @@ CMDLINE_SET="
     nm
     optflags
     pkg_config
+    pkg_config_flags
     random_seed
     samples
     sysinclude
@@ -1555,8 +1582,6 @@ map 'eval ${v}_inline_deps=inline_asm' $ARCH_EXT_LIST_ARM
 altivec_deps="ppc"
 ppc4xx_deps="ppc"
 
-vis_deps="sparc"
-
 cpunop_deps="i686"
 x86_64_select="i686"
 x86_64_suggest="fast_cmov"
@@ -1573,6 +1598,8 @@ ssse3_deps="sse3"
 sse4_deps="ssse3"
 sse42_deps="sse4"
 avx_deps="sse42"
+xop_deps="avx"
+fma3_deps="avx"
 fma4_deps="avx"
 avx2_deps="avx"
 
@@ -1580,7 +1607,7 @@ mmx_external_deps="yasm"
 mmx_inline_deps="inline_asm"
 mmx_suggest="mmx_external mmx_inline"
 
-for ext in $(filter_out mmx $ARCH_EXT_LIST_X86); do
+for ext in $(filter_out mmx $ARCH_EXT_LIST_X86_SIMD); do
     eval dep=\$${ext}_deps
     eval ${ext}_external_deps='"${dep}_external"'
     eval ${ext}_inline_deps='"${dep}_inline"'
@@ -1604,18 +1631,18 @@ atomics_gcc_if="sync_val_compare_and_swap"
 atomics_suncc_if="atomic_cas_ptr machine_rw_barrier"
 atomics_win32_if="MemoryBarrier"
 atomics_native_if_any="$ATOMICS_LIST"
+w32threads_deps="atomics_native"
 threads_if_any="$THREADS_LIST"
 
 # subsystems
 dct_select="rdft"
 error_resilience_select="dsputil"
-lpc_select="dsputil"
 mdct_select="fft"
 rdft_select="fft"
 mpegaudio_select="mpegaudiodsp"
 mpegaudiodsp_select="dct"
 mpegvideo_select="dsputil hpeldsp videodsp"
-mpegvideoenc_select="mpegvideo"
+mpegvideoenc_select="dsputil mpegvideo"
 
 # decoders / encoders
 aac_decoder_select="mdct sinewin"
@@ -1629,7 +1656,7 @@ alac_encoder_select="lpc"
 als_decoder_select="dsputil"
 amrnb_decoder_select="lsp"
 amrwb_decoder_select="lsp"
-amv_decoder_select="dsputil hpeldsp"
+amv_decoder_select="sp5x_decoder"
 ape_decoder_select="dsputil"
 asv1_decoder_select="dsputil"
 asv1_encoder_select="dsputil"
@@ -1657,11 +1684,11 @@ eac3_decoder_select="ac3_decoder"
 eac3_encoder_select="ac3_encoder"
 eamad_decoder_select="aandcttables dsputil mpegvideo"
 eatgq_decoder_select="aandcttables dsputil"
-eatqi_decoder_select="aandcttables error_resilience mpegvideo"
-ffv1_decoder_select="dsputil golomb rangecoder"
-ffv1_encoder_select="dsputil rangecoder"
-ffvhuff_decoder_select="dsputil"
-ffvhuff_encoder_select="dsputil huffman"
+eatqi_decoder_select="aandcttables dsputil error_resilience mpegvideo"
+ffv1_decoder_select="golomb rangecoder"
+ffv1_encoder_select="rangecoder"
+ffvhuff_decoder_select="huffyuv_decoder"
+ffvhuff_encoder_select="huffyuv_encoder"
 fic_decoder_select="dsputil golomb"
 flac_decoder_select="golomb"
 flac_encoder_select="dsputil golomb lpc"
@@ -1685,11 +1712,11 @@ h264_decoder_suggest="error_resilience"
 hevc_decoder_select="dsputil golomb videodsp"
 huffyuv_decoder_select="dsputil"
 huffyuv_encoder_select="dsputil huffman"
-iac_decoder_select="dsputil fft mdct sinewin"
+iac_decoder_select="imc_decoder"
 imc_decoder_select="dsputil fft mdct sinewin"
 indeo3_decoder_select="hpeldsp"
 interplay_video_decoder_select="hpeldsp"
-jpegls_decoder_select="dsputil golomb hpeldsp"
+jpegls_decoder_select="golomb mjpeg_decoder"
 jpegls_encoder_select="golomb"
 jv_decoder_select="dsputil"
 lagarith_decoder_select="dsputil"
@@ -1699,9 +1726,9 @@ mdec_decoder_select="dsputil error_resilience mpegvideo"
 metasound_decoder_select="lsp mdct sinewin"
 mimic_decoder_select="dsputil hpeldsp"
 mjpeg_decoder_select="dsputil hpeldsp"
-mjpegb_decoder_select="dsputil hpeldsp"
-mjpeg_encoder_select="aandcttables dsputil mpegvideoenc"
-mlp_decoder_select="dsputil mlp_parser"
+mjpeg_encoder_select="aandcttables mpegvideoenc"
+mjpegb_decoder_select="mjpeg_decoder"
+mlp_decoder_select="mlp_parser"
 motionpixels_decoder_select="dsputil"
 mp1_decoder_select="mpegaudio"
 mp1float_decoder_select="mpegaudio"
@@ -1714,7 +1741,7 @@ mp3float_decoder_select="mpegaudio"
 mp3on4_decoder_select="mpegaudio"
 mp3on4float_decoder_select="mpegaudio"
 mpc7_decoder_select="dsputil mpegaudiodsp"
-mpc8_decoder_select="dsputil mpegaudiodsp"
+mpc8_decoder_select="mpegaudiodsp"
 mpeg_xvmc_decoder_deps="X11_extensions_XvMClib_h"
 mpeg_xvmc_decoder_select="mpeg2video_decoder"
 mpeg1video_decoder_select="error_resilience mpegvideo"
@@ -1729,12 +1756,11 @@ msmpeg4v2_encoder_select="h263_encoder"
 msmpeg4v3_decoder_select="h263_decoder"
 msmpeg4v3_encoder_select="h263_encoder"
 mss2_decoder_select="error_resilience vc1_decoder"
-mxpeg_decoder_select="dsputil hpeldsp"
+mxpeg_decoder_select="mjpeg_decoder"
 nellymoser_decoder_select="mdct sinewin"
 nellymoser_encoder_select="audio_frame_queue mdct sinewin"
 nuv_decoder_select="dsputil lzo"
 png_decoder_deps="zlib"
-png_decoder_select="dsputil"
 png_encoder_deps="zlib"
 png_encoder_select="dsputil"
 prores_decoder_select="dsputil"
@@ -1751,16 +1777,16 @@ rv30_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvi
 rv40_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo videodsp"
 shorten_decoder_select="golomb"
 sipr_decoder_select="lsp"
-sp5x_decoder_select="dsputil hpeldsp"
+sp5x_decoder_select="mjpeg_decoder"
 svq1_decoder_select="hpeldsp"
 svq1_encoder_select="aandcttables dsputil hpeldsp mpegvideoenc"
-svq3_decoder_select="golomb h264chroma h264dsp h264pred h264qpel hpeldsp mpegvideo videodsp"
-svq3_decoder_suggest="error_resilience zlib"
+svq3_decoder_select="h264_decoder hpeldsp mpegvideo"
+svq3_decoder_suggest="zlib"
 tak_decoder_select="dsputil"
 theora_decoder_select="vp3_decoder"
+thp_decoder_select="mjpeg_decoder"
 tiff_decoder_suggest="zlib"
 tiff_encoder_suggest="zlib"
-thp_decoder_select="dsputil hpeldsp"
 truehd_decoder_select="mlp_decoder"
 truemotion2_decoder_select="dsputil"
 truespeech_decoder_select="dsputil"
@@ -1842,7 +1868,7 @@ wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
 
 # parsers
 h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
-mpeg4video_parser_select="error_resilience mpegvideo"
+mpeg4video_parser_select="error_resilience h263dsp mpegvideo"
 mpegvideo_parser_select="error_resilience mpegvideo"
 vc1_parser_select="mpegvideo"
 
@@ -1974,8 +2000,8 @@ ffrtmpcrypt_protocol_select="tcp_protocol"
 ffrtmphttp_protocol_deps="!librtmp_protocol"
 ffrtmphttp_protocol_select="http_protocol"
 gopher_protocol_select="network"
-httpproxy_protocol_select="tcp_protocol"
 http_protocol_select="tcp_protocol"
+httpproxy_protocol_select="tcp_protocol"
 https_protocol_select="tls_protocol"
 librtmp_protocol_deps="librtmp"
 librtmpe_protocol_deps="librtmp"
@@ -2009,17 +2035,20 @@ boxblur_filter_deps="gpl"
 cropdetect_filter_deps="gpl"
 delogo_filter_deps="gpl"
 drawtext_filter_deps="libfreetype"
-frei0r_filter_deps="frei0r dlopen strtok_r"
+frei0r_filter_deps="frei0r dlopen"
 frei0r_filter_extralibs='$ldl'
-frei0r_src_filter_deps="frei0r dlopen strtok_r"
+frei0r_src_filter_deps="frei0r dlopen"
 frei0r_src_filter_extralibs='$ldl'
 hqdn3d_filter_deps="gpl"
 interlace_filter_deps="gpl"
-resample_filter_deps="avresample"
 ocv_filter_deps="libopencv"
+resample_filter_deps="avresample"
 scale_filter_deps="swscale"
 
 # examples
+avcodec_example_deps="avcodec avutil"
+filter_audio_example_deps="avfilter avutil"
+metadata_example_deps="avformat avutil"
 output_example_deps="avcodec avformat avutil swscale"
 transcode_aac_example_deps="avcodec avformat avresample"
 
@@ -2037,11 +2066,11 @@ avconv_select="aformat_filter anull_filter asyncts_filter atrim_filter format_fi
                fps_filter null_filter resample_filter scale_filter
                setpts_filter trim_filter"
 avplay_deps="avcodec avformat avresample swscale sdl"
+avplay_libs='$sdl_libs'
 avplay_select="rdft"
 avprobe_deps="avcodec avformat"
 avserver_deps="avformat fork !shared"
 avserver_select="ffm_muxer rtp_protocol rtsp_demuxer"
-avserver_extralibs='$ldl'
 
 # documentation
 pod2man_deps="doc"
@@ -2344,6 +2373,11 @@ case "$toolchain" in
         add_cflags  -fsanitize=thread -pie
         add_ldflags -fsanitize=thread -pie
     ;;
+    clang-usan)
+        cc_default="clang"
+        add_cflags  -fsanitize=undefined
+        add_ldflags -fsanitize=undefined
+    ;;
     gcc-asan)
         cc_default="gcc"
         add_cflags  -fsanitize=address
@@ -2353,6 +2387,11 @@ case "$toolchain" in
         cc_default="gcc"
         add_cflags  -fsanitize=thread -pie -fPIC
         add_ldflags -fsanitize=thread -pie -fPIC
+    ;;
+    gcc-usan)
+        cc_default="gcc"
+        add_cflags  -fsanitize=undefined
+        add_ldflags -fsanitize=undefined
     ;;
     valgrind-massif)
         target_exec_default="valgrind"
@@ -2398,7 +2437,7 @@ case "$toolchain" in
         add_ldflags -fprofile-arcs -ftest-coverage
     ;;
     hardened)
-        add_cflags -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -fstack-protector-all
+        add_cflags  -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -fstack-protector-all
         add_ldflags -Wl,-z,relro -Wl,-z,now
     ;;
     ?*)
@@ -3108,7 +3147,6 @@ elif enabled sparc; then
     case $cpu in
         cypress|f93[04]|tsc701|sparcl*|supersparc|hypersparc|niagara|v[789])
             cpuflags="-mcpu=$cpu"
-            disable vis
         ;;
         ultrasparc*|niagara[234])
             cpuflags="-mcpu=$cpu"
@@ -3197,6 +3235,10 @@ case "$arch" in
     ;;
     ppc)
         check_64bit ppc ppc64 'sizeof(void *) > 4'
+        spic=$shared
+    ;;
+    s390)
+        check_64bit s390 s390x 'sizeof(void *) > 4'
         spic=$shared
     ;;
     sparc)
@@ -3505,6 +3547,9 @@ if enabled_all ccc libc_glibc; then
     add_ldflags -Wl,-z,now  # calls to libots crash without this
 fi
 
+check_compile_assert flt_lim "float.h limits.h" "DBL_MAX == (double)DBL_MAX" ||
+    add_cppflags '-I\$(SRC_PATH)/compat/float'
+
 esc(){
     echo "$*" | sed 's/%/%25/g;s/:/%3a/g'
 }
@@ -3645,7 +3690,6 @@ EOF
             $ARCH_EXT_LIST_ARM
 
     check_inline_asm asm_mod_q '"add r0, %Q0, %R0" :: "r"((long long)0)'
-    check_inline_asm asm_mod_y '"vmul.i32 d0, d0, %y0" :: "x"(0)'
 
     [ $target_os != win32 ] && enabled_all armv6t2 shared !pic && enable_weak_pic
 
@@ -3690,10 +3734,6 @@ EOF
 
         enabled altivec || warn "Altivec disabled, possibly missing --cpu flag"
     fi
-
-elif enabled sparc; then
-
-    enabled vis && check_inline_asm vis '"pdist %f0, %f0, %f0"'
 
 elif enabled x86; then
 
@@ -3742,8 +3782,10 @@ EOF
 
         check_yasm "movbe ecx, [5]" && enable yasm ||
             die "yasm/nasm not found or too old. Use --disable-yasm for a crippled build."
+        check_yasm "vpmacsdd xmm0, xmm1, xmm2, xmm3" || disable xop_external
+        check_yasm "vfmadd132ps ymm0, ymm1, ymm2"    || disable fma3_external
         check_yasm "vfmaddps ymm0, ymm1, ymm2, ymm3" || disable fma4_external
-        check_yasm "CPU amdnop" && enable cpunop
+        check_yasm "CPU amdnop" || disable cpunop
     fi
 
     case "$cpu" in
@@ -3786,6 +3828,7 @@ if ! disabled network; then
     check_type netinet/sctp.h "struct sctp_event_subscribe"
     check_func getaddrinfo $network_extralibs
     check_func getservbyport $network_extralibs
+    check_func inet_aton $network_extralibs
     # Prefer arpa/inet.h over winsock2
     if check_header arpa/inet.h ; then
         check_func closesocket
@@ -3820,9 +3863,9 @@ check_func  getopt
 check_func  getrusage
 check_struct "sys/time.h sys/resource.h" "struct rusage" ru_maxrss
 check_func  gettimeofday
-check_func  inet_aton $network_extralibs
 check_func  isatty
 check_func  localtime_r
+check_func  mach_absolute_time
 check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  mkstemp
 check_func  mmap
@@ -3832,7 +3875,6 @@ check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  setrlimit
 check_func  strerror_r
 check_func  strptime
-check_func  strtok_r
 check_func  sched_getaffinity
 check_builtin sync_val_compare_and_swap "" "int *ptr; int oldval, newval; __sync_val_compare_and_swap(ptr, oldval, newval)"
 check_builtin machine_rw_barrier mbarrier.h "__machine_rw_barrier()"
@@ -3858,6 +3900,7 @@ check_header dlfcn.h
 check_header dxva.h
 check_header dxva2api.h
 check_header io.h
+check_header mach/mach_time.h
 check_header malloc.h
 check_header poll.h
 check_header sys/mman.h
@@ -3897,14 +3940,6 @@ if ! disabled pthreads && ! enabled w32threads; then
     fi
 fi
 
-for thread in $THREADS_LIST; do
-    if enabled $thread; then
-        test -n "$thread_type" &&
-            die "ERROR: Only one thread type must be selected." ||
-            thread_type="$thread"
-    fi
-done
-
 disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
 disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
 
@@ -3936,7 +3971,8 @@ enabled libmp3lame        && require "libmp3lame >= 3.98.3" lame/lame.h lame_set
 enabled libopencore_amrnb && require libopencore_amrnb opencore-amrnb/interf_dec.h Decoder_Interface_init -lopencore-amrnb
 enabled libopencore_amrwb && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb
 enabled libopencv         && require_pkg_config opencv opencv/cv.h cvCreateImageHeader
-enabled libopenjpeg       && require libopenjpeg openjpeg.h opj_version -lopenjpeg
+enabled libopenjpeg       && { { check_header openjpeg.h && check_lib2 openjpeg.h opj_version -lopenjpeg; } ||
+                               { require_pkg_config libopenjpeg1 openjpeg.h opj_version; } }
 enabled libopus           && require_pkg_config opus opus_multistream.h opus_multistream_decoder_create
 enabled libpulse          && require_pkg_config libpulse-simple pulse/simple.h pa_simple_new
 enabled librtmp           && require_pkg_config librtmp librtmp/rtmp.h RTMP_Socket
@@ -3959,8 +3995,8 @@ enabled libx264           && require libx264 x264.h x264_encoder_encode -lx264 &
                              { check_cpp_condition x264.h "X264_BUILD >= 118" ||
                                die "ERROR: libx264 version must be >= 0.118."; }
 enabled libx265           && require_pkg_config x265 x265.h x265_encoder_encode &&
-                             { check_cpp_condition x265.h "X265_BUILD >= 5" ||
-                               die "ERROR: libx265 version must be >= 5."; }
+                             { check_cpp_condition x265.h "X265_BUILD >= 9" ||
+                               die "ERROR: libx265 version must be >= 9."; }
 enabled libxavs           && require libxavs xavs.h xavs_encoder_encode -lxavs
 enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
 enabled openssl           && { check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto ||
@@ -4040,7 +4076,8 @@ enabled vdpau &&
     disable vdpau
 
 enabled vdpau && enabled xlib &&
-    check_lib2 "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau &&
+    check_func_headers "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau &&
+    prepend avconv_libs $($ldflags_filter "-lvdpau") &&
     enable vdpau_x11
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
@@ -4247,6 +4284,14 @@ check_deps $CONFIG_LIST       \
 ! enabled_any memalign posix_memalign aligned_malloc &&
     enabled_any $need_memalign && enable memalign_hack
 
+for thread in $THREADS_LIST; do
+    if enabled $thread; then
+        test -n "$thread_type" &&
+            die "ERROR: Only one thread type must be selected." ||
+            thread_type="$thread"
+    fi
+done
+
 echo "install prefix            $prefix"
 echo "source path               $source_path"
 echo "C compiler                $cc"
@@ -4273,6 +4318,8 @@ if enabled x86; then
     echo "SSE enabled               ${sse-no}"
     echo "SSSE3 enabled             ${ssse3-no}"
     echo "AVX enabled               ${avx-no}"
+    echo "XOP enabled               ${xop-no}"
+    echo "FMA3 enabled              ${fma3-no}"
     echo "FMA4 enabled              ${fma4-no}"
     echo "i686 features enabled     ${i686-no}"
     echo "CMOV is fast              ${fast_cmov-no}"
@@ -4294,9 +4341,6 @@ if enabled ppc; then
     echo "AltiVec enabled           ${altivec-no}"
     echo "PPC 4xx optimizations     ${ppc4xx-no}"
     echo "dcbzl available           ${dcbzl-no}"
-fi
-if enabled sparc; then
-    echo "VIS enabled               ${vis-no}"
 fi
 echo "debug symbols             ${debug-no}"
 echo "optimize for size         ${small-no}"
@@ -4420,7 +4464,6 @@ HOSTLD_O=$HOSTLD_O
 TARGET_EXEC=$target_exec $target_exec_args
 TARGET_PATH=$target_path
 TARGET_SAMPLES=${target_samples:-\$(SAMPLES)}
-LIBS-avplay=$sdl_libs
 CFLAGS-avplay=$sdl_cflags
 ZLIB=$($ldflags_filter -lz)
 LIB_INSTALL_EXTRA_CMD=$LIB_INSTALL_EXTRA_CMD
@@ -4453,6 +4496,13 @@ get_version(){
 }
 
 map 'get_version $v' $LIBRARY_LIST
+
+print_program_libs(){
+    eval "program_libs=\$${1}_libs"
+    eval echo "LIBS-${1}=${program_libs}" >> config.mak
+}
+
+map 'print_program_libs $v' $PROGRAM_LIST
 
 cat > $TMPH <<EOF
 /* Automatically generated by configure - do not modify! */

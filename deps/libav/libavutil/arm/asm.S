@@ -53,6 +53,7 @@
         .syntax unified
 T       .thumb
 ELF     .eabi_attribute 25, 1           @ Tag_ABI_align_preserved
+ELF     .section .note.GNU-stack,"",%progbits @ Mark stack as non-executable
 
 .macro  function name, export=0, align=2
         .set            .Lpic_idx, 0
@@ -213,6 +214,13 @@ T       ldr             \rt, [\rt]
 A       ldr             \rt, [\rn], \rm
 T       ldr             \rt, [\rn]
 T       add             \rn, \rn, \rm
+.endm
+
+.macro  ldrc_pre        cc,  rt,  rn,  rm:vararg
+A       ldr\cc          \rt, [\rn, \rm]!
+T       itt             \cc
+T       add\cc          \rn, \rn, \rm
+T       ldr\cc          \rt, [\rn]
 .endm
 
 .macro  ldrd_reg        rt,  rt2, rn,  rm

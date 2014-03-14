@@ -1,5 +1,5 @@
 ;******************************************************************************
-;* MMX optimized DSP utils
+;* SIMD-optimized fullpel functions
 ;* Copyright (c) 2008 Loren Merritt
 ;* Copyright (c) 2003-2013 Michael Niedermayer
 ;* Copyright (c) 2013 Daniel Kang
@@ -26,7 +26,8 @@
 SECTION .text
 
 INIT_MMX mmxext
-; void pixels(uint8_t *block, const uint8_t *pixels, ptrdiff_t line_size, int h)
+; void ff_put/avg_pixels(uint8_t *block, const uint8_t *pixels,
+;                        ptrdiff_t line_size, int h)
 %macro PIXELS48 2
 %if %2 == 4
 %define OP movh
@@ -65,7 +66,8 @@ PIXELS48 avg, 8
 
 
 INIT_XMM sse2
-; void put_pixels16_sse2(uint8_t *block, const uint8_t *pixels, ptrdiff_t line_size, int h)
+; void ff_put_pixels16_sse2(uint8_t *block, const uint8_t *pixels,
+;                           ptrdiff_t line_size, int h)
 cglobal put_pixels16, 4,5,4
     lea          r4, [r2*3]
 .loop:
@@ -83,7 +85,8 @@ cglobal put_pixels16, 4,5,4
     jnz       .loop
     REP_RET
 
-; void avg_pixels16_sse2(uint8_t *block, const uint8_t *pixels, ptrdiff_t line_size, int h)
+; void ff_avg_pixels16_sse2(uint8_t *block, const uint8_t *pixels,
+;                           ptrdiff_t line_size, int h)
 cglobal avg_pixels16, 4,5,4
     lea          r4, [r2*3]
 .loop:

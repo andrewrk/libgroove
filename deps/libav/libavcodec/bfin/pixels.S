@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "config_bfin.h"
+#include "libavutil/bfin/asm.h"
 
 /*
   motion compensation
@@ -97,70 +97,6 @@ pp16$1:  DISALGNEXCPT                || R2 = [I1++]   || [I3++M3] = R7;
         RTS;
 DEFUN_END(put_pixels16uc)
 
-
-
-
-
-
-DEFUN(put_pixels8uc_nornd,mL1,
-        (uint8_t *block, const uint8_t *s0, const uint8_t *s1,
-                 int line_size, int h)):
-        i3=r0;        // dest
-        i0=r1;        // src0
-        i1=r2;        // src1
-        r2=[sp+12];   // line_size
-        p0=[sp+16];   // h
-        [--sp] = (r7:6);
-        r2+=-4;
-        m3=r2;
-        r2+=-4;
-        m0=r2;
-        LSETUP(pp8$2,pp8$3) LC0=P0;
-        DISALGNEXCPT                || R0 = [I0++]  || R2  =[I1++];
-
-pp8$2:  DISALGNEXCPT                || R1 = [I0++]  || R3  =[I1++];
-        R6 = BYTEOP1P(R1:0,R3:2)(T)  || R0 = [I0++M0]|| R2  =[I1++M0];
-        R7 = BYTEOP1P(R1:0,R3:2)(T,R) || R0 = [I0++]  || [I3++] = R6 ;
-pp8$3:  DISALGNEXCPT                || R2 = [I1++]  || [I3++M3] = R7;
-
-        (r7:6) = [sp++];
-        RTS;
-DEFUN_END(put_pixels8uc_nornd)
-
-DEFUN(put_pixels16uc_nornd,mL1,
-        (uint8_t *block, const uint8_t *s0, const uint8_t *s1,
-                 int line_size, int h)):
-        i3=r0;        // dest
-        i0=r1;        // src0
-        i1=r2;        // src1
-        r2=[sp+12];   // line_size
-        p0=[sp+16];   // h
-
-        [--sp] = (r7:6);
-        r2+=-12;
-        m3=r2;        // line_size
-        r2+=-4;
-        m0=r2;
-
-        LSETUP(pp16$2,pp16$3) LC0=P0;
-        DISALGNEXCPT                || R0 = [I0++]   || R2  =[I1++];
-
-pp16$2:
-        DISALGNEXCPT                || R1 = [I0++]   || R3  =[I1++];
-        R6 = BYTEOP1P(R1:0,R3:2)(T)    || R0 = [I0++]   || R2  =[I1++];
-        R7 = BYTEOP1P(R1:0,R3:2)(T,R) || R1 = [I0++]   || R3  =[I1++];
-        [I3++] = R6;
-
-        R6 = BYTEOP1P(R1:0,R3:2)(T)    || R0 = [I0++M0] || R2  =[I1++M0];
-        R7 = BYTEOP1P(R1:0,R3:2)(T,R) || R0 = [I0++]   || [I3++] = R7 ;
-        [I3++] = R6;
-pp16$3: DISALGNEXCPT                || R2 = [I1++]   || [I3++M3] = R7;
-
-        (r7:6) = [sp++];
-
-        RTS;
-DEFUN_END(put_pixels16uc_nornd)
-
 DEFUN(z_put_pixels16_xy2,mL1,
         (uint8_t *block, const uint8_t *s0,
                  int dest_size, int line_size, int h)):
@@ -220,64 +156,6 @@ LE$16O: DISALGNEXCPT                       || R2 = [I1++] || [I3++M2] = R5;
         rts;
 DEFUN_END(z_put_pixels16_xy2)
 
-DEFUN(put_pixels16_xy2_nornd,mL1,
-        (uint8_t *block, const uint8_t *s0,
-                 int line_size, int h)):
-        link 0;
-        [--sp] = (r7:4);
-        i3=r0;        // dest
-        i0=r1;        // src0--> pixels
-        i1=r1;        // src1--> pixels + line_size
-        m3=r2;
-        r2+=-12;
-        m2=r2;
-        r2+=-4;
-        i1+=m3;       /* src1 + line_size */
-        m0=r2;        /* line-size - 20 */
-        p0=[fp+20];   // h
-
-        B0=I0;
-        B1=I1;
-        B3=I3;
-
-        DISALGNEXCPT                       || R0 = [I0++] || R2  =[I1++];
-
-        LSETUP(LS$16ET,LE$16ET) LC0=P0;
-LS$16ET:DISALGNEXCPT                       || R1 = [I0++] || R3  =[I1++];
-        R4 = BYTEOP2P (R3:2,R1:0) (TL)     || R0 = [I0++] || R2  =[I1++];
-        R5 = BYTEOP2P (R3:2,R1:0) (TL,R)   || R1 = [I0++] || [I3++] = R4 ;
-        DISALGNEXCPT                       || R3 = [I1++] || [I3++] = R5;
-        R4 = BYTEOP2P (R3:2,R1:0) (TL)     || R0 = [I0++M0]|| R2  = [I1++M0];
-        R5 = BYTEOP2P (R3:2,R1:0) (TL,R)   || R0 = [I0++] || [I3++] = R4 ;
-LE$16ET:DISALGNEXCPT                       || R2 = [I1++] || [I3++M2] = R5;
-
-        M1 = 1;
-        I3=B3;
-        I1=B1;
-        I0=B0;
-
-        I0 += M1;
-        I1 += M1;
-
-        DISALGNEXCPT                       || R0 = [I0++] || R2  =[I1++];
-        LSETUP(LS$16OT,LE$16OT) LC0=P0;
-LS$16OT:DISALGNEXCPT                       || R1 = [I0++] || R3  =[I1++];
-        R4 = BYTEOP2P (R3:2,R1:0) (TH)     || R0 = [I0++] || R2  =[I1++];
-        R5 = BYTEOP2P (R3:2,R1:0) (TH,R)   || R1 = [I0++] || R6  =[I3++];
-        R4 = R4 +|+ R6                                    || R7 = [I3--];
-        R5 = R5 +|+ R7                                    || [I3++] = R4;
-        DISALGNEXCPT                       || R3  =[I1++] || [I3++] = R5;
-        R4 = BYTEOP2P (R3:2,R1:0) (TH)     || R0 = [I0++M0]|| R2  = [I1++M0];
-        R5 = BYTEOP2P (R3:2,R1:0) (TH,R)   || R0 = [I0++] || R6 = [I3++];
-        R4 = R4 +|+ R6                                    || R7 = [I3--];
-        R5 = R5 +|+ R7                                    || [I3++] = R4;
-LE$16OT:DISALGNEXCPT                       || R2 = [I1++] || [I3++M2] = R5;
-
-        (r7:4) = [sp++];
-        unlink;
-        rts;
-DEFUN_END(put_pixels16_xy2_nornd)
-
 DEFUN(z_put_pixels8_xy2,mL1,
         (uint8_t *block, const uint8_t *s0,
                  int dest_size, int line_size, int h)):
@@ -327,54 +205,3 @@ LE$8O:  DISALGNEXCPT                       || R2  =[I1++]   || [I3++M2] = R5;
         unlink;
         rts;
 DEFUN_END(z_put_pixels8_xy2)
-
-DEFUN(put_pixels8_xy2_nornd,mL1,
-        (uint8_t *block, const uint8_t *s0, int line_size, int h)):
-        link 0;
-        [--sp] = (r7:4);
-        i3=r0;        // dest
-        i0=r1;        // src0--> pixels
-        i1=r1;        // src1--> pixels + line_size
-        m3=r2;
-        r2+=-4;
-        m2=r2;
-        r2+=-4;
-        i1+=m3;       /* src1 + line_size */
-        m0=r2;        /* line-size - 20 */
-        p0=[fp+20];   // h
-
-
-        b0 = I0;
-        b1 = I1;
-        b3 = I3;
-
-        LSETUP(LS$8ET,LE$8ET) LC0=P0;
-        DISALGNEXCPT                       || R0 = [I0++]   || R2  =[I1++];
-
-LS$8ET: DISALGNEXCPT                       || R1 = [I0++]   || R3 = [I1++];
-        R4 = BYTEOP2P (R3:2,R1:0) (TL)     || R0 = [I0++M0] || R2 = [I1++M0];
-        R5 = BYTEOP2P (R3:2,R1:0) (TL,R)   || R0 = [I0++]   || [I3++] = R4 ;
-LE$8ET: DISALGNEXCPT                       || R2 = [I1++]   || [I3++M2] = R5;
-
-        M1 = 1;
-        I3 = b3;
-        I1 = b1;
-        I0 = b0;
-
-        I0 += M1;
-        I1 += M1;
-
-        LSETUP(LS$8OT,LE$8OT) LC0=P0;
-        DISALGNEXCPT                       || R0 = [I0++]   || R2 = [I1++];
-
-LS$8OT: DISALGNEXCPT                       || R1 = [I0++]   || R3 = [I1++];
-        R4 = BYTEOP2P (R3:2,R1:0) (TH)     || R0 = [I0++M0] || R2 = [I1++M0];
-        R5 = BYTEOP2P (R3:2,R1:0) (TH,R)   || R0 = [I0++]   || R6 = [I3++];
-        R4 = R4 +|+ R6                                      || R7 = [I3--];
-        R5 = R5 +|+ R7                                      || [I3++] = R4;
-LE$8OT: DISALGNEXCPT                       || R2  =[I1++]   || [I3++M2] = R5;
-
-        (r7:4) = [sp++];
-        unlink;
-        rts;
-DEFUN_END(put_pixels8_xy2_nornd)

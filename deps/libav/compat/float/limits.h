@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003 David S. Miller <davem@redhat.com>
+ * Work around broken floating point limits on some systems.
  *
  * This file is part of Libav.
  *
@@ -18,23 +18,5 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/attributes.h"
-#include "libavcodec/dsputil.h"
-#include "dsputil_vis.h"
-#include "vis.h"
-
-av_cold void ff_dsputil_init_vis(DSPContext *c, AVCodecContext *avctx)
-{
-  /* VIS-specific optimizations */
-  int accel = vis_level ();
-  const int high_bit_depth = avctx->bits_per_raw_sample > 8;
-
-  if (accel & ACCEL_SPARC_VIS && !high_bit_depth) {
-      if (avctx->idct_algo == FF_IDCT_SIMPLEVIS) {
-          c->idct_put = ff_simple_idct_put_vis;
-          c->idct_add = ff_simple_idct_add_vis;
-          c->idct     = ff_simple_idct_vis;
-          c->idct_permutation_type = FF_TRANSPOSE_IDCT_PERM;
-      }
-  }
-}
+#include_next <limits.h>
+#include <float.h>

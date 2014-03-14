@@ -306,18 +306,21 @@ int ff_h264_decode_seq_parameter_set(H264Context *h)
     constraint_set_flags |= get_bits1(&h->gb) << 1;   // constraint_set1_flag
     constraint_set_flags |= get_bits1(&h->gb) << 2;   // constraint_set2_flag
     constraint_set_flags |= get_bits1(&h->gb) << 3;   // constraint_set3_flag
-    get_bits(&h->gb, 4); // reserved
+    constraint_set_flags |= get_bits1(&h->gb) << 4;   // constraint_set4_flag
+    constraint_set_flags |= get_bits1(&h->gb) << 5;   // constraint_set5_flag
+    skip_bits(&h->gb, 2);                             // reserved_zero_2bits
     level_idc = get_bits(&h->gb, 8);
     sps_id    = get_ue_golomb_31(&h->gb);
 
     if (sps_id >= MAX_SPS_COUNT) {
-        av_log(h->avctx, AV_LOG_ERROR, "sps_id (%d) out of range\n", sps_id);
+        av_log(h->avctx, AV_LOG_ERROR, "sps_id %u out of range\n", sps_id);
         return AVERROR_INVALIDDATA;
     }
     sps = av_mallocz(sizeof(SPS));
     if (!sps)
         return AVERROR(ENOMEM);
 
+    sps->sps_id               = sps_id;
     sps->time_offset_length   = 24;
     sps->profile_idc          = profile_idc;
     sps->constraint_set_flags = constraint_set_flags;
@@ -327,16 +330,21 @@ int ff_h264_decode_seq_parameter_set(H264Context *h)
     memset(sps->scaling_matrix8, 16, sizeof(sps->scaling_matrix8));
     sps->scaling_matrix_present = 0;
 
-    if (sps->profile_idc == 100 || sps->profile_idc == 110 ||
-        sps->profile_idc == 122 || sps->profile_idc == 244 ||
-        sps->profile_idc ==  44 || sps->profile_idc ==  83 ||
-        sps->profile_idc ==  86 || sps->profile_idc == 118 ||
-        sps->profile_idc == 128 || sps->profile_idc == 144) {
+    if (sps->profile_idc == 100 ||  // High profile
+        sps->profile_idc == 110 ||  // High10 profile
+        sps->profile_idc == 122 ||  // High422 profile
+        sps->profile_idc == 244 ||  // High444 Predictive profile
+        sps->profile_idc ==  44 ||  // Cavlc444 profile
+        sps->profile_idc ==  83 ||  // Scalable Constrained High profile (SVC)
+        sps->profile_idc ==  86 ||  // Scalable High Intra profile (SVC)
+        sps->profile_idc == 118 ||  // Stereo High profile (MVC)
+        sps->profile_idc == 128 ||  // Multiview High profile (MVC)
+        sps->profile_idc == 138 ||  // Multiview Depth High profile (MVCD)
+        sps->profile_idc == 144) {  // old High444 profile
         sps->chroma_format_idc = get_ue_golomb_31(&h->gb);
         if (sps->chroma_format_idc > 3) {
-            av_log(h->avctx, AV_LOG_ERROR,
-                   "chroma_format_idc (%u) out of range\n",
-                   sps->chroma_format_idc);
+            avpriv_request_sample(h->avctx, "chroma_format_idc %u",
+                                  sps->chroma_format_idc);
             goto fail;
         } else if (sps->chroma_format_idc == 3) {
             sps->residual_color_transform_flag = get_bits1(&h->gb);
@@ -394,7 +402,8 @@ int ff_h264_decode_seq_parameter_set(H264Context *h)
     sps->ref_frame_count = get_ue_golomb_31(&h->gb);
     if (sps->ref_frame_count > MAX_PICTURE_COUNT - 2 ||
         sps->ref_frame_count >= 32U) {
-        av_log(h->avctx, AV_LOG_ERROR, "too many reference frames\n");
+        av_log(h->avctx, AV_LOG_ERROR,
+               "too many reference frames %d\n", sps->ref_frame_count);
         goto fail;
     }
     sps->gaps_in_frame_num_allowed_flag = get_bits1(&h->gb);
@@ -503,7 +512,6 @@ int ff_h264_decode_seq_parameter_set(H264Context *h)
     av_free(h->sps_buffers[sps_id]);
     h->sps_buffers[sps_id] = sps;
     h->sps                 = *sps;
-    h->current_sps_id      = sps_id;
 
     return 0;
 
@@ -529,7 +537,7 @@ int ff_h264_decode_picture_parameter_set(H264Context *h, int bit_length)
     int bits_left;
 
     if (pps_id >= MAX_PPS_COUNT) {
-        av_log(h->avctx, AV_LOG_ERROR, "pps_id (%d) out of range\n", pps_id);
+        av_log(h->avctx, AV_LOG_ERROR, "pps_id %u out of range\n", pps_id);
         return AVERROR_INVALIDDATA;
     } else if (h->sps.bit_depth_luma > 10) {
         av_log(h->avctx, AV_LOG_ERROR,
@@ -544,7 +552,7 @@ int ff_h264_decode_picture_parameter_set(H264Context *h, int bit_length)
     pps->sps_id = get_ue_golomb_31(&h->gb);
     if ((unsigned)pps->sps_id >= MAX_SPS_COUNT ||
         h->sps_buffers[pps->sps_id] == NULL) {
-        av_log(h->avctx, AV_LOG_ERROR, "sps_id out of range\n");
+        av_log(h->avctx, AV_LOG_ERROR, "sps_id %u out of range\n", pps->sps_id);
         goto fail;
     }
 

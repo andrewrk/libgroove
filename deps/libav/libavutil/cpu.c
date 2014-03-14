@@ -87,8 +87,11 @@ int av_parse_cpu_flags(const char *s)
 #define CPUFLAG_SSE42    (AV_CPU_FLAG_SSE42    | CPUFLAG_SSE4)
 #define CPUFLAG_AVX      (AV_CPU_FLAG_AVX      | CPUFLAG_SSE42)
 #define CPUFLAG_XOP      (AV_CPU_FLAG_XOP      | CPUFLAG_AVX)
+#define CPUFLAG_FMA3     (AV_CPU_FLAG_FMA3     | CPUFLAG_AVX)
 #define CPUFLAG_FMA4     (AV_CPU_FLAG_FMA4     | CPUFLAG_AVX)
 #define CPUFLAG_AVX2     (AV_CPU_FLAG_AVX2     | CPUFLAG_AVX)
+#define CPUFLAG_BMI1     (AV_CPU_FLAG_BMI1)
+#define CPUFLAG_BMI2     (AV_CPU_FLAG_BMI2     | CPUFLAG_BMI1)
     static const AVOption cpuflags_opts[] = {
         { "flags"   , NULL, 0, AV_OPT_TYPE_FLAGS, { .i64 = 0 }, INT64_MIN, INT64_MAX, .unit = "flags" },
 #if   ARCH_PPC
@@ -107,8 +110,11 @@ int av_parse_cpu_flags(const char *s)
         { "sse4.2"  , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_SSE42        },    .unit = "flags" },
         { "avx"     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_AVX          },    .unit = "flags" },
         { "xop"     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_XOP          },    .unit = "flags" },
+        { "fma3"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_FMA3         },    .unit = "flags" },
         { "fma4"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_FMA4         },    .unit = "flags" },
         { "avx2"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_AVX2         },    .unit = "flags" },
+        { "bmi1"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_BMI1         },    .unit = "flags" },
+        { "bmi2"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_BMI2         },    .unit = "flags" },
         { "3dnow"   , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_3DNOW        },    .unit = "flags" },
         { "3dnowext", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_3DNOWEXT     },    .unit = "flags" },
         { "cmov",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_CMOV     },    .unit = "flags" },
@@ -204,11 +210,14 @@ static const struct {
     { AV_CPU_FLAG_SSE42,     "sse4.2"     },
     { AV_CPU_FLAG_AVX,       "avx"        },
     { AV_CPU_FLAG_XOP,       "xop"        },
+    { AV_CPU_FLAG_FMA3,      "fma3"       },
     { AV_CPU_FLAG_FMA4,      "fma4"       },
     { AV_CPU_FLAG_3DNOW,     "3dnow"      },
     { AV_CPU_FLAG_3DNOWEXT,  "3dnowext"   },
     { AV_CPU_FLAG_CMOV,      "cmov"       },
     { AV_CPU_FLAG_AVX2,      "avx2"       },
+    { AV_CPU_FLAG_BMI1,      "bmi1"       },
+    { AV_CPU_FLAG_BMI2,      "bmi2"       },
 #endif
     { 0 }
 };

@@ -15,9 +15,12 @@ DOCS-$(CONFIG_POD2MAN)                          += $(MANPAGES) $(PODPAGES)
 DOCS-$(CONFIG_TEXI2HTML)                        += $(HTMLPAGES)
 DOCS = $(DOCS-yes)
 
+DOC_EXAMPLES-$(CONFIG_AVCODEC_EXAMPLE)          += avcodec
+DOC_EXAMPLES-$(CONFIG_FILTER_AUDIO_EXAMPLE)     += filter_audio
+DOC_EXAMPLES-$(CONFIG_METADATA_EXAMPLE)         += metadata
 DOC_EXAMPLES-$(CONFIG_OUTPUT_EXAMPLE)           += output
 DOC_EXAMPLES-$(CONFIG_TRANSCODE_AAC_EXAMPLE)    += transcode_aac
-ALL_DOC_EXAMPLES = output transcode_aac
+ALL_DOC_EXAMPLES = avcodec filter_audio metadata output transcode_aac
 
 DOC_EXAMPLES     := $(DOC_EXAMPLES-yes:%=doc/examples/%$(EXESUF))
 ALL_DOC_EXAMPLES := $(ALL_DOC_EXAMPLES:%=doc/examples/%$(EXESUF))
@@ -57,11 +60,12 @@ $(DOCS) doc/doxy/html: | doc/
 $(DOC_EXAMPLES:%$(EXESUF)=%.o): | doc/examples
 OBJDIRS += doc/examples
 
+DOXY_INPUT      = $(addprefix $(SRC_PATH)/, $(INSTHEADERS) $(DOC_EXAMPLES:%$(EXESUF)=%.c) $(LIB_EXAMPLES:%$(EXESUF)=%.c))
 DOXY_TEMPLATES  = doxy_stylesheet.css footer.html header.html
 DOXY_TEMPLATES := $(addprefix $(SRC_PATH)/doc/doxy/, $(DOXY_TEMPLATES))
 
-doc/doxy/html: $(SRC_PATH)/doc/Doxyfile $(DOXY_TEMPLATES) $(INSTHEADERS)
-	$(M)$(SRC_PATH)/doc/doxy-wrapper.sh $(SRC_PATH) $^
+doc/doxy/html: $(SRC_PATH)/doc/Doxyfile $(DOXY_INPUT) $(DOXY_TEMPLATES)
+	$(M)$(SRC_PATH)/doc/doxy-wrapper.sh $(SRC_PATH) $< $(DOXY_INPUT)
 
 install-progs-$(CONFIG_POD2MAN): install-man
 install-progs-$(CONFIG_TEXI2HTML): install-doc

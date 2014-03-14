@@ -23,11 +23,11 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avcodec.h"
+#include "dct.h"
 #include "dsputil.h"
 #include "put_bits.h"
 #include "bytestream.h"
 #include "internal.h"
-#include "proresdsp.h"
 #include "proresdata.h"
 
 #define CFACTOR_Y422 2
@@ -190,9 +190,11 @@ typedef struct ProresContext {
     int16_t quants[MAX_STORED_Q][64];
     int16_t custom_q[64];
     const uint8_t *quant_mat;
+    const uint8_t *scantable;
 
-    ProresDSPContext dsp;
-    ScanTable  scantable;
+    void (* fdct)(DSPContext *dsp, const uint16_t *src,
+                  int linesize, int16_t *block);
+    DSPContext dsp;
 
     int mb_width, mb_height;
     int mbs_per_slice;
@@ -261,27 +263,27 @@ static void get_slice_data(ProresContext *ctx, const uint16_t *src,
                        mb_width * sizeof(*emu_buf));
         }
         if (!is_chroma) {
-            ctx->dsp.fdct(esrc, elinesize, blocks);
+            ctx->fdct(&ctx->dsp, esrc, elinesize, blocks);
             blocks += 64;
             if (blocks_per_mb > 2) {
-                ctx->dsp.fdct(esrc + 8, elinesize, blocks);
+                ctx->fdct(&ctx->dsp, esrc + 8, elinesize, blocks);
                 blocks += 64;
             }
-            ctx->dsp.fdct(esrc + elinesize * 4, elinesize, blocks);
+            ctx->fdct(&ctx->dsp, esrc + elinesize * 4, elinesize, blocks);
             blocks += 64;
             if (blocks_per_mb > 2) {
-                ctx->dsp.fdct(esrc + elinesize * 4 + 8, elinesize, blocks);
+                ctx->fdct(&ctx->dsp, esrc + elinesize * 4 + 8, elinesize, blocks);
                 blocks += 64;
             }
         } else {
-            ctx->dsp.fdct(esrc, elinesize, blocks);
+            ctx->fdct(&ctx->dsp, esrc, elinesize, blocks);
             blocks += 64;
-            ctx->dsp.fdct(esrc + elinesize * 4, elinesize, blocks);
+            ctx->fdct(&ctx->dsp, esrc + elinesize * 4, elinesize, blocks);
             blocks += 64;
             if (blocks_per_mb > 2) {
-                ctx->dsp.fdct(esrc + 8, elinesize, blocks);
+                ctx->fdct(&ctx->dsp, esrc + 8, elinesize, blocks);
                 blocks += 64;
-                ctx->dsp.fdct(esrc + elinesize * 4 + 8, elinesize, blocks);
+                ctx->fdct(&ctx->dsp, esrc + elinesize * 4 + 8, elinesize, blocks);
                 blocks += 64;
             }
         }
@@ -426,7 +428,7 @@ static int encode_slice_plane(ProresContext *ctx, PutBitContext *pb,
 
     encode_dcs(pb, blocks, blocks_per_slice, qmat[0]);
     encode_acs(pb, blocks, blocks_per_slice, plane_size_factor,
-               ctx->scantable.permutated, qmat);
+               ctx->scantable, qmat);
     flush_put_bits(pb);
 
     return (put_bits_count(pb) - saved_pos) >> 3;
@@ -673,7 +675,7 @@ static int estimate_slice_plane(ProresContext *ctx, int *error, int plane,
 
     bits  = estimate_dcs(error, td->blocks[plane], blocks_per_slice, qmat[0]);
     bits += estimate_acs(error, td->blocks[plane], blocks_per_slice,
-                         plane_size_factor, ctx->scantable.permutated, qmat);
+                         plane_size_factor, ctx->scantable, qmat);
 
     return FFALIGN(bits, 8);
 }
@@ -1066,6 +1068,20 @@ static av_cold int encode_close(AVCodecContext *avctx)
     return 0;
 }
 
+static void prores_fdct(DSPContext *dsp, const uint16_t *src,
+                        int linesize, int16_t *block)
+{
+    int x, y;
+    const uint16_t *tsrc = src;
+
+    for (y = 0; y < 8; y++) {
+        for (x = 0; x < 8; x++)
+            block[y * 8 + x] = tsrc[x];
+        tsrc += linesize >> 1;
+    }
+    dsp->fdct(block);
+}
+
 static av_cold int encode_init(AVCodecContext *avctx)
 {
     ProresContext *ctx = avctx->priv_data;
@@ -1079,10 +1095,10 @@ static av_cold int encode_init(AVCodecContext *avctx)
     if (!avctx->coded_frame)
         return AVERROR(ENOMEM);
 
-    ff_proresdsp_init(&ctx->dsp);
-    ff_init_scantable(ctx->dsp.dct_permutation, &ctx->scantable,
-                      interlaced ? ff_prores_interlaced_scan
-                                 : ff_prores_progressive_scan);
+    ctx->fdct      = prores_fdct;
+    ctx->scantable = interlaced ? ff_prores_interlaced_scan
+                                : ff_prores_progressive_scan;
+    ff_dsputil_init(&ctx->dsp, avctx);
 
     mps = ctx->mbs_per_slice;
     if (mps & (mps - 1)) {

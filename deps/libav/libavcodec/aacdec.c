@@ -2529,7 +2529,7 @@ static void apply_dependent_coupling(AACContext *ac,
                 const float gain = cce->coup.gain[index][idx];
                 for (group = 0; group < ics->group_len[g]; group++) {
                     for (k = offsets[i]; k < offsets[i + 1]; k++) {
-                        // XXX dsputil-ize
+                        // FIXME: SIMDify
                         dest[group * 128 + k] += gain * src[group * 128 + k];
                     }
                 }
@@ -3030,7 +3030,8 @@ static int latm_decode_audio_specific_config(struct LATMContext *latmctx,
     if (bits_consumed < 0)
         return AVERROR_INVALIDDATA;
 
-    if (ac->oc[1].m4ac.sample_rate != m4ac.sample_rate ||
+    if (!latmctx->initialized ||
+        ac->oc[1].m4ac.sample_rate != m4ac.sample_rate ||
         ac->oc[1].m4ac.chan_config != m4ac.chan_config) {
 
         av_log(avctx, AV_LOG_INFO, "audio config changed\n");

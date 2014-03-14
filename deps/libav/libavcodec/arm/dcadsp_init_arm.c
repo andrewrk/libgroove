@@ -24,15 +24,11 @@
 #include "libavutil/attributes.h"
 #include "libavcodec/dcadsp.h"
 
-void ff_dca_lfe_fir0_neon(float *out, const float *in, const float *coefs,
-                          float scale);
-void ff_dca_lfe_fir1_neon(float *out, const float *in, const float *coefs,
-                          float scale);
+void ff_dca_lfe_fir0_neon(float *out, const float *in, const float *coefs);
+void ff_dca_lfe_fir1_neon(float *out, const float *in, const float *coefs);
 
-void ff_dca_lfe_fir32_vfp(float *out, const float *in, const float *coefs,
-                          float scale);
-void ff_dca_lfe_fir64_vfp(float *out, const float *in, const float *coefs,
-                          float scale);
+void ff_dca_lfe_fir32_vfp(float *out, const float *in, const float *coefs);
+void ff_dca_lfe_fir64_vfp(float *out, const float *in, const float *coefs);
 
 void ff_dca_qmf_32_subbands_vfp(float samples_in[32][8], int sb_act,
                                 SynthFilterContext *synth, FFTContext *imdct,
@@ -53,6 +49,12 @@ void ff_synth_filter_float_neon(FFTContext *imdct,
                                 float out[32], const float in[32],
                                 float scale);
 
+void ff_decode_hf_neon(float dst[DCA_SUBBANDS][8],
+                       const int32_t vq_num[DCA_SUBBANDS],
+                       const int8_t hf_vq[1024][32], intptr_t vq_offset,
+                       int32_t scale[DCA_SUBBANDS][2],
+                       intptr_t start, intptr_t end);
+
 av_cold void ff_dcadsp_init_arm(DCADSPContext *s)
 {
     int cpu_flags = av_get_cpu_flags();
@@ -65,6 +67,7 @@ av_cold void ff_dcadsp_init_arm(DCADSPContext *s)
     if (have_neon(cpu_flags)) {
         s->lfe_fir[0] = ff_dca_lfe_fir0_neon;
         s->lfe_fir[1] = ff_dca_lfe_fir1_neon;
+        s->decode_hf  = ff_decode_hf_neon;
     }
 }
 

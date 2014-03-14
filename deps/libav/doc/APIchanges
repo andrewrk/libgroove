@@ -13,6 +13,23 @@ libavutil:     2013-12-xx
 
 API changes, most recent first:
 
+2014-xx-xx - xxxxxxx - lavu 53.05.0 - frame.h
+  Add av_frame_copy() for copying the frame data.
+
+2014-02-xx - xxxxxxx - lavr 1.2.0 - avresample.h
+  Add avresample_is_open() for checking whether a resample context is open.
+
+2014-xx-xx - xxxxxxx - lavu 53.04.0  - opt.h
+  Add AV_OPT_FLAG_EXPORT and AV_OPT_FLAG_READONLY to mark options meant (only)
+  for reading.
+
+2014-xx-xx - xxxxxxx - lavu 53.03.01 - opt.h
+  Deprecate unused AV_OPT_FLAG_METADATA.
+
+2014-02-xx - xxxxxxx - lavu 53.3.0 - frame.h
+  Add AV_FRAME_DATA_DOWNMIX_INFO value to the AVFrameSideDataType enum and
+  downmix_info.h API, which identify downmix-related metadata.
+
 2014-02-04 - d9ae103 - lavf 55.11.0 - avformat.h
   Add AVFormatContext.max_interleave_delta for controlling amount of buffering
   when interleaving.
@@ -61,7 +78,7 @@ API changes, most recent first:
   Add ITU-R BT.2020 and other not yet included values to color primaries,
   transfer characteristics and colorspaces.
 
-2013-10-31 - 28096e0 - lavu 52.17.0 - avframe.h
+2013-10-31 - 28096e0 - lavu 52.17.0 - frame.h
   Add AVFrame.flags and AV_FRAME_FLAG_CORRUPT.
 
 2013-09-28 - 0767bfd - lavfi 3.11.0 - avfilter.h

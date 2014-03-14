@@ -29,6 +29,10 @@
 #include "avcodec.h"
 #include "internal.h"
 
+#if defined(_MSC_VER)
+#define X265_API_IMPORTS 1
+#endif
+
 typedef struct libx265Context {
     const AVClass *class;
 
@@ -77,9 +81,19 @@ static av_cold int libx265_encode_init(AVCodecContext *avctx)
     libx265Context *ctx = avctx->priv_data;
     x265_nal *nal;
     uint8_t *buf;
+    int sar_num, sar_den;
     int nnal;
     int ret;
     int i;
+
+    if (avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL &&
+        !av_pix_fmt_desc_get(avctx->pix_fmt)->log2_chroma_w &&
+        !av_pix_fmt_desc_get(avctx->pix_fmt)->log2_chroma_h) {
+        av_log(avctx, AV_LOG_ERROR,
+               "4:4:4 support is not fully defined for HEVC yet. "
+               "Set -strict experimental to encode anyway.\n");
+        return AVERROR(ENOSYS);
+    }
 
     avctx->coded_frame = av_frame_alloc();
     if (!avctx->coded_frame) {
@@ -93,17 +107,41 @@ static av_cold int libx265_encode_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
     }
 
-    x265_param_default(ctx->params);
     if (x265_param_default_preset(ctx->params, ctx->preset, ctx->tune) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Invalid preset or tune.\n");
         return AVERROR(EINVAL);
     }
 
     ctx->params->frameNumThreads = avctx->thread_count;
-    ctx->params->frameRate       = (int) (avctx->time_base.den / avctx->time_base.num);
+    ctx->params->fpsNum          = avctx->time_base.den;
+    ctx->params->fpsDenom        = avctx->time_base.num * avctx->ticks_per_frame;
     ctx->params->sourceWidth     = avctx->width;
     ctx->params->sourceHeight    = avctx->height;
-    ctx->params->inputBitDepth   = av_pix_fmt_desc_get(avctx->pix_fmt)->comp[0].depth_minus1 + 1;
+
+    av_reduce(&sar_num, &sar_den,
+              avctx->sample_aspect_ratio.num,
+              avctx->sample_aspect_ratio.den, 4096);
+    ctx->params->vui.bEnableVuiParametersPresentFlag = 1;
+    ctx->params->vui.bEnableAspectRatioIdc           = 1;
+    ctx->params->vui.aspectRatioIdc                  = 255;
+    ctx->params->vui.sarWidth                        = sar_num;
+    ctx->params->vui.sarHeight                       = sar_den;
+
+    if (x265_max_bit_depth == 8)
+        ctx->params->internalBitDepth = 8;
+    else if (x265_max_bit_depth == 12)
+        ctx->params->internalBitDepth = 10;
+
+    switch (avctx->pix_fmt) {
+    case AV_PIX_FMT_YUV420P:
+    case AV_PIX_FMT_YUV420P10:
+        ctx->params->internalCsp = X265_CSP_I420;
+        break;
+    case AV_PIX_FMT_YUV444P:
+    case AV_PIX_FMT_YUV444P10:
+        ctx->params->internalCsp = X265_CSP_I444;
+        break;
+    }
 
     if (avctx->bit_rate > 0) {
         ctx->params->rc.bitrate         = avctx->bit_rate / 1000;
@@ -182,13 +220,16 @@ static int libx265_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int ret;
     int i;
 
+    x265_picture_init(ctx->params, &x265pic);
+
     if (pic) {
         for (i = 0; i < 3; i++) {
            x265pic.planes[i] = pic->data[i];
            x265pic.stride[i] = pic->linesize[i];
         }
 
-        x265pic.pts = pic->pts;
+        x265pic.pts      = pic->pts;
+        x265pic.bitDepth = av_pix_fmt_desc_get(avctx->pix_fmt)->comp[0].depth_minus1 + 1;
     }
 
     ret = x265_encoder_encode(ctx->encoder, &nal, &nnal,
@@ -236,12 +277,15 @@ static int libx265_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
 static const enum AVPixelFormat x265_csp_eight[] = {
     AV_PIX_FMT_YUV420P,
+    AV_PIX_FMT_YUV444P,
     AV_PIX_FMT_NONE
 };
 
 static const enum AVPixelFormat x265_csp_twelve[] = {
     AV_PIX_FMT_YUV420P,
+    AV_PIX_FMT_YUV444P,
     AV_PIX_FMT_YUV420P10,
+    AV_PIX_FMT_YUV444P10,
     AV_PIX_FMT_NONE
 };
 

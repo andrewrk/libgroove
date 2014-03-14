@@ -54,6 +54,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(ATRIM,          atrim,          af);
     REGISTER_FILTER(CHANNELMAP,     channelmap,     af);
     REGISTER_FILTER(CHANNELSPLIT,   channelsplit,   af);
+    REGISTER_FILTER(COMPAND,        compand,        af);
     REGISTER_FILTER(JOIN,           join,           af);
     REGISTER_FILTER(RESAMPLE,       resample,       af);
     REGISTER_FILTER(VOLUME,         volume,         af);
@@ -97,6 +98,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(SETSAR,         setsar,         vf);
     REGISTER_FILTER(SETTB,          settb,          vf);
     REGISTER_FILTER(SHOWINFO,       showinfo,       vf);
+    REGISTER_FILTER(SHUFFLEPLANES,  shuffleplanes,  vf);
     REGISTER_FILTER(SPLIT,          split,          vf);
     REGISTER_FILTER(TRANSPOSE,      transpose,      vf);
     REGISTER_FILTER(TRIM,           trim,           vf);

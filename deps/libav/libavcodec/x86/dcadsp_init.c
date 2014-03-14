@@ -23,9 +23,17 @@
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/dcadsp.h"
 
-void ff_int8x8_fmul_int32_sse(float *dst, const int8_t *src, int scale);
-void ff_int8x8_fmul_int32_sse2(float *dst, const int8_t *src, int scale);
-void ff_int8x8_fmul_int32_sse4(float *dst, const int8_t *src, int scale);
+void ff_decode_hf_sse(float dst[DCA_SUBBANDS][8], const int vq_num[DCA_SUBBANDS],
+                      const int8_t hf_vq[1024][32], intptr_t vq_offset,
+                      int scale[DCA_SUBBANDS][2], intptr_t start, intptr_t end);
+void ff_decode_hf_sse2(float dst[DCA_SUBBANDS][8], const int vq_num[DCA_SUBBANDS],
+                       const int8_t hf_vq[1024][32], intptr_t vq_offset,
+                       int scale[DCA_SUBBANDS][2], intptr_t start, intptr_t end);
+void ff_decode_hf_sse4(float dst[DCA_SUBBANDS][8], const int vq_num[DCA_SUBBANDS],
+                       const int8_t hf_vq[1024][32], intptr_t vq_offset,
+                       int scale[DCA_SUBBANDS][2], intptr_t start, intptr_t end);
+void ff_dca_lfe_fir0_sse(float *out, const float *in, const float *coefs);
+void ff_dca_lfe_fir1_sse(float *out, const float *in, const float *coefs);
 
 av_cold void ff_dcadsp_init_x86(DCADSPContext *s)
 {
@@ -33,15 +41,49 @@ av_cold void ff_dcadsp_init_x86(DCADSPContext *s)
 
     if (EXTERNAL_SSE(cpu_flags)) {
 #if ARCH_X86_32
-        s->int8x8_fmul_int32 = ff_int8x8_fmul_int32_sse;
+        s->decode_hf = ff_decode_hf_sse;
 #endif
+        s->lfe_fir[0]        = ff_dca_lfe_fir0_sse;
+        s->lfe_fir[1]        = ff_dca_lfe_fir1_sse;
     }
 
     if (EXTERNAL_SSE2(cpu_flags)) {
-        s->int8x8_fmul_int32 = ff_int8x8_fmul_int32_sse2;
+        s->decode_hf = ff_decode_hf_sse2;
     }
 
     if (EXTERNAL_SSE4(cpu_flags)) {
-        s->int8x8_fmul_int32 = ff_int8x8_fmul_int32_sse4;
+        s->decode_hf = ff_decode_hf_sse4;
     }
+}
+
+void ff_synth_filter_inner_sse2(float *synth_buf_ptr, float synth_buf2[32],
+                                const float window[512],
+                                float out[32], intptr_t offset, float scale);
+
+#if HAVE_YASM
+static void synth_filter_sse2(FFTContext *imdct,
+                              float *synth_buf_ptr, int *synth_buf_offset,
+                              float synth_buf2[32], const float window[512],
+                              float out[32], const float in[32], float scale)
+{
+    float *synth_buf= synth_buf_ptr + *synth_buf_offset;
+
+    imdct->imdct_half(imdct, synth_buf, in);
+
+    ff_synth_filter_inner_sse2(synth_buf, synth_buf2, window,
+                               out, *synth_buf_offset, scale);
+
+    *synth_buf_offset = (*synth_buf_offset - 32) & 511;
+}
+#endif /* HAVE_YASM */
+
+av_cold void ff_synth_filter_init_x86(SynthFilterContext *s)
+{
+#if HAVE_YASM
+    int cpu_flags = av_get_cpu_flags();
+
+    if (EXTERNAL_SSE2(cpu_flags)) {
+        s->synth_filter_float = synth_filter_sse2;
+    }
+#endif /* HAVE_YASM */
 }

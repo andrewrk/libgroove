@@ -25,12 +25,10 @@
  * @author Michael Niedermayer <michaelni@gmx.at>
  */
 
-#include "internal.h"
 #include "avcodec.h"
-#include "h264.h"
 #include "golomb.h"
-
-#include <assert.h>
+#include "h264.h"
+#include "internal.h"
 
 static const uint8_t sei_num_clock_ts_table[9] = {
     1, 1, 1, 2, 2, 3, 3, 2, 3
@@ -238,7 +236,7 @@ int ff_h264_decode_sei(H264Context *h)
             if (ret < 0)
                 return ret;
             break;
-        case SEI_BUFFERING_PERIOD:
+        case SEI_TYPE_BUFFERING_PERIOD:
             ret = decode_buffering_period(h);
             if (ret < 0)
                 return ret;
