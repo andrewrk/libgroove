@@ -26,7 +26,6 @@ int main(int argc, char * argv[]) {
     }
 
     struct GroovePlayer *player = groove_player_create();
-    groove_player_attach(player, playlist);
 
     for (int i = 1; i < argc; i += 1) {
         char *arg = argv[i];
@@ -49,6 +48,7 @@ int main(int argc, char * argv[]) {
             groove_playlist_insert(playlist, file, 1.0, NULL);
         }
     }
+    groove_player_attach(player, playlist);
 
     union GroovePlayerEvent event;
     struct GroovePlaylistItem *item;
