@@ -60,12 +60,20 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
     info->duration = d->track_duration;
 
     ebur128_state *cur_track_state = d->all_track_states[d->cur_track_index];
-    ebur128_loudness_global(cur_track_state, &info->loudness);
-    ebur128_true_peak(cur_track_state, 0, &info->peak);
-    double out;
-    ebur128_true_peak(cur_track_state, 1, &out);
-    if (out > info->peak) info->peak = out;
-    if (info->peak > d->album_peak) d->album_peak = info->peak;
+    if (!cur_track_state) {
+        // we received the end before we expected it. This happens for example
+        // when a DRM-protected song is played. In this situation, set duration to 0
+        // to indicate no song data.
+        info->loudness = 0;
+        info->peak = 0;
+    } else {
+        ebur128_loudness_global(cur_track_state, &info->loudness);
+        ebur128_true_peak(cur_track_state, 0, &info->peak);
+        double out;
+        ebur128_true_peak(cur_track_state, 1, &out);
+        if (out > info->peak) info->peak = out;
+        if (info->peak > d->album_peak) d->album_peak = info->peak;
+    }
 
     groove_queue_put(d->info_queue, info);
 
@@ -384,6 +392,7 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector) {
     d->abort_request = 0;
     d->info_head = NULL;
     d->info_pos = 0;
+    d->track_duration = 0.0;
 
     return 0;
 }
