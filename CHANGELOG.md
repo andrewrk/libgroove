@@ -1,6 +1,23 @@
-### Version 3.0.5 (release pending)
+### Version 3.0.7 (2014-03-16)
+
+ * build: fix cmake warnings
+ * use ebur128 true peak instead of sample peak
+ * fix bug where accessing "album" metadata would instead
+   return the "album_artist"
+ * update to libav 10 beta2
+ * use the compand filter to allow setting the gain to > 1.0. Closes #45
+ * log error when cannot set up filter graph
+ * loudness scanning: fix crash for songs with 0 frames. Closes #48
+ * playlist example: fix race condition
+
+### Version 3.0.6 (2014-02-20)
+
+ * build: avoid useless dependencies
+
+### Version 3.0.5 (2014-02-20)
 
  * update to libav dff1c19140e70. Closes #16 ASF seeking bug
+ * build: use GNUInstallDirs
 
 ### Version 3.0.4 (2014-02-09)
  
