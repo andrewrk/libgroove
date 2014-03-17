@@ -82,12 +82,13 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
 
 static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
     int new_size = d->state_history_count * 2;
-    d->all_track_states = realloc(d->all_track_states, new_size);
+    d->all_track_states = realloc(d->all_track_states, new_size * sizeof(ebur128_state *));
     if (!d->all_track_states) {
         av_log(NULL, AV_LOG_ERROR, "unable to reallocate state pointer array\n");
         return -1;
     }
-    memset(d->all_track_states + d->state_history_count, 0, new_size - d->state_history_count);
+    int zero_count = new_size - d->state_history_count;
+    memset(d->all_track_states + d->state_history_count, 0, zero_count * sizeof(ebur128_state *));
     d->state_history_count = new_size;
     return 0;
 }
