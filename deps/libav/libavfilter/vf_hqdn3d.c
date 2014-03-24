@@ -147,7 +147,6 @@ static void denoise_depth(HQDN3DContext *s,
     else
         denoise_temporal(src, dst, frame_ant,
                          w, h, sstride, dstride, temporal, depth);
-    emms_c();
 }
 
 #define denoise(...) \

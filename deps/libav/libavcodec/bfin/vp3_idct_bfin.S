@@ -28,9 +28,14 @@ Registers Used  : A0, A1, R0-R7, I0-I3, B0, B2, B3, M0-M2, L0-L3, P0-P5, LC0.
 
 */
 
-#include "libavutil/bfin/asm.h"
+#include "config.h"
+#include "config_bfin.h"
 
-SECTION_L1_DATA_B
+#if defined(__FDPIC__) && CONFIG_SRAM
+.section .l1.data.B,"aw",@progbits
+#else
+.data
+#endif
 
 .align 4;
 coefs:
@@ -45,7 +50,9 @@ coefs:
 .short 0x18F9;           //cos(7pi/16)
 .short 0x7D8A;           //cos(pi/16)
 
-SECTION_L1_DATA_A
+#if defined(__FDPIC__) && CONFIG_SRAM
+.section .l1.data.A,"aw",@progbits
+#endif
 
 vtmp: .space 256
 

@@ -41,8 +41,6 @@ const MXFCodecUL ff_mxf_codec_uls[] = {
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x01,0x04,0x01,0x02,0x02,0x02,0x01,0x02,0x00 }, 13,    AV_CODEC_ID_DVVIDEO }, /* DV25 IEC PAL */
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x07,0x04,0x01,0x02,0x02,0x03,0x01,0x01,0x00 }, 14,   AV_CODEC_ID_JPEG2000 }, /* JPEG2000 Codestream */
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x01,0x04,0x01,0x02,0x01,0x7F,0x00,0x00,0x00 }, 13,   AV_CODEC_ID_RAWVIDEO }, /* Uncompressed */
-    { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x01,0x01,0x02,0x01,0x00 }, 15,   AV_CODEC_ID_RAWVIDEO }, /* Uncompressed 422 8-bit */
-    { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x01,0x04,0x01,0x02,0x02,0x71,0x00,0x00,0x00 }, 13,      AV_CODEC_ID_DNXHD }, /* SMPTE VC-3/DNxHD */
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x01,0x04,0x01,0x02,0x02,0x03,0x02,0x00,0x00 }, 14,      AV_CODEC_ID_DNXHD }, /* SMPTE VC-3/DNxHD */
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x01,0x32,0x00,0x00 }, 14,       AV_CODEC_ID_H264 }, /* H.264/MPEG-4 AVC Intra */
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x01,0x01,0x02,0x02,0x00 }, 15,       AV_CODEC_ID_V210 }, /* V210 */
@@ -105,44 +103,4 @@ int ff_mxf_decode_pixel_layout(const char pixel_layout[16], enum AVPixelFormat *
     }
 
     return -1;
-}
-
-static const MXFSamplesPerFrame mxf_spf[] = {
-    { { 1001, 24000 }, { 2002, 0,    0,    0,    0,    0 } }, // FILM 23.976
-    { { 1, 24},        { 2000, 0,    0,    0,    0,    0 } }, // FILM 24
-    { { 1001, 30000 }, { 1602, 1601, 1602, 1601, 1602, 0 } }, // NTSC 29.97
-    { { 1001, 60000 }, { 801,  801,  801,  801,  800,  0 } }, // NTSC 59.94
-    { { 1, 25 },       { 1920, 0,    0,    0,    0,    0 } }, // PAL 25
-    { { 1, 50 },       { 960,  0,    0,    0,    0,    0 } }, // PAL 50
-};
-
-static const AVRational mxf_time_base[] = {
-    { 1001, 24000 },
-    { 1, 24},
-    { 1001, 30000 },
-    { 1001, 60000 },
-    { 1, 25 },
-    { 1, 50 },
-    { 0, 0}
-};
-
-const MXFSamplesPerFrame *ff_mxf_get_samples_per_frame(AVFormatContext *s,
-                                                       AVRational time_base)
-{
-    int idx = av_find_nearest_q_idx(time_base, mxf_time_base);
-    AVRational diff = av_sub_q(time_base, mxf_time_base[idx]);
-
-    diff.num = abs(diff.num);
-
-    if (av_cmp_q(diff, (AVRational){1, 1000}) >= 0)
-        return NULL;
-
-    if (av_cmp_q(time_base, mxf_time_base[idx]))
-        av_log(s, AV_LOG_WARNING,
-               "%d/%d input time base matched %d/%d container time base\n",
-               time_base.num, time_base.den,
-               mxf_spf[idx].time_base.num,
-               mxf_spf[idx].time_base.den);
-
-    return &mxf_spf[idx];
 }

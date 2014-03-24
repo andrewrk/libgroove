@@ -2904,18 +2904,18 @@ static void init_scan_tables(H264Context *h)
 {
     int i;
     for (i = 0; i < 16; i++) {
-#define TRANSPOSE(x) (x >> 2) | ((x << 2) & 0xF)
-        h->zigzag_scan[i] = TRANSPOSE(zigzag_scan[i]);
-        h->field_scan[i]  = TRANSPOSE(field_scan[i]);
-#undef TRANSPOSE
+#define T(x) (x >> 2) | ((x << 2) & 0xF)
+        h->zigzag_scan[i] = T(zigzag_scan[i]);
+        h->field_scan[i]  = T(field_scan[i]);
+#undef T
     }
     for (i = 0; i < 64; i++) {
-#define TRANSPOSE(x) (x >> 3) | ((x & 7) << 3)
-        h->zigzag_scan8x8[i]       = TRANSPOSE(ff_zigzag_direct[i]);
-        h->zigzag_scan8x8_cavlc[i] = TRANSPOSE(zigzag_scan8x8_cavlc[i]);
-        h->field_scan8x8[i]        = TRANSPOSE(field_scan8x8[i]);
-        h->field_scan8x8_cavlc[i]  = TRANSPOSE(field_scan8x8_cavlc[i]);
-#undef TRANSPOSE
+#define T(x) (x >> 3) | ((x & 7) << 3)
+        h->zigzag_scan8x8[i]       = T(ff_zigzag_direct[i]);
+        h->zigzag_scan8x8_cavlc[i] = T(zigzag_scan8x8_cavlc[i]);
+        h->field_scan8x8[i]        = T(field_scan8x8[i]);
+        h->field_scan8x8_cavlc[i]  = T(field_scan8x8_cavlc[i]);
+#undef T
     }
     if (h->sps.transform_bypass) { // FIXME same ugly
         h->zigzag_scan_q0          = zigzag_scan;
@@ -3368,7 +3368,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
     if (slice_type > 9) {
         av_log(h->avctx, AV_LOG_ERROR,
                "slice type %d too large at %d %d\n",
-               slice_type, h->mb_x, h->mb_y);
+               h->slice_type, h->mb_x, h->mb_y);
         return AVERROR_INVALIDDATA;
     }
     if (slice_type > 4) {
@@ -3471,12 +3471,8 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
          h->height != h->avctx->coded_height  ||
          needs_reinit)) {
         if (h != h0) {
-            av_log(h->avctx, AV_LOG_ERROR,
-                   "changing width %d -> %d / height %d -> %d on "
-                   "slice %d\n",
-                   h->width, h->avctx->coded_width,
-                   h->height, h->avctx->coded_height,
-                   h0->current_slice + 1);
+            av_log(h->avctx, AV_LOG_ERROR, "changing width/height on "
+                   "slice %d\n", h0->current_slice + 1);
             return AVERROR_INVALIDDATA;
         }
 

@@ -35,15 +35,13 @@
  * http://wiki.multimedia.cx/index.php?title=Nellymoser
  */
 
-#include "libavutil/common.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/mathematics.h"
-
-#include "audio_frame_queue.h"
+#include "nellymoser.h"
 #include "avcodec.h"
+#include "audio_frame_queue.h"
 #include "fft.h"
 #include "internal.h"
-#include "nellymoser.h"
 #include "sinewin.h"
 
 #define BITSTREAM_WRITER_LE

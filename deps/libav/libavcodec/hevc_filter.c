@@ -317,15 +317,11 @@ static void sao_filter_CTB(HEVCContext *s, int x, int y)
 static int get_pcm(HEVCContext *s, int x, int y)
 {
     int log2_min_pu_size = s->sps->log2_min_pu_size;
-    int x_pu, y_pu;
+    int x_pu             = x >> log2_min_pu_size;
+    int y_pu             = y >> log2_min_pu_size;
 
-    if (x < 0 || y < 0)
-        return 2;
-
-    x_pu = x >> log2_min_pu_size;
-    y_pu = y >> log2_min_pu_size;
-
-    if (x_pu >= s->sps->min_pu_width || y_pu >= s->sps->min_pu_height)
+    if (x < 0 || x_pu >= s->sps->min_pu_width ||
+        y < 0 || y_pu >= s->sps->min_pu_height)
         return 2;
     return s->is_pcm[y_pu * s->sps->min_pu_width + x_pu];
 }
@@ -378,8 +374,8 @@ static void deblocking_filter_CTB(HEVCContext *s, int x0, int y0)
                 const int qp0 = (get_qPy(s, x - 1, y)     + get_qPy(s, x, y)     + 1) >> 1;
                 const int qp1 = (get_qPy(s, x - 1, y + 4) + get_qPy(s, x, y + 4) + 1) >> 1;
 
-                beta[0] = betatable[av_clip(qp0 + beta_offset, 0, MAX_QP)];
-                beta[1] = betatable[av_clip(qp1 + beta_offset, 0, MAX_QP)];
+                beta[0] = betatable[av_clip(qp0 + (beta_offset >> 1 << 1), 0, MAX_QP)];
+                beta[1] = betatable[av_clip(qp1 + (beta_offset >> 1 << 1), 0, MAX_QP)];
                 tc[0]   = bs0 ? TC_CALC(qp0, bs0) : 0;
                 tc[1]   = bs1 ? TC_CALC(qp1, bs1) : 0;
                 src     = &s->frame->data[LUMA][y * s->frame->linesize[LUMA] + (x << s->sps->pixel_shift)];
@@ -443,8 +439,8 @@ static void deblocking_filter_CTB(HEVCContext *s, int x0, int y0)
                 tc_offset   = x >= x0 ? cur_tc_offset : left_tc_offset;
                 beta_offset = x >= x0 ? cur_beta_offset : left_beta_offset;
 
-                beta[0] = betatable[av_clip(qp0 + beta_offset, 0, MAX_QP)];
-                beta[1] = betatable[av_clip(qp1 + beta_offset, 0, MAX_QP)];
+                beta[0] = betatable[av_clip(qp0 + (beta_offset >> 1 << 1), 0, MAX_QP)];
+                beta[1] = betatable[av_clip(qp1 + (beta_offset >> 1 << 1), 0, MAX_QP)];
                 tc[0]   = bs0 ? TC_CALC(qp0, bs0) : 0;
                 tc[1]   = bs1 ? TC_CALC(qp1, bs1) : 0;
                 src     = &s->frame->data[LUMA][y * s->frame->linesize[LUMA] + (x << s->sps->pixel_shift)];

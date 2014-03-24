@@ -93,9 +93,23 @@ huge variation on the reference codes on Blackfin I guess it must have
 to do with the memory system.
 */
 
-#include "libavutil/bfin/asm.h"
-
+#define mL3 .text
+#if defined(__FDPIC__) && CONFIG_SRAM
+#define mL1 .l1.text
+#else
+#define mL1 mL3
+#endif
 #define MEM mL1
+
+#define DEFUN(fname,where,interface) \
+        .section where;              \
+        .global _ff_bfin_ ## fname;  \
+        .type _ff_bfin_ ## fname, STT_FUNC; \
+        .align 8;                    \
+        _ff_bfin_ ## fname
+
+#define DEFUN_END(fname) \
+        .size _ff_bfin_ ## fname, . - _ff_bfin_ ## fname
 
 
 .text

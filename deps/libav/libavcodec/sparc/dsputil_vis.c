@@ -1,5 +1,5 @@
 /*
- * Work around broken floating point limits on some systems.
+ * Copyright (C) 2003 David S. Miller <davem@redhat.com>
  *
  * This file is part of Libav.
  *
@@ -18,18 +18,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include_next <float.h>
+#include "libavutil/attributes.h"
+#include "libavcodec/dsputil.h"
+#include "dsputil_vis.h"
+#include "vis.h"
 
-#ifdef FLT_MAX
-#undef  FLT_MAX
-#define FLT_MAX 3.40282346638528859812e+38F
+av_cold void ff_dsputil_init_vis(DSPContext *c, AVCodecContext *avctx)
+{
+  /* VIS-specific optimizations */
+  int accel = vis_level ();
+  const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
-#undef  FLT_MIN
-#define FLT_MIN 1.17549435082228750797e-38F
-
-#undef  DBL_MAX
-#define DBL_MAX ((double)1.79769313486231570815e+308L)
-
-#undef  DBL_MIN
-#define DBL_MIN ((double)2.22507385850720138309e-308L)
-#endif
+  if (accel & ACCEL_SPARC_VIS && !high_bit_depth) {
+      if (avctx->idct_algo == FF_IDCT_SIMPLEVIS) {
+          c->idct_put = ff_simple_idct_put_vis;
+          c->idct_add = ff_simple_idct_add_vis;
+          c->idct     = ff_simple_idct_vis;
+          c->idct_permutation_type = FF_TRANSPOSE_IDCT_PERM;
+      }
+  }
+}

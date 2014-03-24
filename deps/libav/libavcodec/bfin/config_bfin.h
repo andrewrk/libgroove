@@ -17,38 +17,49 @@
  * License along with Libav; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+/*
+   low level assembler interface wrapper
 
-#ifndef AVUTIL_BFIN_ASM_H
-#define AVUTIL_BFIN_ASM_H
+DEFUN(put_pixels_clamped,mL1,
+        (int16_t *block, uint8_t *dest, int line_size)):
+
+      body
+
+      rts;
+*/
+
+#ifndef AVCODEC_BFIN_CONFIG_BFIN_H
+#define AVCODEC_BFIN_CONFIG_BFIN_H
 
 #include "config.h"
 
-#define mL3 .text
+#ifndef DEFUN
 
+#define mL3 .text
+#ifndef mL1
 #if defined(__FDPIC__) && CONFIG_SRAM
 #define mL1 .l1.text
-#define SECTION_L1_DATA_A .section .l1.data.A,"aw",@progbits
-#define SECTION_L1_DATA_B .section .l1.data.B,"aw",@progbits
 #else
 #define mL1 mL3
-#define SECTION_L1_DATA_A
-#define SECTION_L1_DATA_B .data
+#endif
 #endif
 
-#define DEFUN(fname, where, interface)          \
-    .section where;                             \
-    .global _ff_bfin_ ## fname;                 \
-    .type _ff_bfin_ ## fname, STT_FUNC;         \
-    .align 8;                                   \
-    _ff_bfin_ ## fname
+#define DEFUN(fname,where,interface) \
+        .section where;              \
+        .global _ff_bfin_ ## fname ; \
+        .type _ff_bfin_ ## fname, STT_FUNC; \
+        .align 8;                    \
+        _ff_bfin_ ## fname
 
 #define DEFUN_END(fname) \
-    .size _ff_bfin_ ## fname, . - _ff_bfin_ ## fname
+        .size _ff_bfin_ ## fname, . - _ff_bfin_ ## fname
 
 #ifdef __FDPIC__
-#define RELOC(reg, got, obj) reg = [got + obj@GOT17M4]
+#define RELOC(reg,got,obj) reg = [got + obj@GOT17M4]
 #else
-#define RELOC(reg, got, obj) reg.L = obj; reg.H = obj
+#define RELOC(reg,got,obj) reg.L = obj; reg.H = obj
 #endif
 
-#endif /* AVUTIL_BFIN_ASM_H */
+#endif
+
+#endif /* AVCODEC_BFIN_CONFIG_BFIN_H */

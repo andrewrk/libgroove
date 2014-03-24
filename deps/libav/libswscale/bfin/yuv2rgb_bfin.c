@@ -25,20 +25,25 @@
 
 #include "config.h"
 #include "libavutil/attributes.h"
-#include "libavutil/bfin/attributes.h"
 #include "libswscale/swscale_internal.h"
+
+#if defined(__FDPIC__) && CONFIG_SRAM
+#define L1CODE __attribute__((l1_text))
+#else
+#define L1CODE
+#endif
 
 void ff_bfin_yuv2rgb555_line(const uint8_t *Y, const uint8_t *U,
                              const uint8_t *V, uint8_t *out,
-                             int w, uint32_t *coeffs) attribute_l1_text;
+                             int w, uint32_t *coeffs) L1CODE;
 
 void ff_bfin_yuv2rgb565_line(const uint8_t *Y, const uint8_t *U,
                              const uint8_t *V, uint8_t *out,
-                             int w, uint32_t *coeffs) attribute_l1_text;
+                             int w, uint32_t *coeffs) L1CODE;
 
 void ff_bfin_yuv2rgb24_line(const uint8_t *Y, const uint8_t *U,
                             const uint8_t *V, uint8_t *out,
-                            int w, uint32_t *coeffs) attribute_l1_text;
+                            int w, uint32_t *coeffs) L1CODE;
 
 typedef void (*ltransform)(const uint8_t *Y, const uint8_t *U, const uint8_t *V,
                            uint8_t *out, int w, uint32_t *coeffs);

@@ -19,8 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <inttypes.h>
-
 #include "libavutil/channel_layout.h"
 #include "avformat.h"
 #include "internal.h"
@@ -97,8 +95,7 @@ static int read_header(AVFormatContext *s)
 
     mvi->audio_frame_size   = ((uint64_t)mvi->audio_data_size << MVI_FRAC_BITS) / frames_count;
     if (mvi->audio_frame_size <= 1 << MVI_FRAC_BITS - 1) {
-        av_log(s, AV_LOG_ERROR,
-               "Invalid audio_data_size (%"PRIu32") or frames_count (%u)\n",
+        av_log(s, AV_LOG_ERROR, "Invalid audio_data_size (%d) or frames_count (%d)\n",
                mvi->audio_data_size, frames_count);
         return AVERROR_INVALIDDATA;
     }

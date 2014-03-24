@@ -1,5 +1,5 @@
 /*
- * SIMD-optimized MP3 decoding functions
+ * MMX optimized MP3 decoding functions
  * Copyright (c) 2010 Vitor Sessak
  *
  * This file is part of Libav.

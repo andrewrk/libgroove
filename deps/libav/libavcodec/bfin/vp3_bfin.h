@@ -1,6 +1,4 @@
 /*
- * Copyright (C) 2007 Marc Hoffman <mmh@pleasantst.com>
- *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -18,17 +16,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVUTIL_BFIN_ATTRIBUTES_H
-#define AVUTIL_BFIN_ATTRIBUTES_H
 
-#include "config.h"
+#ifndef AVCODEC_BFIN_VP3_BFIN_H
+#define AVCODEC_BFIN_VP3_BFIN_H
 
-#if defined(__FDPIC__) && CONFIG_SRAM
-#define attribute_l1_text   __attribute__((l1_text))
-#define attribute_l1_data_b __attribute__((l1_data_B))
-#else
-#define attribute_l1_text
-#define attribute_l1_data_b
-#endif
+#include <stdint.h>
 
-#endif /* AVUTIL_BFIN_ATTRIBUTES_H */
+void ff_bfin_vp3_idct(int16_t *block);
+
+#endif /* AVCODEC_BFIN_VP3_BFIN_H */

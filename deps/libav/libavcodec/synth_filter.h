@@ -33,6 +33,5 @@ typedef struct SynthFilterContext {
 
 void ff_synth_filter_init(SynthFilterContext *c);
 void ff_synth_filter_init_arm(SynthFilterContext *c);
-void ff_synth_filter_init_x86(SynthFilterContext *c);
 
 #endif /* AVCODEC_SYNTH_FILTER_H */

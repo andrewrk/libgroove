@@ -1,5 +1,5 @@
 ;******************************************************************************
-;* SIMD-optimized quarterpel functions
+;* MMX optimized DSP utils
 ;* Copyright (c) 2008 Loren Merritt
 ;* Copyright (c) 2003-2013 Michael Niedermayer
 ;* Copyright (c) 2013 Daniel Kang
@@ -44,8 +44,7 @@ SECTION .text
     mova   %2, %1
 %endmacro
 
-; void ff_put/avg_pixels4_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
-;                                   int dstStride, int src1Stride, int h)
+; void pixels4_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2, int dstStride, int src1Stride, int h)
 %macro PIXELS4_L2 1
 %define OP op_%1h
 cglobal %1_pixels4_l2, 6,6
@@ -88,8 +87,7 @@ INIT_MMX mmxext
 PIXELS4_L2 put
 PIXELS4_L2 avg
 
-; void ff_put/avg_pixels8_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
-;                                   int dstStride, int src1Stride, int h)
+; void pixels8_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2, int dstStride, int src1Stride, int h)
 %macro PIXELS8_L2 1
 %define OP op_%1
 cglobal %1_pixels8_l2, 6,6
@@ -132,8 +130,7 @@ INIT_MMX mmxext
 PIXELS8_L2 put
 PIXELS8_L2 avg
 
-; void ff_put/avg_pixels16_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
-;                                    int dstStride, int src1Stride, int h)
+; void pixels16_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2, int dstStride, int src1Stride, int h)
 %macro PIXELS16_L2 1
 %define OP op_%1
 cglobal %1_pixels16_l2, 6,6

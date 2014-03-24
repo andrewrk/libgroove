@@ -20,8 +20,6 @@
  */
 
 #include "libavutil/common.h"
-#include "libavutil/intreadwrite.h"
-
 #include "bit_depth_template.c"
 #include "hpel_template.c"
 

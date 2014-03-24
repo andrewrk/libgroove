@@ -1,5 +1,5 @@
 /*
- * SIMD-optimized halfpel functions
+ * MMX optimized DSP utils
  * Copyright (c) 2000, 2001 Fabrice Bellard
  * Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
  *
@@ -26,7 +26,6 @@
 #include "libavutil/cpu.h"
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
-#include "libavcodec/avcodec.h"
 #include "libavcodec/hpeldsp.h"
 #include "dsputil_x86.h"
 

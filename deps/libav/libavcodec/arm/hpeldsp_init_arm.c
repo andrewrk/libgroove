@@ -1,5 +1,5 @@
 /*
- * ARM-optimized halfpel functions
+ * ARM optimized DSP utils
  * Copyright (c) 2001 Lionel Ulmer
  *
  * This file is part of Libav.

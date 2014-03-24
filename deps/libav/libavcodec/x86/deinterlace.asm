@@ -1,5 +1,5 @@
 ;******************************************************************************
-;* SIMD-optimized deinterlacing functions
+;* MMX optimized deinterlacing functions
 ;* Copyright (c) 2010 Vitor Sessak
 ;* Copyright (c) 2002 Michael Niedermayer
 ;*

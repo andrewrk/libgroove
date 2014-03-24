@@ -1,5 +1,5 @@
 /*
- * SIMD-optimized LPC functions
+ * MMX optimized LPC DSP utils
  * Copyright (c) 2007 Loren Merritt
  *
  * This file is part of Libav.

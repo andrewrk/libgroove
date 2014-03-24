@@ -1,5 +1,5 @@
 @
-@ ARMv5te-optimized core video DSP functions
+@ ARMv5te optimized DSP utils
 @ Copyright (c) 2004 AGAWA Koji <i (AT) atty (DOT) jp>
 @
 @ This file is part of Libav.

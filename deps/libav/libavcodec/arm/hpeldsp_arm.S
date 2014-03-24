@@ -1,5 +1,5 @@
 @
-@ ARMv4-optimized halfpel functions
+@ ARMv4 optimized DSP utils
 @ Copyright (c) 2004 AGAWA Koji <i (AT) atty (DOT) jp>
 @
 @ This file is part of Libav.

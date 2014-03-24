@@ -97,11 +97,8 @@ void *avpriv_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval)
     return *ptr;
 }
 
-#else /* HAVE_THREADS */
+#else
 
-/* This should never trigger, unless a new threading implementation
- * without correct atomics dependencies in configure or a corresponding
- * atomics implementation is added. */
 #error "Threading is enabled, but there is no implementation of atomic operations available"
 
 #endif /* HAVE_PTHREADS */

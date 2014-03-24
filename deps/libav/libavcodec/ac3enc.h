@@ -31,14 +31,12 @@
 #include <stdint.h>
 
 #include "libavutil/float_dsp.h"
-
 #include "ac3.h"
 #include "ac3dsp.h"
 #include "avcodec.h"
 #include "dsputil.h"
-#include "fft.h"
-#include "mathops.h"
 #include "put_bits.h"
+#include "fft.h"
 
 #ifndef CONFIG_AC3ENC_FLOAT
 #define CONFIG_AC3ENC_FLOAT 0

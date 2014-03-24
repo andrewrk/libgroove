@@ -24,18 +24,21 @@
 
 #include "config.h"
 #include "libavutil/attributes.h"
-#include "libavutil/bfin/attributes.h"
 #include "libswscale/swscale_internal.h"
+
+#if defined (__FDPIC__) && CONFIG_SRAM
+#define L1CODE __attribute__((l1_text))
+#else
+#define L1CODE
+#endif
 
 int ff_bfin_uyvytoyv12(const uint8_t *src, uint8_t *ydst, uint8_t *udst,
                        uint8_t *vdst, int width, int height,
-                       int lumStride, int chromStride,
-                       int srcStride) attribute_l1_text;
+                       int lumStride, int chromStride, int srcStride) L1CODE;
 
 int ff_bfin_yuyvtoyv12(const uint8_t *src, uint8_t *ydst, uint8_t *udst,
                        uint8_t *vdst, int width, int height,
-                       int lumStride, int chromStride,
-                       int srcStride) attribute_l1_text;
+                       int lumStride, int chromStride, int srcStride) L1CODE;
 
 static int uyvytoyv12_unscaled(SwsContext *c, const uint8_t *src[],
                                int srcStride[], int srcSliceY, int srcSliceH,

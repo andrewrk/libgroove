@@ -26,6 +26,7 @@
 #include <stdint.h>
 
 #include "avcodec.h"
+#include "dsputil.h"
 #include "get_bits.h"
 #include "put_bits.h"
 #include "rangecoder.h"
@@ -104,6 +105,8 @@ typedef struct FFV1Context {
 
     int gob_count;
     int quant_table_count;
+
+    DSPContext dsp;
 
     struct FFV1Context *slice_context[MAX_SLICES];
     int slice_count;

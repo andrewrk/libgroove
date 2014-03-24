@@ -24,8 +24,6 @@
  * This is a demuxer for Loki SDL Motion JPEG files
  */
 
-#include <inttypes.h>
-
 #include "avformat.h"
 #include "internal.h"
 #include "riff.h"
@@ -54,7 +52,7 @@ static int smjpeg_read_header(AVFormatContext *s)
     avio_skip(pb, 8); // magic
     version = avio_rb32(pb);
     if (version)
-        avpriv_request_sample(s, "Unknown version %"PRIu32, version);
+        avpriv_request_sample(s, "Unknown version %d", version);
 
     duration = avio_rb32(pb); // in msec
 
@@ -126,7 +124,7 @@ static int smjpeg_read_header(AVFormatContext *s)
         case SMJPEG_HEND:
             return 0;
         default:
-            av_log(s, AV_LOG_ERROR, "unknown header %"PRIx32"\n", htype);
+            av_log(s, AV_LOG_ERROR, "unknown header %x\n", htype);
             return AVERROR_INVALIDDATA;
         }
     }
@@ -166,7 +164,7 @@ static int smjpeg_read_packet(AVFormatContext *s, AVPacket *pkt)
         ret = AVERROR_EOF;
         break;
     default:
-        av_log(s, AV_LOG_ERROR, "unknown chunk %"PRIx32"\n", dtype);
+        av_log(s, AV_LOG_ERROR, "unknown chunk %x\n", dtype);
         ret = AVERROR_INVALIDDATA;
         break;
     }

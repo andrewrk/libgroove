@@ -1,6 +1,4 @@
 /*
- * Work around broken floating point limits on some systems.
- *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -18,5 +16,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include_next <limits.h>
-#include <float.h>
+#ifndef AVCODEC_SH4_DSPUTIL_SH4_H
+#define AVCODEC_SH4_DSPUTIL_SH4_H
+
+#include "libavcodec/avcodec.h"
+#include "libavcodec/dsputil.h"
+
+void ff_idct_sh4(int16_t *block);
+
+#endif /* AVCODEC_SH4_DSPUTIL_SH4_H */

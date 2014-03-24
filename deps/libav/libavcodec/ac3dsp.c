@@ -1,5 +1,5 @@
 /*
- * AC-3 DSP functions
+ * AC-3 DSP utils
  * Copyright (c) 2011 Justin Ruggles
  *
  * This file is part of Libav.

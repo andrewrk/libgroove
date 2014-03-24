@@ -29,8 +29,6 @@
  * http://wiki.multimedia.cx/index.php?title=IFF
  */
 
-#include <inttypes.h>
-
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
@@ -169,7 +167,7 @@ static int iff_read_header(AVFormatContext *s)
 
         case ID_CMAP:
             if (data_size < 3 || data_size > 768 || data_size % 3) {
-                 av_log(s, AV_LOG_ERROR, "Invalid CMAP chunk size %"PRIu32"\n",
+                 av_log(s, AV_LOG_ERROR, "Invalid CMAP chunk size %d\n",
                         data_size);
                  return AVERROR_INVALIDDATA;
             }
