@@ -766,6 +766,7 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
     } else {
         p->sink_map = map_entry;
     }
+    p->rebuild_filter_graph_flag = 1;
     p->sink_map_count += 1;
     return 0;
 }
