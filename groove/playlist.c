@@ -735,10 +735,11 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     struct SinkStack *stack_entry = av_mallocz(sizeof(struct SinkStack));
-    stack_entry->sink = sink;
 
     if (!stack_entry)
         return -1;
+
+    stack_entry->sink = sink;
 
     struct SinkMap *map_item = p->sink_map;
     while (map_item) {
