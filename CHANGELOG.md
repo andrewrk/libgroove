@@ -1,3 +1,10 @@
+### Version 3.0.8 (2014-04-01)
+
+ * loudness scanning: fix memory corruption when scanning large album
+ * update to libav10
+ * playlist: fix segfault on out of memory
+ * playlist: fix segfault race condition when adding a sink
+
 ### Version 3.0.7 (2014-03-16)
 
  * build: fix cmake warnings
