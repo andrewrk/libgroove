@@ -232,6 +232,7 @@ endif()
 include_directories(${PROJECT_BINARY_DIR})
 if(LIBAV_IS_BUNDLED)
   target_link_libraries(groove
+    ${CMAKE_DL_LIBS}
     ${LIBAV_INSTALL}/lib/libavfilter.a
     ${LIBAV_INSTALL}/lib/libavformat.a
     ${LIBAV_INSTALL}/lib/libavcodec.a
