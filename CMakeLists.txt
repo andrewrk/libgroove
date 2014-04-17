@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 2.8)
 project(groove C)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 include(ExternalProject)
-include(GNUInstallDirs)
 
 set(LIBGROOVE_STATUS "yes")
 set(LIBGROOVE_VERSION_MAJOR 3)
@@ -264,15 +263,15 @@ set_target_properties(groove_static PROPERTIES
 if(LIBAV_IS_BUNDLED)
   add_dependencies(groove_static libav)
 endif()
-install(TARGETS groove_static DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS groove_static DESTINATION lib)
 
 
 install(FILES
   "groove/groove.h"
   "groove/queue.h"
   "groove/encoder.h"
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/groove")
-install(TARGETS groove DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  DESTINATION "include/groove")
+install(TARGETS groove DESTINATION lib)
 
 add_executable(metadata example/metadata.c)
 set_target_properties(metadata PROPERTIES
@@ -310,8 +309,8 @@ else()
   endif()
   include_directories(${SDL2_INCLUDE_DIR})
 
-  install(FILES "grooveplayer/player.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/grooveplayer")
-  install(TARGETS grooveplayer DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(FILES "grooveplayer/player.h" DESTINATION "include/grooveplayer")
+  install(TARGETS grooveplayer DESTINATION lib)
 
   add_library(grooveplayer_static STATIC
     ${LIBGROOVE_PLAYER_SOURCES}
@@ -322,7 +321,7 @@ else()
   if(SDL2_IS_BUNDLED)
     add_dependencies(grooveplayer_static SDL2-static)
   endif()
-  install(TARGETS grooveplayer_static DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(TARGETS grooveplayer_static DESTINATION lib)
 
 
   add_executable(playlist example/playlist.c ${PROJECT_SOURCE_DIR}/grooveplayer/player.h)
@@ -356,8 +355,8 @@ else()
   endif()
   include_directories(${EBUR128_INCLUDE_DIR})
 
-  install(FILES "grooveloudness/loudness.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/grooveloudness")
-  install(TARGETS grooveloudness DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(FILES "grooveloudness/loudness.h" DESTINATION "include/grooveloudness")
+  install(TARGETS grooveloudness DESTINATION lib)
 
 
   add_library(grooveloudness_static STATIC
@@ -369,7 +368,7 @@ else()
   if(EBUR128_IS_BUNDLED)
     add_dependencies(grooveloudness_static ebur128_static)
   endif()
-  install(TARGETS grooveloudness_static DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(TARGETS grooveloudness_static DESTINATION lib)
 
 
   add_executable(replaygain example/replaygain.c)
