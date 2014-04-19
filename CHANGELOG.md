@@ -1,3 +1,9 @@
+### Version 3.1.0 (2014-04-19)
+
+ * add acoustid fingerprinter sink. Closes #19
+ * build: revert GNUInstallDirs
+ * update to libav 10.1
+
 ### Version 3.0.8 (2014-04-01)
 
  * loudness scanning: fix memory corruption when scanning large album
