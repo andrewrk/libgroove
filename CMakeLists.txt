@@ -30,6 +30,15 @@ else(DISABLE_LOUDNESS)
   file(GLOB_RECURSE LIBGROOVE_LOUDNESS_HEADERS ${CMAKE_SOURCE_DIR}/grooveloudness/*.h)
 endif(DISABLE_LOUDNESS)
 
+if(DISABLE_FINGERPRINTER)
+  set(LIBGROOVE_FINGERPRINTER_STATUS "no")
+else(DISABLE_FINGERPRINTER)
+  set(LIBGROOVE_FINGERPRINTER_STATUS "yes")
+  message("Configuring libgroovefingerprinter version ${LIBGROOVE_VERSION}")
+  file(GLOB_RECURSE LIBGROOVE_FINGERPRINTER_SOURCES ${CMAKE_SOURCE_DIR}/groovefingerprinter/*.c)
+  file(GLOB_RECURSE LIBGROOVE_FINGERPRINTER_HEADERS ${CMAKE_SOURCE_DIR}/groovefingerprinter/*.h)
+endif(DISABLE_FINGERPRINTER)
+
 # check for C99
 find_package(C99)
 if(C99_FLAG_DETECTED)
@@ -62,6 +71,18 @@ else(DISABLE_LOUDNESS)
     set(EBUR128_INCLUDE_DIR ${EBUR128_SRC})
   endif(EBUR128_FOUND)
 endif(DISABLE_LOUDNESS)
+
+# check for chromaprint
+if(DISABLE_FINGERPRINTER)
+  set(STATUS_CHROMAPRINT, "not needed")
+else(DISABLE_FINGERPRINTER)
+  find_package(Chromaprint)
+  if(CHROMAPRINT_FOUND)
+    set(STATUS_CHROMAPRINT "OK")
+  else(CHROMAPRINT_FOUND)
+    set(STATUS_CHROMAPRINT "not found")
+  endif(CHROMAPRINT_FOUND)
+endif(DISABLE_FINGERPRINTER)
 
 # check for SDL2
 if(DISABLE_PLAYER)
@@ -379,6 +400,42 @@ else()
   add_dependencies(replaygain groove grooveloudness)
 endif()
 
+if(DISABLE_FINGERPRINTER)
+else()
+  add_library(groovefingerprinter SHARED
+    ${LIBGROOVE_FINGERPRINTER_SOURCES}
+    ${LIBGROOVE_FINGERPRINTER_HEADERS})
+  set_target_properties(groovefingerprinter PROPERTIES
+    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
+    VERSION ${LIBGROOVE_VERSION}
+    COMPILE_FLAGS ${LIB_CFLAGS}
+    )
+  target_link_libraries(groovefingerprinter LINK_PUBLIC groove ${CMAKE_THREAD_LIBS_INIT})
+  add_dependencies(groovefingerprinter groove)
+  target_link_libraries(groovefingerprinter LINK_PRIVATE ${CHROMAPRINT_LIBRARIES})
+  include_directories(${CHROMAPRINT_INCLUDE_DIR})
+
+  install(FILES "groovefingerprinter/fingerprinter.h" DESTINATION "include/groovefingerprinter")
+  install(TARGETS groovefingerprinter DESTINATION lib)
+
+
+  add_library(groovefingerprinter_static STATIC
+    ${LIBGROOVE_FINGERPRINTER_SOURCES}
+    ${LIBGROOVE_FINGERPRINTER_HEADERS})
+  set_target_properties(groovefingerprinter_static PROPERTIES
+    OUTPUT_NAME groovefingerprinter
+    COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
+  install(TARGETS groovefingerprinter_static DESTINATION lib)
+
+
+  add_executable(fingerprint example/fingerprint.c)
+  set_target_properties(fingerprint PROPERTIES
+    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+  include_directories(${EXAMPLE_INCLUDES})
+  target_link_libraries(fingerprint groove groovefingerprinter)
+  add_dependencies(fingerprint groove groovefingerprinter)
+endif()
+
 message("\n"
 "Installation Summary\n"
 "--------------------\n"
@@ -386,6 +443,7 @@ message("\n"
 "* Build libgroove              : ${LIBGROOVE_STATUS}\n"
 "* Build libgrooveplayer        : ${LIBGROOVE_PLAYER_STATUS}\n"
 "* Build libgrooveloudness      : ${LIBGROOVE_LOUDNESS_STATUS}\n"
+"* Build libgroovefingerprinter : ${LIBGROOVE_FINGERPRINTER_STATUS}\n"
 )
 
 message(
@@ -403,6 +461,7 @@ message(
 "* threads                      : ${STATUS_THREADS}\n"
 "* SDL2                         : ${STATUS_SDL2}\n"
 "* ebur128                      : ${STATUS_EBUR128}\n"
+"* chromaprint                  : ${STATUS_CHROMAPRINT}\n"
 "* libavformat                  : ${STATUS_LIBAVFORMAT}\n"
 "* libavcodec                   : ${STATUS_LIBAVCODEC}\n"
 "* libavfilter                  : ${STATUS_LIBAVFILTER}\n"
