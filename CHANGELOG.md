@@ -1,3 +1,11 @@
+### Version 3.1.1 (2014-04-21)
+ * fingerprinter example: add --raw option
+ * fingerprinter sink: add error checking to chromaprint function calls
+ * fingerprinter sink: fix documentation. raw fingerprints are signed 32-bit
+   integers, not unsigned 32-bit integers.
+ * fingerprinter sink: change `void *` to `int32_t *` for encode/decode
+   functions
+
 ### Version 3.1.0 (2014-04-19)
 
  * add acoustid fingerprinter sink. Closes #19
