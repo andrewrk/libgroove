@@ -8,12 +8,12 @@
 #ifndef GROOVE_LOUDNESS_H_INCLUDED
 #define GROOVE_LOUDNESS_H_INCLUDED
 
+#include <groove/groove.h>
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif /* __cplusplus */
-
-#include <groove/groove.h>
 
 struct GrooveLoudnessDetectorInfo {
     /* loudness is in LUFS. 1 LUFS == 1 dB

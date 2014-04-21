@@ -60,12 +60,20 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
     info->duration = d->track_duration;
 
     ebur128_state *cur_track_state = d->all_track_states[d->cur_track_index];
-    ebur128_loudness_global(cur_track_state, &info->loudness);
-    ebur128_sample_peak(cur_track_state, 0, &info->peak);
-    double out;
-    ebur128_sample_peak(cur_track_state, 1, &out);
-    if (out > info->peak) info->peak = out;
-    if (info->peak > d->album_peak) d->album_peak = info->peak;
+    if (!cur_track_state) {
+        // we received the end before we expected it. This happens for example
+        // when a DRM-protected song is played. In this situation, set duration to 0
+        // to indicate no song data.
+        info->loudness = 0;
+        info->peak = 0;
+    } else {
+        ebur128_loudness_global(cur_track_state, &info->loudness);
+        ebur128_true_peak(cur_track_state, 0, &info->peak);
+        double out;
+        ebur128_true_peak(cur_track_state, 1, &out);
+        if (out > info->peak) info->peak = out;
+        if (info->peak > d->album_peak) d->album_peak = info->peak;
+    }
 
     groove_queue_put(d->info_queue, info);
 
@@ -74,12 +82,13 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
 
 static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
     int new_size = d->state_history_count * 2;
-    d->all_track_states = realloc(d->all_track_states, new_size);
+    d->all_track_states = realloc(d->all_track_states, new_size * sizeof(ebur128_state *));
     if (!d->all_track_states) {
         av_log(NULL, AV_LOG_ERROR, "unable to reallocate state pointer array\n");
         return -1;
     }
-    memset(d->all_track_states + d->state_history_count, 0, new_size - d->state_history_count);
+    int zero_count = new_size - d->state_history_count;
+    memset(d->all_track_states + d->state_history_count, 0, zero_count * sizeof(ebur128_state *));
     d->state_history_count = new_size;
     return 0;
 }
@@ -165,7 +174,7 @@ static void *detect_thread(void *arg) {
                 }
             }
             d->all_track_states[d->cur_track_index] = ebur128_init(2, 44100,
-                    EBUR128_MODE_SAMPLE_PEAK|EBUR128_MODE_I);
+                    EBUR128_MODE_TRUE_PEAK|EBUR128_MODE_I);
             if (!d->all_track_states[d->cur_track_index]) {
                 av_log(NULL, AV_LOG_ERROR, "unable to allocate EBU R128 track context\n");
             }
@@ -384,6 +393,7 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector) {
     d->abort_request = 0;
     d->info_head = NULL;
     d->info_pos = 0;
+    d->track_duration = 0.0;
 
     return 0;
 }

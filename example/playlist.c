@@ -3,12 +3,18 @@
 #include <grooveplayer/player.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+static int usage(const char *exe) {
+    fprintf(stderr, "Usage: %s [--volume 1.0] file1 file2 ...\n", exe);
+    return 1;
+}
 
 int main(int argc, char * argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s file1 file2 ...\n", argv[0]);
-        return 1;
-    }
+    // parse arguments
+    const char *exe = argv[0];
+    if (argc < 2) return usage(exe);
+
     groove_init();
     atexit(groove_finish);
     groove_set_logging(GROOVE_LOG_INFO);
@@ -20,18 +26,29 @@ int main(int argc, char * argv[]) {
     }
 
     struct GroovePlayer *player = groove_player_create();
-    groove_player_attach(player, playlist);
 
     for (int i = 1; i < argc; i += 1) {
-        char * filename = argv[i];
-        struct GrooveFile * file = groove_file_open(filename);
-        if (!file) {
-            fprintf(stderr, "Not queuing %s\n", filename);
-            continue;
+        char *arg = argv[i];
+        if (arg[0] == '-' && arg[1] == '-') {
+            arg += 2;
+            if (i + 1 >= argc) {
+                return usage(exe);
+            } else if (strcmp(arg, "volume") == 0) {
+                double volume = atof(argv[++i]);
+                groove_playlist_set_volume(playlist, volume);
+            } else {
+                return usage(exe);
+            }
+        } else {
+            struct GrooveFile * file = groove_file_open(arg);
+            if (!file) {
+                fprintf(stderr, "Not queuing %s\n", arg);
+                continue;
+            }
+            groove_playlist_insert(playlist, file, 1.0, NULL);
         }
-        groove_playlist_insert(playlist, file, 1.0, NULL);
     }
-    groove_playlist_play(playlist);
+    groove_player_attach(player, playlist);
 
     union GroovePlayerEvent event;
     struct GroovePlaylistItem *item;

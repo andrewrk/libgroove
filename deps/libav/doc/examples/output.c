@@ -24,9 +24,9 @@
  * @file
  * libavformat API example.
  *
- * @example doc/examples/output.c
- * Output a media file in any supported libavformat format.
- * The default codecs are used.
+ * @example output.c
+ * Output a media file in any supported libavformat format. The default
+ * codecs are used.
  */
 
 #include <stdlib.h>

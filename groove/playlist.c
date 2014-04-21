@@ -56,6 +56,7 @@ struct GroovePlaylistPrivate {
     AVFilterGraph *filter_graph;
     AVFilterContext *abuffer_ctx;
     AVFilterContext *volume_ctx;
+    AVFilterContext *compand_ctx;
     AVFilterContext *asplit_ctx;
 
     // this mutex applies to the variables in this block
@@ -249,8 +250,16 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
     return max_data_size;
 }
 
+static const double dB_scale = 0.1151292546497023; // log(10) * 0.05
+
+static double gain_to_dB(double gain) {
+    return log(gain) / dB_scale;
+}
+
 // abuffer -> volume -> asplit for each audio format
 //                     -> aformat -> abuffersink
+// if the volume gain is > 1.0, we use a compand filter instead
+// for soft limiting.
 static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile *file) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
@@ -267,6 +276,7 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
 
     AVFilter *abuffer = avfilter_get_by_name("abuffer");
     AVFilter *volume = avfilter_get_by_name("volume");
+    AVFilter *compand = avfilter_get_by_name("compand");
     AVFilter *asplit = avfilter_get_by_name("asplit");
     AVFilter *aformat = avfilter_get_by_name("aformat");
     AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
@@ -299,13 +309,12 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
     // save the volume value so we can compare later and check
     // whether we have to reconstruct the graph
     p->filter_volume = p->volume;
-    // if volume is not equal to 1.0, create volume filter
+    // if volume is < 1.0, create volume filter
+    //             == 1.0, do not create a filter
+    //              > 1.0, create a compand filter (for soft limiting)
     double vol = p->volume;
-    if (vol > 1.0) vol = 1.0;
     if (vol < 0.0) vol = 0.0;
-    if (vol == 1.0) {
-        p->volume_ctx = NULL;
-    } else {
+    if (vol < 1.0) {
         snprintf(p->strbuf, sizeof(p->strbuf), "volume=%f", vol);
         av_log(NULL, AV_LOG_INFO, "volume: %s\n", p->strbuf);
         err = avfilter_graph_create_filter(&p->volume_ctx, volume, NULL,
@@ -320,6 +329,31 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
             return err;
         }
         audio_src_ctx = p->volume_ctx;
+    } else if (vol > 1.0) {
+        double attack = 0.1;
+        double decay = 0.2;
+        const char *points = "-2/-2";
+        double soft_knee = 0.02;
+        double gain = gain_to_dB(vol);
+        double volume_param = 0.0;
+        double delay = 0.2;
+        snprintf(p->strbuf, sizeof(p->strbuf), "%f:%f:%s:%f:%f:%f:%f",
+                attack, decay, points, soft_knee, gain, volume_param, delay);
+        av_log(NULL, AV_LOG_INFO, "compand: %s\n", p->strbuf);
+        err = avfilter_graph_create_filter(&p->compand_ctx, compand, NULL,
+                p->strbuf, NULL, p->filter_graph);
+        if (err < 0) {
+            av_log(NULL, AV_LOG_ERROR, "error initializing compand filter\n");
+            return err;
+        }
+        err = avfilter_link(audio_src_ctx, 0, p->compand_ctx, 0);
+        if (err < 0) {
+            av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
+            return err;
+        }
+        audio_src_ctx = p->compand_ctx;
+    } else {
+        p->volume_ctx = NULL;
     }
 
     // if only one sink, no need for asplit
@@ -394,7 +428,9 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
 
     err = avfilter_graph_config(p->filter_graph, NULL);
     if (err < 0) {
-        av_log(NULL, AV_LOG_ERROR, "error configuring the filter graph\n");
+        av_strerror(err, p->strbuf, sizeof(p->strbuf));
+        av_log(NULL, AV_LOG_ERROR, "error configuring the filter graph: %s\n",
+                p->strbuf);
         return err;
     }
 
@@ -699,10 +735,11 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     struct SinkStack *stack_entry = av_mallocz(sizeof(struct SinkStack));
-    stack_entry->sink = sink;
 
     if (!stack_entry)
         return -1;
+
+    stack_entry->sink = sink;
 
     struct SinkMap *map_item = p->sink_map;
     while (map_item) {
@@ -729,6 +766,7 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
     } else {
         p->sink_map = map_entry;
     }
+    p->rebuild_filter_graph_flag = 1;
     p->sink_map_count += 1;
     return 0;
 }

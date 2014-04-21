@@ -94,10 +94,7 @@ struct GrooveFile *groove_file_open(char *filename) {
     }
 
     // copy the audio stream metadata to the context metadata
-    AVDictionaryEntry *tag = NULL;
-    while((tag = av_dict_get(f->audio_st->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
-        av_dict_set(&f->ic->metadata, tag->key, tag->value, AV_DICT_IGNORE_SUFFIX);
-    }
+    av_dict_copy(&f->ic->metadata, f->audio_st->metadata, 0);
 
     return file;
 }
@@ -159,7 +156,9 @@ struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *
 {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     const AVDictionaryEntry *e = (const AVDictionaryEntry *) prev;
-    return (struct GrooveTag *) av_dict_get(f->ic->metadata, key, e, flags|AV_DICT_IGNORE_SUFFIX);
+    if (key && key[0] == 0)
+        flags |= AV_DICT_IGNORE_SUFFIX;
+    return (struct GrooveTag *) av_dict_get(f->ic->metadata, key, e, flags);
 }
 
 int groove_file_metadata_set(struct GrooveFile *file, const char *key,
@@ -167,7 +166,7 @@ int groove_file_metadata_set(struct GrooveFile *file, const char *key,
 {
     file->dirty = 1;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
-    return av_dict_set(&f->ic->metadata, key, value, flags|AV_DICT_IGNORE_SUFFIX);
+    return av_dict_set(&f->ic->metadata, key, value, flags);
 }
 
 const char *groove_tag_key(struct GrooveTag *tag) {
@@ -333,10 +332,7 @@ int groove_file_save(struct GrooveFile *file) {
     }
 
     // set metadata
-    AVDictionaryEntry *tag = NULL;
-    while((tag = av_dict_get(f->ic->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
-        av_dict_set(&f->oc->metadata, tag->key, tag->value, AV_DICT_IGNORE_SUFFIX);
-    }
+    av_dict_copy(&f->oc->metadata, f->ic->metadata, 0);
 
     if (avformat_write_header(f->oc, NULL) < 0) {
         cleanup_save(file);

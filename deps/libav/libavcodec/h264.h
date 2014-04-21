@@ -120,7 +120,7 @@ enum {
  * SEI message types
  */
 typedef enum {
-    SEI_BUFFERING_PERIOD            = 0,   ///< buffering period (H.264, D.1.1)
+    SEI_TYPE_BUFFERING_PERIOD       = 0,   ///< buffering period (H.264, D.1.1)
     SEI_TYPE_PIC_TIMING             = 1,   ///< picture timing
     SEI_TYPE_USER_DATA_UNREGISTERED = 5,   ///< unregistered user data
     SEI_TYPE_RECOVERY_POINT         = 6,   ///< recovery point (frame # to decoder sync)
@@ -146,6 +146,7 @@ typedef enum {
  * Sequence parameter set
  */
 typedef struct SPS {
+    unsigned int sps_id;
     int profile_idc;
     int level_idc;
     int chroma_format_idc;
@@ -353,13 +354,8 @@ typedef struct H264Context {
     ptrdiff_t mb_linesize;  ///< may be equal to s->linesize or s->linesize * 2, for mbaff
     ptrdiff_t mb_uvlinesize;
 
-    unsigned current_sps_id; ///< id of the current SPS
     SPS sps; ///< current sps
-
-    /**
-     * current pps
-     */
-    PPS pps; // FIXME move to Picture perhaps? (->no) do we need that?
+    PPS pps; ///< current pps
 
     uint32_t dequant4_buffer[6][QP_MAX_NUM + 1][16]; // FIXME should these be moved down?
     uint32_t dequant8_buffer[6][QP_MAX_NUM + 1][64];

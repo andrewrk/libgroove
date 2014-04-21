@@ -5,8 +5,8 @@ include(ExternalProject)
 
 set(LIBGROOVE_STATUS "yes")
 set(LIBGROOVE_VERSION_MAJOR 3)
-set(LIBGROOVE_VERSION_MINOR 0)
-set(LIBGROOVE_VERSION_PATCH 4)
+set(LIBGROOVE_VERSION_MINOR 1)
+set(LIBGROOVE_VERSION_PATCH 1)
 set(LIBGROOVE_VERSION "${LIBGROOVE_VERSION_MAJOR}.${LIBGROOVE_VERSION_MINOR}.${LIBGROOVE_VERSION_PATCH}")
 message("Configuring libgroove version ${LIBGROOVE_VERSION}")
 file(GLOB_RECURSE LIBGROOVE_SOURCES ${CMAKE_SOURCE_DIR}/groove/*.c)
@@ -29,6 +29,15 @@ else(DISABLE_LOUDNESS)
   file(GLOB_RECURSE LIBGROOVE_LOUDNESS_SOURCES ${CMAKE_SOURCE_DIR}/grooveloudness/*.c)
   file(GLOB_RECURSE LIBGROOVE_LOUDNESS_HEADERS ${CMAKE_SOURCE_DIR}/grooveloudness/*.h)
 endif(DISABLE_LOUDNESS)
+
+if(DISABLE_FINGERPRINTER)
+  set(LIBGROOVE_FINGERPRINTER_STATUS "no")
+else(DISABLE_FINGERPRINTER)
+  set(LIBGROOVE_FINGERPRINTER_STATUS "yes")
+  message("Configuring libgroovefingerprinter version ${LIBGROOVE_VERSION}")
+  file(GLOB_RECURSE LIBGROOVE_FINGERPRINTER_SOURCES ${CMAKE_SOURCE_DIR}/groovefingerprinter/*.c)
+  file(GLOB_RECURSE LIBGROOVE_FINGERPRINTER_HEADERS ${CMAKE_SOURCE_DIR}/groovefingerprinter/*.h)
+endif(DISABLE_FINGERPRINTER)
 
 # check for C99
 find_package(C99)
@@ -62,6 +71,18 @@ else(DISABLE_LOUDNESS)
     set(EBUR128_INCLUDE_DIR ${EBUR128_SRC})
   endif(EBUR128_FOUND)
 endif(DISABLE_LOUDNESS)
+
+# check for chromaprint
+if(DISABLE_FINGERPRINTER)
+  set(STATUS_CHROMAPRINT, "not needed")
+else(DISABLE_FINGERPRINTER)
+  find_package(Chromaprint)
+  if(CHROMAPRINT_FOUND)
+    set(STATUS_CHROMAPRINT "OK")
+  else(CHROMAPRINT_FOUND)
+    set(STATUS_CHROMAPRINT "not found")
+  endif(CHROMAPRINT_FOUND)
+endif(DISABLE_FINGERPRINTER)
 
 # check for SDL2
 if(DISABLE_PLAYER)
@@ -231,6 +252,7 @@ endif()
 include_directories(${PROJECT_BINARY_DIR})
 if(LIBAV_IS_BUNDLED)
   target_link_libraries(groove
+    ${CMAKE_DL_LIBS}
     ${LIBAV_INSTALL}/lib/libavfilter.a
     ${LIBAV_INSTALL}/lib/libavformat.a
     ${LIBAV_INSTALL}/lib/libavcodec.a
@@ -245,14 +267,14 @@ if(LIBAV_IS_BUNDLED)
   include_directories(${LIBAV_INSTALL}/include)
   add_dependencies(groove libav)
 else()
-  target_link_libraries(groove
+  target_link_libraries(groove LINK_PRIVATE
     ${LIBAV_AVCODEC_LIBRARIES}
     ${LIBAV_AVFILTER_LIBRARIES}
-    ${LIBAV_AVFORMAT_LIBRARIES}
-    ${LIBAV_AVUTIL_LIBRARIES})
+    ${LIBAV_AVFORMAT_LIBRARIES})
+  target_link_libraries(groove LINK_PUBLIC ${LIBAV_AVUTIL_LIBRARIES})
   include_directories(${LIBAV_INCLUDE_DIRS})
 endif()
-target_link_libraries(groove ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(groove LINK_PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 
 add_library(groove_static STATIC ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
@@ -298,13 +320,13 @@ else()
     VERSION ${LIBGROOVE_VERSION}
     COMPILE_FLAGS ${LIB_CFLAGS}
     )
-  target_link_libraries(grooveplayer groove)
+  target_link_libraries(grooveplayer LINK_PUBLIC groove)
   add_dependencies(grooveplayer groove)
   if(SDL2_IS_BUNDLED)
     target_link_libraries(grooveplayer SDL2-static)
     add_dependencies(grooveplayer SDL2-static)
   else()
-    target_link_libraries(grooveplayer ${SDL2_LIBRARY})
+    target_link_libraries(grooveplayer LINK_PRIVATE ${SDL2_LIBRARY})
   endif()
   include_directories(${SDL2_INCLUDE_DIR})
 
@@ -341,16 +363,16 @@ else()
     VERSION ${LIBGROOVE_VERSION}
     COMPILE_FLAGS ${LIB_CFLAGS}
     )
-  target_link_libraries(grooveloudness groove ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries(grooveloudness LINK_PUBLIC groove ${CMAKE_THREAD_LIBS_INIT})
   add_dependencies(grooveloudness groove)
   if(EBUR128_IS_BUNDLED)
     target_link_libraries(grooveloudness ebur128_static)
     add_dependencies(grooveloudness ebur128_static)
     if(SPEEXDSP_FOUND)
-      target_link_libraries(groove ${SPEEXDSP_LIBRARIES})
+      target_link_libraries(grooveloudness ${SPEEXDSP_LIBRARIES})
     endif(SPEEXDSP_FOUND)
   else()
-    target_link_libraries(groove ${EBUR128_LIBRARY})
+    target_link_libraries(grooveloudness LINK_PRIVATE ${EBUR128_LIBRARY})
   endif()
   include_directories(${EBUR128_INCLUDE_DIR})
 
@@ -378,6 +400,42 @@ else()
   add_dependencies(replaygain groove grooveloudness)
 endif()
 
+if(DISABLE_FINGERPRINTER)
+else()
+  add_library(groovefingerprinter SHARED
+    ${LIBGROOVE_FINGERPRINTER_SOURCES}
+    ${LIBGROOVE_FINGERPRINTER_HEADERS})
+  set_target_properties(groovefingerprinter PROPERTIES
+    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
+    VERSION ${LIBGROOVE_VERSION}
+    COMPILE_FLAGS ${LIB_CFLAGS}
+    )
+  target_link_libraries(groovefingerprinter LINK_PUBLIC groove ${CMAKE_THREAD_LIBS_INIT})
+  add_dependencies(groovefingerprinter groove)
+  target_link_libraries(groovefingerprinter LINK_PRIVATE ${CHROMAPRINT_LIBRARIES})
+  include_directories(${CHROMAPRINT_INCLUDE_DIR})
+
+  install(FILES "groovefingerprinter/fingerprinter.h" DESTINATION "include/groovefingerprinter")
+  install(TARGETS groovefingerprinter DESTINATION lib)
+
+
+  add_library(groovefingerprinter_static STATIC
+    ${LIBGROOVE_FINGERPRINTER_SOURCES}
+    ${LIBGROOVE_FINGERPRINTER_HEADERS})
+  set_target_properties(groovefingerprinter_static PROPERTIES
+    OUTPUT_NAME groovefingerprinter
+    COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
+  install(TARGETS groovefingerprinter_static DESTINATION lib)
+
+
+  add_executable(fingerprint example/fingerprint.c)
+  set_target_properties(fingerprint PROPERTIES
+    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+  include_directories(${EXAMPLE_INCLUDES})
+  target_link_libraries(fingerprint groove groovefingerprinter)
+  add_dependencies(fingerprint groove groovefingerprinter)
+endif()
+
 message("\n"
 "Installation Summary\n"
 "--------------------\n"
@@ -385,6 +443,7 @@ message("\n"
 "* Build libgroove              : ${LIBGROOVE_STATUS}\n"
 "* Build libgrooveplayer        : ${LIBGROOVE_PLAYER_STATUS}\n"
 "* Build libgrooveloudness      : ${LIBGROOVE_LOUDNESS_STATUS}\n"
+"* Build libgroovefingerprinter : ${LIBGROOVE_FINGERPRINTER_STATUS}\n"
 )
 
 message(
@@ -402,6 +461,7 @@ message(
 "* threads                      : ${STATUS_THREADS}\n"
 "* SDL2                         : ${STATUS_SDL2}\n"
 "* ebur128                      : ${STATUS_EBUR128}\n"
+"* chromaprint                  : ${STATUS_CHROMAPRINT}\n"
 "* libavformat                  : ${STATUS_LIBAVFORMAT}\n"
 "* libavcodec                   : ${STATUS_LIBAVCODEC}\n"
 "* libavfilter                  : ${STATUS_LIBAVFILTER}\n"

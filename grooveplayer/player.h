@@ -8,12 +8,12 @@
 #ifndef GROOVE_PLAYER_H_INCLUDED
 #define GROOVE_PLAYER_H_INCLUDED
 
+#include <groove/groove.h>
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif /* __cplusplus */
-
-#include <groove/groove.h>
 
 /* use this to make a playlist utilize your speakers */
 

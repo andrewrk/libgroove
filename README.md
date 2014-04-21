@@ -24,14 +24,15 @@ music player.
    * **loudness scanner sink** - uses the [EBU R 128](http://tech.ebu.ch/loudness)
      standard to detect loudness. The values it produces are compatible with
      [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification).
-   * ([on the roadmap](https://github.com/andrewrk/libgroove/issues/19)) accoustid fingerprint
+   * **fingerprint sink** - uses [chromaprint](acoustid.org/chromaprint) to
+     generate unique song IDs that can be used with the acoustid service.
  * Thread-safe.
  * Example programs included:
    * `playlist` - play a series of songs with gapless playback
    * `metadata` - read or update song metadata
    * `replaygain` - report the suggested replaygain for a set of files
    * `transcode` - transcode one or more files into one output file
- * Cross-platform.
+   * `fingerprint` - generate acoustid fingerprints for one or more files
 
 ## Dependencies
 
@@ -45,6 +46,7 @@ so that you can still compile if they cannot be found on your system.
    - [libmp3lame-dev](http://lame.sourceforge.net/)
  * [libebur128](https://github.com/jiixyj/libebur128) (bundled)
  * [libsdl2-dev](http://www.libsdl.org/) (bundled)
+ * [libchromaprint-dev](http://acoustid.org/chromaprint)
 
 ## Installation
 
@@ -55,8 +57,9 @@ so that you can still compile if they cannot be found on your system.
    ```
    sudo apt-add-repository ppa:andrewrk/libgroove
    sudo apt-get update
-   sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev
+   sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev libgroovefingerprinter-dev
    ```
+ * [Debian experimental](http://serverfault.com/questions/22414)
 
 ### From Source
 
@@ -68,9 +71,9 @@ so that you can still compile if they cannot be found on your system.
 ## Documentation
 
  * Check out the example programs in the example folder.
- * Read some header files for the relevant APIs:
+ * Read header files for the relevant APIs:
    * groove/groove.h
-     - global stuff
+     - globals
      - GrooveFile
      - GroovePlaylist
      - GrooveBuffer
@@ -81,6 +84,8 @@ so that you can still compile if they cannot be found on your system.
      - GroovePlayer
    * grooveloudness/loudness.h
      - GrooveLoudnessDetector
+   * groovefingerprinter/fingerprinter.h
+     - GrooveFingerprinter
  * Join #libgroove on irc.freenode.org and ask questions.
 
 ## Projects Using libgroove
