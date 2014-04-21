@@ -63,7 +63,9 @@ static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
         av_log(NULL, AV_LOG_ERROR, "unable to finish chromaprint\n");
         return -1;
     }
-    if (!chromaprint_get_fingerprint(p->chroma_ctx, &info->fingerprint)) {
+    if (!chromaprint_get_raw_fingerprint(p->chroma_ctx,
+                (void **)&info->fingerprint, &info->fingerprint_size))
+    {
         av_log(NULL, AV_LOG_ERROR, "unable to get fingerprint\n");
         return -1;
     }

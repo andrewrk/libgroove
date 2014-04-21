@@ -52,14 +52,14 @@ int main(int argc, char * argv[]) {
                     info.duration,
                     info.item->file->filename);
             if (raw) {
-                int size;
-                int32_t *raw_fingerprint;
-                groove_fingerprinter_decode(info.fingerprint, &raw_fingerprint, &size);
-                for (int i = 0; i < size; i += 1) {
-                    printf("%"PRId32"\n", raw_fingerprint[i]);
+                for (int i = 0; i < info.fingerprint_size; i += 1) {
+                    printf("%"PRId32"\n", info.fingerprint[i]);
                 }
             } else {
-                printf("%s\n", info.fingerprint);
+                char *encoded_fp;
+                groove_fingerprinter_encode(info.fingerprint, info.fingerprint_size, &encoded_fp);
+                printf("%s\n", encoded_fp);
+                groove_fingerprinter_dealloc(encoded_fp);
             }
             groove_fingerprinter_free_info(&info);
         } else {

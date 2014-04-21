@@ -18,8 +18,11 @@ extern "C"
 /* use this to find out the unique id of an audio track */
 
 struct GrooveFingerprinterInfo {
-    /* Compressed string. */
-    char *fingerprint;
+    /* a fingerprint is an array of signed 32-bit integers. If you want to
+     * submit the fingerprint to acoustid.org service, use groove_fingerprinter_encode.*/
+    int32_t *fingerprint;
+    int fingerprint_size;
+
     /* how many seconds long this song is */
     double duration;
 
