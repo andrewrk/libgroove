@@ -86,7 +86,7 @@ void groove_fingerprinter_position(struct GrooveFingerprinter *printer,
  * groove_fingerprinter_dealloc().
  *
  * Parameters:
- *  - fp: pointer to an array of unsigned 32-bit integers representing the raw
+ *  - fp: pointer to an array of signed 32-bit integers representing the raw
  *        fingerprint to be encoded
  *  - size: number of items in the raw fingerprint
  *  - encoded_fp: pointer to a pointer, where the encoded fingerprint will be
@@ -95,7 +95,7 @@ void groove_fingerprinter_position(struct GrooveFingerprinter *printer,
  * Returns:
  *  - 0 on error, 1 on success
  */
-int groove_fingerprinter_encode(void *fp, int size, char **encoded_fp);
+int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp);
 
 /**
  * Uncompress and base64-decode an encoded fingerprint
@@ -107,13 +107,13 @@ int groove_fingerprinter_encode(void *fp, int size, char **encoded_fp);
  *  - encoded_fp: Pointer to an encoded fingerprint
  *  - encoded_size: Size of the encoded fingerprint in bytes
  *  - fp: Pointer to a pointer, where the decoded raw fingerprint (array
- *        of unsigned 32-bit integers) will be stored
+ *        of signed 32-bit integers) will be stored
  *  - size: Number of items in the returned raw fingerprint
  *
  * Returns:
  *  - 0 on error, 1 on success
  */
-int groove_fingerprinter_decode(char *encoded_fp, void **fp, int *size);
+int groove_fingerprinter_decode(char *encoded_fp, int32_t **fp, int *size);
 
 void groove_fingerprinter_dealloc(void *ptr);
 

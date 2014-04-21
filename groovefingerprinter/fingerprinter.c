@@ -59,8 +59,14 @@ static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
     info->item = p->info_head;
     info->duration = p->track_duration;
 
-    chromaprint_finish(p->chroma_ctx);
-    chromaprint_get_fingerprint(p->chroma_ctx, &info->fingerprint);
+    if (!chromaprint_finish(p->chroma_ctx)) {
+        av_log(NULL, AV_LOG_ERROR, "unable to finish chromaprint\n");
+        return -1;
+    }
+    if (!chromaprint_get_fingerprint(p->chroma_ctx, &info->fingerprint)) {
+        av_log(NULL, AV_LOG_ERROR, "unable to get fingerprint\n");
+        return -1;
+    }
 
     groove_queue_put(p->info_queue, info);
 
@@ -122,7 +128,9 @@ static void *print_thread(void *arg) {
             if (p->info_head) {
                 emit_track_info(p);
             }
-            chromaprint_start(p->chroma_ctx, 44100, 2);
+            if (!chromaprint_start(p->chroma_ctx, 44100, 2)) {
+                av_log(NULL, AV_LOG_ERROR, "unable to start fingerprint\n");
+            }
             p->track_duration = 0.0;
             p->info_head = buffer->item;
             p->info_pos = buffer->pos;
@@ -131,7 +139,9 @@ static void *print_thread(void *arg) {
         double buffer_duration = buffer->frame_count / (double)buffer->format.sample_rate;
         p->track_duration += buffer_duration;
         p->album_duration += buffer_duration;
-        chromaprint_feed(p->chroma_ctx, buffer->data[0], buffer->frame_count * 2);
+        if (!chromaprint_feed(p->chroma_ctx, buffer->data[0], buffer->frame_count * 2)) {
+            av_log(NULL, AV_LOG_ERROR, "unable to feed fingerprint\n");
+        }
 
         pthread_mutex_unlock(&p->info_head_mutex);
         groove_buffer_unref(buffer);
@@ -283,6 +293,11 @@ int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
     groove_queue_reset(p->info_queue);
 
     p->chroma_ctx = chromaprint_new(CHROMAPRINT_ALGORITHM_DEFAULT);
+    if (!p->chroma_ctx) {
+        groove_fingerprinter_detach(printer);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate chromaprint\n");
+        return -1;
+    }
 
     if (groove_sink_attach(p->sink, playlist) < 0) {
         groove_fingerprinter_detach(printer);
@@ -368,16 +383,16 @@ void groove_fingerprinter_free_info(struct GrooveFingerprinterInfo *info) {
     info->fingerprint = NULL;
 }
 
-int groove_fingerprinter_encode(void *fp, int size, char **encoded_fp) {
+int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp) {
     int encoded_size;
     return chromaprint_encode_fingerprint(fp, size,
             CHROMAPRINT_ALGORITHM_DEFAULT, (void*)encoded_fp, &encoded_size, 1);
 }
 
-int groove_fingerprinter_decode(char *encoded_fp, void **fp, int *size) {
+int groove_fingerprinter_decode(char *encoded_fp, int32_t **fp, int *size) {
     int algorithm;
     int encoded_size = strlen(encoded_fp);
-    return chromaprint_decode_fingerprint(encoded_fp, encoded_size, fp, size,
+    return chromaprint_decode_fingerprint(encoded_fp, encoded_size, (void**)fp, size,
             &algorithm, 1);
 }
 

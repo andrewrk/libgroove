@@ -53,10 +53,10 @@ int main(int argc, char * argv[]) {
                     info.item->file->filename);
             if (raw) {
                 int size;
-                uint32_t *raw_fingerprint;
-                groove_fingerprinter_decode(info.fingerprint, (void*)&raw_fingerprint, &size);
+                int32_t *raw_fingerprint;
+                groove_fingerprinter_decode(info.fingerprint, &raw_fingerprint, &size);
                 for (int i = 0; i < size; i += 1) {
-                    printf("%"PRIu32"\n", raw_fingerprint[i]);
+                    printf("%"PRId32"\n", raw_fingerprint[i]);
                 }
             } else {
                 printf("%s\n", info.fingerprint);
