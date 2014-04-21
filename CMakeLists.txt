@@ -74,7 +74,7 @@ endif(DISABLE_LOUDNESS)
 
 # check for chromaprint
 if(DISABLE_FINGERPRINTER)
-  set(STATUS_CHROMAPRINT, "not needed")
+  set(STATUS_CHROMAPRINT "not needed")
 else(DISABLE_FINGERPRINTER)
   find_package(Chromaprint)
   if(CHROMAPRINT_FOUND)
