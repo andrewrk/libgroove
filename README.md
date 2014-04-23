@@ -44,7 +44,8 @@ so that you can still compile if they cannot be found on your system.
    - [libbz2-dev](http://www.bzip.org/)
    - [yasm](http://yasm.tortall.net/)
    - [libmp3lame-dev](http://lame.sourceforge.net/)
- * [libebur128](https://github.com/jiixyj/libebur128) (bundled)
+ * [libebur128](https://github.com/jiixyj/libebur128) (bundled) if using
+   bundled version, needs libspeexdsp-dev
  * [libsdl2-dev](http://www.libsdl.org/) (bundled)
  * [libchromaprint-dev](http://acoustid.org/chromaprint)
 
