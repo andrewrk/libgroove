@@ -134,6 +134,7 @@ static struct GrooveBuffer * frame_to_groove_buffer(struct GroovePlaylist *playl
     buffer->size = frame_size(frame);
 
     b->frame = frame;
+    b->pts = frame->pts;
 
     return buffer;
 }

@@ -259,6 +259,9 @@ struct GrooveBuffer {
 void groove_buffer_ref(struct GrooveBuffer *buffer);
 void groove_buffer_unref(struct GrooveBuffer *buffer);
 
+/* return the presentation time stamp of the buffer. */
+uint64_t groove_buffer_pts(struct GrooveBuffer *buffer);
+
 /************** GrooveSink ****************/
 
 /* use this to get access to a realtime raw audio buffer

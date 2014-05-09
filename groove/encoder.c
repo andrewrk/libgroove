@@ -41,6 +41,7 @@ struct GrooveEncoderPrivate {
     char drain_cond_inited;
     struct GroovePlaylistItem *encode_head;
     double encode_pos;
+    uint64_t encode_pts;
 
     struct GrooveAudioFormat encode_format;
 
@@ -73,6 +74,7 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
         struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
         frame = b->frame;
         frame->pts = e->next_pts;
+        e->encode_pts = e->next_pts;
         e->next_pts += buffer->frame_count + 1;
     }
 
@@ -252,6 +254,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
 
     buffer->item = e->encode_head;
     buffer->pos = e->encode_pos;
+    b->pts = e->encode_pts;
     buffer->format = e->encode_format;
 
     b->is_packet = 1;
@@ -615,6 +618,7 @@ int groove_encoder_detach(struct GrooveEncoder *encoder) {
 
     e->encode_head = NULL;
     e->encode_pos = -1.0;
+    e->encode_pts = 0;
     e->sent_header = 0;
     e->abort_request = 0;
     e->next_pts = 0;
