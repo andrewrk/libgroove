@@ -8,12 +8,12 @@
 #ifndef GROOVE_H_INCLUDED
 #define GROOVE_H_INCLUDED
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif /* __cplusplus */
-
-#include <stdint.h>
 
 /************* global *************/
 

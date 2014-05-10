@@ -8,12 +8,12 @@
 #ifndef GROOVE_ENCODER_H_INCLUDED
 #define GROOVE_ENCODER_H_INCLUDED
 
+#include "groove.h"
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif /* __cplusplus */
-
-#include "groove.h"
 
 /* attach a GrooveEncoder to a playlist to keep a buffer of encoded audio full.
  * for example you could use it to implement an http audio stream
