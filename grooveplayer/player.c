@@ -246,7 +246,8 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
     wanted_spec.callback = sdl_audio_callback;
     wanted_spec.userdata = player;
 
-    p->device_id = SDL_OpenAudioDevice(player->device_name, 0, &wanted_spec,
+    const char* device_name = SDL_GetAudioDeviceName(player->device_index, 0);
+    p->device_id = SDL_OpenAudioDevice(device_name, 0, &wanted_spec,
             &spec, SDL_AUDIO_ALLOW_ANY_CHANGE);
     if (p->device_id == 0) {
         av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());

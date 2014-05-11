@@ -31,9 +31,10 @@ union GroovePlayerEvent {
 
 struct GroovePlayer {
     /* set this to the device you want to open
-     * NULL means default device
+     * -1 means default device
+     * -2 means dummy device
      */
-    char *device_name;
+    int device_index;
 
     /* The desired audio format settings with which to open the device.
      * groove_player_create defaults these to 44100 Hz,
