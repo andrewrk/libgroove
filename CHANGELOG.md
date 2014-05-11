@@ -6,6 +6,7 @@
  * fingerprinter: encode/decode return 0 on success, < 0 on error
  * fingerprinter: info struct contains raw fingerprint instead of
    compressed string. closes #61
+ * ability to set true peak on playlist items. closes #50
 
 ### Version 3.1.1 (2014-04-21)
 

@@ -38,7 +38,7 @@ int main(int argc, char * argv[]) {
                 fprintf(stderr, "Unable to open %s\n", arg);
                 continue;
             }
-            groove_playlist_insert(playlist, file, 1.0, NULL);
+            groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
         }
     }
 

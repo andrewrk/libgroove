@@ -73,6 +73,8 @@ struct GroovePlaylistPrivate {
     struct GroovePlaylistItem *decode_head;
     // desired volume for the volume filter
     double volume;
+    // known true peak value
+    double peak;
     // set to 1 to trigger a rebuild
     int rebuild_filter_graph_flag;
     // map audio format to list of sinks
@@ -81,8 +83,9 @@ struct GroovePlaylistPrivate {
     struct SinkMap *sink_map;
     int sink_map_count;
 
-    // the value for volume that was used to construct the filter graph
+    // the value that was used to construct the filter graph
     double filter_volume;
+    double filter_peak;
 
     // only touched by decode_thread, tells whether we have sent the end_of_q_sentinel
     int sent_end_of_q;
@@ -310,12 +313,18 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
     // save the volume value so we can compare later and check
     // whether we have to reconstruct the graph
     p->filter_volume = p->volume;
+    p->filter_peak = p->peak;
     // if volume is < 1.0, create volume filter
     //             == 1.0, do not create a filter
     //              > 1.0, create a compand filter (for soft limiting)
     double vol = p->volume;
+    // adjust for the known true peak of the playlist item. In other words, if
+    // we know that the song peaks at 0.8, and we want to amplify by 1.2, that
+    // comes out to 0.96 so we know that we can safely amplify by 1.2 even
+    // though it's greater than 1.0.
+    double amp_vol = vol * (p->peak > 1.0 ? 1.0 : p->peak);
     if (vol < 0.0) vol = 0.0;
-    if (vol < 1.0) {
+    if (amp_vol < 1.0) {
         snprintf(p->strbuf, sizeof(p->strbuf), "volume=%f", vol);
         av_log(NULL, AV_LOG_INFO, "volume: %s\n", p->strbuf);
         err = avfilter_graph_create_filter(&p->volume_ctx, volume, NULL,
@@ -330,7 +339,7 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
             return err;
         }
         audio_src_ctx = p->volume_ctx;
-    } else if (vol > 1.0) {
+    } else if (amp_vol > 1.0) {
         double attack = 0.1;
         double decay = 0.2;
         const char *points = "-2/-2";
@@ -453,7 +462,8 @@ static int maybe_init_filter_graph(struct GroovePlaylist *playlist, struct Groov
         p->in_sample_fmt != avctx->sample_fmt ||
         p->in_time_base.num != time_base.num ||
         p->in_time_base.den != time_base.den ||
-        p->volume != p->filter_volume)
+        p->volume != p->filter_volume ||
+        p->peak != p->filter_peak)
     {
         return init_filter_graph(playlist, file);
     }
@@ -626,6 +636,13 @@ static int audioq_purge(struct GrooveQueue *queue, void *obj) {
     return buffer->item == item;
 }
 
+static void update_playlist_volume(struct GroovePlaylist *playlist) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+    struct GroovePlaylistItem *item = p->decode_head;
+    p->volume = playlist->volume * item->gain;
+    p->peak = item->peak;
+}
+
 // this thread is responsible for decoding and inserting buffers of decoded
 // audio into each sink
 static void *decode_thread(void *arg) {
@@ -656,7 +673,7 @@ static void *decode_thread(void *arg) {
 
         struct GrooveFile *file = p->decode_head->file;
 
-        p->volume = p->decode_head->gain * playlist->volume;
+        update_playlist_volume(playlist);
 
         if (decode_one_frame(playlist, file) < 0) {
             p->decode_head = p->decode_head->next;
@@ -968,8 +985,8 @@ void groove_playlist_seek(struct GroovePlaylist *playlist, struct GroovePlaylist
     pthread_mutex_unlock(&p->decode_head_mutex);
 }
 
-struct GroovePlaylistItem * groove_playlist_insert(struct GroovePlaylist *playlist, struct GrooveFile *file,
-        double gain, struct GroovePlaylistItem *next)
+struct GroovePlaylistItem *groove_playlist_insert(struct GroovePlaylist *playlist,
+        struct GrooveFile *file, double gain, double peak, struct GroovePlaylistItem *next)
 {
     struct GroovePlaylistItem * item = av_mallocz(sizeof(struct GroovePlaylistItem));
     if (!item)
@@ -978,6 +995,7 @@ struct GroovePlaylistItem * groove_playlist_insert(struct GroovePlaylist *playli
     item->file = file;
     item->next = next;
     item->gain = gain;
+    item->peak = peak;
 
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
@@ -1092,7 +1110,20 @@ void groove_playlist_set_gain(struct GroovePlaylist *playlist, struct GroovePlay
     pthread_mutex_lock(&p->decode_head_mutex);
     item->gain = gain;
     if (item == p->decode_head) {
-        p->volume = playlist->volume * p->decode_head->gain;
+        update_playlist_volume(playlist);
+    }
+    pthread_mutex_unlock(&p->decode_head_mutex);
+}
+
+void groove_playlist_set_peak(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
+        double peak)
+{
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+
+    pthread_mutex_lock(&p->decode_head_mutex);
+    item->peak = peak;
+    if (item == p->decode_head) {
+        update_playlist_volume(playlist);
     }
     pthread_mutex_unlock(&p->decode_head_mutex);
 }
@@ -1119,7 +1150,8 @@ void groove_playlist_set_volume(struct GroovePlaylist *playlist, double volume) 
 
     pthread_mutex_lock(&p->decode_head_mutex);
     playlist->volume = volume;
-    p->volume = p->decode_head ? volume * p->decode_head->gain : volume;
+    if (p->decode_head)
+        update_playlist_volume(playlist);
     pthread_mutex_unlock(&p->decode_head_mutex);
 }
 

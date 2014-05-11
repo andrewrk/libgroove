@@ -143,13 +143,27 @@ void groove_file_audio_format(struct GrooveFile *file,
 /************* GroovePlaylist *************/
 struct GroovePlaylistItem {
     /* all fields are read-only. modify with methods below. */
-    struct GroovePlaylistItem *prev;
+
     struct GrooveFile *file;
-    /* a volume adjustment in float format to apply to the file when it plays.
-     * This is typically used for ReplayGain.
+
+    /* A volume adjustment in float format to apply to the file when it plays.
+     * This is typically used for loudness compensation, for example ReplayGain.
      * To convert from dB to float, use exp(log(10) * 0.05 * dB_value)
      */
     double gain;
+
+    /* The sample peak of this playlist item is assumed to be 1.0 in float
+     * format. If you know for certain that the peak is less than 1.0, you
+     * may set this value which may allow the volume adjustment to use
+     * a pure amplifier rather than a compressor. This results in slightly
+     * better audio quality.
+     */
+    double peak;
+
+    /* A GroovePlaylist is a doubly linked list. Use these fields to
+     * traverse the list.
+     */
+    struct GroovePlaylistItem *prev;
     struct GroovePlaylistItem *next;
 };
 
@@ -184,11 +198,13 @@ void groove_playlist_seek(struct GroovePlaylist *playlist,
 /* once you add a file to the playlist, you must not destroy it until you first
  * remove it from the playlist.
  * next: the item to insert before. if NULL, you will append to the playlist.
- * gain: see GroovePlaylistItem structure. use 0 for no adjustment.
+ * gain: see GroovePlaylistItem structure. use 1.0 for no adjustment.
+ * peak: see GroovePlaylistItem structure. use 1.0 for no adjustment.
  * returns the newly created playlist item.
  */
 struct GroovePlaylistItem *groove_playlist_insert(
-        struct GroovePlaylist *playlist, struct GrooveFile *file, double gain,
+        struct GroovePlaylist *playlist, struct GrooveFile *file,
+        double gain, double peak,
         struct GroovePlaylistItem *next);
 
 /* this will not call groove_file_close on item->file !
@@ -220,6 +236,9 @@ int groove_playlist_count(struct GroovePlaylist *playlist);
 
 void groove_playlist_set_gain(struct GroovePlaylist *playlist,
         struct GroovePlaylistItem *item, double gain);
+
+void groove_playlist_set_peak(struct GroovePlaylist *playlist,
+        struct GroovePlaylistItem *item, double peak);
 
 /* value is in float format. defaults to 1.0 */
 void groove_playlist_set_volume(struct GroovePlaylist *playlist, double volume);

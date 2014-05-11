@@ -50,7 +50,7 @@ int main(int argc, char * argv[]) {
                 fprintf(stderr, "Error opening input file %s\n", arg);
                 return 1;
             }
-            groove_playlist_insert(playlist, file, 1.0, NULL);
+            groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
         }
     }
     if (!output_file_name)
