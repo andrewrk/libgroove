@@ -3,6 +3,9 @@
  * GrooveBuffer struct contains the presentation time stamp
  * move include statements to outside of extern C
  * player: specify device by index rather than name. closes #44
+ * fingerprinter: encode/decode return 0 on success, < 0 on error
+ * fingerprinter: info struct contains raw fingerprint instead of
+   compressed string. closes #61
 
 ### Version 3.1.1 (2014-04-21)
 

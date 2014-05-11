@@ -18,8 +18,11 @@ extern "C"
 /* use this to find out the unique id of an audio track */
 
 struct GrooveFingerprinterInfo {
-    /* Compressed string. */
-    char *fingerprint;
+    /* raw fingerprint. A fingerprint is an array of signed 32-bit integers. */
+    int32_t *fingerprint;
+    /* the number of 32-bit integers in the fingerprint array */
+    int fingerprint_size;
+
     /* how many seconds long this song is */
     double duration;
 
@@ -93,7 +96,7 @@ void groove_fingerprinter_position(struct GrooveFingerprinter *printer,
  *                stored
  *
  * Returns:
- *  - 0 on error, 1 on success
+ *  - 0 on success, < 0 on error
  */
 int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp);
 
@@ -111,7 +114,7 @@ int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp);
  *  - size: Number of items in the returned raw fingerprint
  *
  * Returns:
- *  - 0 on error, 1 on success
+ *  - 0 on success, < 0 on error
  */
 int groove_fingerprinter_decode(char *encoded_fp, int32_t **fp, int *size);
 

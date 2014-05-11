@@ -63,7 +63,9 @@ static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
         av_log(NULL, AV_LOG_ERROR, "unable to finish chromaprint\n");
         return -1;
     }
-    if (!chromaprint_get_fingerprint(p->chroma_ctx, &info->fingerprint)) {
+    if (!chromaprint_get_raw_fingerprint(p->chroma_ctx,
+                (void**)&info->fingerprint, &info->fingerprint_size))
+    {
         av_log(NULL, AV_LOG_ERROR, "unable to get fingerprint\n");
         return -1;
     }
@@ -385,15 +387,17 @@ void groove_fingerprinter_free_info(struct GrooveFingerprinterInfo *info) {
 
 int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp) {
     int encoded_size;
-    return chromaprint_encode_fingerprint(fp, size,
+    int err = chromaprint_encode_fingerprint(fp, size,
             CHROMAPRINT_ALGORITHM_DEFAULT, (void*)encoded_fp, &encoded_size, 1);
+    return err == 1 ? 0 : -1;
 }
 
 int groove_fingerprinter_decode(char *encoded_fp, int32_t **fp, int *size) {
     int algorithm;
     int encoded_size = strlen(encoded_fp);
-    return chromaprint_decode_fingerprint(encoded_fp, encoded_size, (void**)fp, size,
+    int err = chromaprint_decode_fingerprint(encoded_fp, encoded_size, (void**)fp, size,
             &algorithm, 1);
+    return err == 1 ? 0 : -1;
 }
 
 void groove_fingerprinter_dealloc(void *ptr) {
