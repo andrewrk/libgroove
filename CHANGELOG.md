@@ -1,4 +1,11 @@
+### Version 4.0.0 (not yet released)
+
+ * GrooveBuffer struct contains the presentation time stamp
+ * move include statements to outside of extern C
+ * player: specify device by index rather than name. closes #44
+
 ### Version 3.1.1 (2014-04-21)
+
  * fingerprinter example: add --raw option
  * fingerprinter sink: add error checking to chromaprint function calls
  * fingerprinter sink: fix documentation. raw fingerprints are signed 32-bit
