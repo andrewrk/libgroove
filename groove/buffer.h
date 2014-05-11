@@ -24,8 +24,6 @@ struct GrooveBufferPrivate {
     // used for when is_packet is true
     // GrooveBuffer::data[0] will point to this
     uint8_t *data;
-
-    uint64_t pts;
 };
 
 #endif /* GROOVE_BUFFER_H_INCLUDED */

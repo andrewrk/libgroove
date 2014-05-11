@@ -254,13 +254,13 @@ struct GrooveBuffer {
 
     /* total number of bytes contained in this buffer */
     int size;
+
+    /* presentation time stamp of the buffer */
+    uint64_t pts;
 };
 
 void groove_buffer_ref(struct GrooveBuffer *buffer);
 void groove_buffer_unref(struct GrooveBuffer *buffer);
-
-/* return the presentation time stamp of the buffer. */
-uint64_t groove_buffer_pts(struct GrooveBuffer *buffer);
 
 /************** GrooveSink ****************/
 

@@ -38,8 +38,3 @@ void groove_buffer_unref(struct GrooveBuffer *buffer) {
         av_free(b);
     }
 }
-
-uint64_t groove_buffer_pts(struct GrooveBuffer *buffer) {
-    struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
-    return b->pts;
-}

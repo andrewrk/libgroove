@@ -132,9 +132,9 @@ static struct GrooveBuffer * frame_to_groove_buffer(struct GroovePlaylist *playl
     buffer->format.sample_fmt = frame->format;
     buffer->format.sample_rate = frame->sample_rate;
     buffer->size = frame_size(frame);
+    buffer->pts = frame->pts;
 
     b->frame = frame;
-    b->pts = frame->pts;
 
     return buffer;
 }

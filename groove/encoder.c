@@ -254,7 +254,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
 
     buffer->item = e->encode_head;
     buffer->pos = e->encode_pos;
-    b->pts = e->encode_pts;
+    buffer->pts = e->encode_pts;
     buffer->format = e->encode_format;
 
     b->is_packet = 1;
