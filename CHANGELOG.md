@@ -7,6 +7,9 @@
  * fingerprinter: info struct contains raw fingerprint instead of
    compressed string. closes #61
  * ability to set true peak on playlist items. closes #50
+ * GroovePlaylist: `volume` renamed to `gain`
+   - `groove_playlist_set_gain` renamed to `groove_playlist_set_item_gain`
+   - `groove_playlist_set_volume` renamed to `groove_playlist_set_gain`
 
 ### Version 3.1.1 (2014-04-21)
 

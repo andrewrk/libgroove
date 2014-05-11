@@ -639,7 +639,7 @@ static int audioq_purge(struct GrooveQueue *queue, void *obj) {
 static void update_playlist_volume(struct GroovePlaylist *playlist) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GroovePlaylistItem *item = p->decode_head;
-    p->volume = playlist->volume * item->gain;
+    p->volume = playlist->gain * item->gain;
     p->peak = item->peak;
 }
 
@@ -876,7 +876,7 @@ struct GroovePlaylist * groove_playlist_create(void) {
     struct GroovePlaylist *playlist = &p->externals;
 
     // the one that the playlist can read
-    playlist->volume = 1.0;
+    playlist->gain = 1.0;
     // the other volume multiplied by the playlist item's gain
     p->volume = 1.0;
 
@@ -1102,7 +1102,7 @@ int groove_playlist_count(struct GroovePlaylist *playlist) {
     return count;
 }
 
-void groove_playlist_set_gain(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
+void groove_playlist_set_item_gain(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
         double gain)
 {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
@@ -1115,7 +1115,7 @@ void groove_playlist_set_gain(struct GroovePlaylist *playlist, struct GroovePlay
     pthread_mutex_unlock(&p->decode_head_mutex);
 }
 
-void groove_playlist_set_peak(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
+void groove_playlist_set_item_peak(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
         double peak)
 {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
@@ -1145,11 +1145,11 @@ void groove_playlist_position(struct GroovePlaylist *playlist, struct GroovePlay
     pthread_mutex_unlock(&p->decode_head_mutex);
 }
 
-void groove_playlist_set_volume(struct GroovePlaylist *playlist, double volume) {
+void groove_playlist_set_gain(struct GroovePlaylist *playlist, double gain) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     pthread_mutex_lock(&p->decode_head_mutex);
-    playlist->volume = volume;
+    playlist->gain = gain;
     if (p->decode_head)
         update_playlist_volume(playlist);
     pthread_mutex_unlock(&p->decode_head_mutex);

@@ -35,7 +35,7 @@ int main(int argc, char * argv[]) {
                 return usage(exe);
             } else if (strcmp(arg, "volume") == 0) {
                 double volume = atof(argv[++i]);
-                groove_playlist_set_volume(playlist, volume);
+                groove_playlist_set_gain(playlist, volume);
             } else {
                 return usage(exe);
             }

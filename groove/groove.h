@@ -174,9 +174,10 @@ struct GroovePlaylist {
     struct GroovePlaylistItem *head;
     struct GroovePlaylistItem *tail;
 
-    /* in float format, defaults to 1.0
+    /* volume adjustment in float format which applies to all playlist items
+     * and all sinks. defaults to 1.0.
      */
-    double volume;
+    double gain;
 };
 
 /* a playlist manages keeping an audio buffer full
@@ -234,14 +235,13 @@ void groove_playlist_clear(struct GroovePlaylist *playlist);
 /* return the count of playlist items */
 int groove_playlist_count(struct GroovePlaylist *playlist);
 
-void groove_playlist_set_gain(struct GroovePlaylist *playlist,
+void groove_playlist_set_gain(struct GroovePlaylist *playlist, double gain);
+
+void groove_playlist_set_item_gain(struct GroovePlaylist *playlist,
         struct GroovePlaylistItem *item, double gain);
 
-void groove_playlist_set_peak(struct GroovePlaylist *playlist,
+void groove_playlist_set_item_peak(struct GroovePlaylist *playlist,
         struct GroovePlaylistItem *item, double peak);
-
-/* value is in float format. defaults to 1.0 */
-void groove_playlist_set_volume(struct GroovePlaylist *playlist, double volume);
 
 /************ GrooveBuffer ****************/
 
