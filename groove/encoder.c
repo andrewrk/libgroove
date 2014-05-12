@@ -347,6 +347,7 @@ struct GrooveEncoder *groove_encoder_create(void) {
     encoder->target_audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
     encoder->sink_buffer_size = e->sink->buffer_size;
     encoder->encoded_buffer_size = 16 * 1024;
+    encoder->gain = e->sink->gain;
 
     return encoder;
 }
@@ -581,6 +582,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
     e->sink->buffer_size = encoder->sink_buffer_size;
     e->sink->buffer_sample_count = (codec->capabilities & CODEC_CAP_VARIABLE_FRAME_SIZE) ?
         0 : codec_ctx->frame_size;
+    e->sink->gain = encoder->gain;
 
     if (groove_sink_attach(e->sink, playlist) < 0) {
         groove_encoder_detach(encoder);
@@ -679,4 +681,10 @@ void groove_encoder_position(struct GrooveEncoder *encoder,
         *seconds = e->encode_pos;
 
     pthread_mutex_unlock(&e->encode_head_mutex);
+}
+
+int groove_encoder_set_gain(struct GrooveEncoder *encoder, double gain) {
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
+    encoder->gain = gain;
+    return groove_sink_set_gain(e->sink, gain);
 }

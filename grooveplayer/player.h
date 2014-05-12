@@ -55,6 +55,15 @@ struct GroovePlayer {
      */
     int sink_buffer_size;
 
+    /* This volume adjustment to make to this player.
+     * It is recommended that you leave this at 1.0 and instead adjust the
+     * gain of the underlying playlist.
+     * If you want to change this value after you have already attached the
+     * sink to the playlist, you must use groove_player_set_gain.
+     * float format. Defaults to 1.0
+     */
+    double gain;
+
     /* read-only. set when you call groove_player_attach and cleared when
      * you call groove_player_detach
      */
@@ -115,6 +124,11 @@ int groove_player_event_get(struct GroovePlayer *player,
  */
 int groove_player_event_peek(struct GroovePlayer *player, int block);
 
+/* See the gain property of GrooveSink. It is recommended that you leave this
+ * at 1.0 and instead adjust the gain of the playlist.
+ * returns 0 on success, < 0 on error
+ */
+int groove_player_set_gain(struct GroovePlayer *player, double gain);
 
 #ifdef __cplusplus
 }

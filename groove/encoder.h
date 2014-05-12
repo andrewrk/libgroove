@@ -65,6 +65,15 @@ struct GrooveEncoder {
      */
     int encoded_buffer_size;
 
+    /* This volume adjustment to make to this player.
+     * It is recommended that you leave this at 1.0 and instead adjust the
+     * gain of the underlying playlist.
+     * If you want to change this value after you have already attached the
+     * sink to the playlist, you must use groove_encoder_set_gain.
+     * float format. Defaults to 1.0
+     */
+    double gain;
+
     /* read-only. set when attached and cleared when detached */
     struct GroovePlaylist *playlist;
 
@@ -116,6 +125,11 @@ int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
 void groove_encoder_position(struct GrooveEncoder *encoder,
         struct GroovePlaylistItem **item, double *seconds);
 
+/* See the gain property of GrooveSink. It is recommended that you leave this
+ * at 1.0 and instead adjust the gain of the playlist.
+ * returns 0 on success, < 0 on error
+ */
+int groove_encoder_set_gain(struct GrooveEncoder *encoder, double gain);
 
 #ifdef __cplusplus
 }

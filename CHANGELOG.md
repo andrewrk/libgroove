@@ -10,6 +10,7 @@
  * GroovePlaylist: `volume` renamed to `gain`
    - `groove_playlist_set_gain` renamed to `groove_playlist_set_item_gain`
    - `groove_playlist_set_volume` renamed to `groove_playlist_set_gain`
+ * support per-sink gain adjustment. closes #41
 
 ### Version 3.1.1 (2014-04-21)
 

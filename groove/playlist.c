@@ -55,9 +55,13 @@ struct GroovePlaylistPrivate {
     char strbuf[512];
     AVFilterGraph *filter_graph;
     AVFilterContext *abuffer_ctx;
-    AVFilterContext *volume_ctx;
-    AVFilterContext *compand_ctx;
-    AVFilterContext *asplit_ctx;
+
+    AVFilter *volume_filter;
+    AVFilter *compand_filter;
+    AVFilter *abuffer_filter;
+    AVFilter *asplit_filter;
+    AVFilter *aformat_filter;
+    AVFilter *abuffersink_filter;
 
     // this mutex applies to the variables in this block
     pthread_mutex_t decode_head_mutex;
@@ -260,6 +264,58 @@ static double gain_to_dB(double gain) {
     return log(gain) / dB_scale;
 }
 
+static int create_volume_filter(struct GroovePlaylistPrivate *p, AVFilterContext **audio_src_ctx,
+        double vol, double amp_vol)
+{
+    int err;
+
+    if (vol < 0.0) vol = 0.0;
+    if (amp_vol < 1.0) {
+        snprintf(p->strbuf, sizeof(p->strbuf), "volume=%f", vol);
+        av_log(NULL, AV_LOG_INFO, "volume: %s\n", p->strbuf);
+        AVFilterContext *volume_ctx;
+        err = avfilter_graph_create_filter(&volume_ctx, p->volume_filter, NULL,
+                p->strbuf, NULL, p->filter_graph);
+        if (err < 0) {
+            av_log(NULL, AV_LOG_ERROR, "error initializing volume filter\n");
+            return err;
+        }
+        err = avfilter_link(*audio_src_ctx, 0, volume_ctx, 0);
+        if (err < 0) {
+            av_strerror(err, p->strbuf, sizeof(p->strbuf));
+            av_log(NULL, AV_LOG_ERROR, "unable to link volume filter: %s\n", p->strbuf);
+            return err;
+        }
+        *audio_src_ctx = volume_ctx;
+    } else if (amp_vol > 1.0) {
+        double attack = 0.1;
+        double decay = 0.2;
+        const char *points = "-2/-2";
+        double soft_knee = 0.02;
+        double gain = gain_to_dB(vol);
+        double volume_param = 0.0;
+        double delay = 0.2;
+        snprintf(p->strbuf, sizeof(p->strbuf), "%f:%f:%s:%f:%f:%f:%f",
+                attack, decay, points, soft_knee, gain, volume_param, delay);
+        av_log(NULL, AV_LOG_INFO, "compand: %s\n", p->strbuf);
+        AVFilterContext *compand_ctx;
+        err = avfilter_graph_create_filter(&compand_ctx, p->compand_filter, NULL,
+                p->strbuf, NULL, p->filter_graph);
+        if (err < 0) {
+            av_log(NULL, AV_LOG_ERROR, "error initializing compand filter\n");
+            return err;
+        }
+        err = avfilter_link(*audio_src_ctx, 0, compand_ctx, 0);
+        if (err < 0) {
+            av_strerror(err, p->strbuf, sizeof(p->strbuf));
+            av_log(NULL, AV_LOG_ERROR, "unable to link compand filter: %s\n", p->strbuf);
+            return err;
+        }
+        *audio_src_ctx = compand_ctx;
+    }
+    return 0;
+}
+
 // abuffer -> volume -> asplit for each audio format
 //                     -> aformat -> abuffersink
 // if the volume gain is > 1.0, we use a compand filter instead
@@ -278,13 +334,6 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
         return -1;
     }
 
-    AVFilter *abuffer = avfilter_get_by_name("abuffer");
-    AVFilter *volume = avfilter_get_by_name("volume");
-    AVFilter *compand = avfilter_get_by_name("compand");
-    AVFilter *asplit = avfilter_get_by_name("asplit");
-    AVFilter *aformat = avfilter_get_by_name("aformat");
-    AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
-
     int err;
     // create abuffer filter
     AVCodecContext *avctx = f->audio_st->codec;
@@ -301,7 +350,7 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
     p->in_channel_layout = avctx->channel_layout;
     p->in_sample_fmt = avctx->sample_fmt;
     p->in_time_base = time_base;
-    err = avfilter_graph_create_filter(&p->abuffer_ctx, abuffer,
+    err = avfilter_graph_create_filter(&p->abuffer_ctx, p->abuffer_filter,
             NULL, p->strbuf, NULL, p->filter_graph);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "error initializing abuffer filter\n");
@@ -323,67 +372,27 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
     // comes out to 0.96 so we know that we can safely amplify by 1.2 even
     // though it's greater than 1.0.
     double amp_vol = vol * (p->peak > 1.0 ? 1.0 : p->peak);
-    if (vol < 0.0) vol = 0.0;
-    if (amp_vol < 1.0) {
-        snprintf(p->strbuf, sizeof(p->strbuf), "volume=%f", vol);
-        av_log(NULL, AV_LOG_INFO, "volume: %s\n", p->strbuf);
-        err = avfilter_graph_create_filter(&p->volume_ctx, volume, NULL,
-                p->strbuf, NULL, p->filter_graph);
-        if (err < 0) {
-            av_log(NULL, AV_LOG_ERROR, "error initializing volume filter\n");
-            return err;
-        }
-        err = avfilter_link(audio_src_ctx, 0, p->volume_ctx, 0);
-        if (err < 0) {
-            av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
-            return err;
-        }
-        audio_src_ctx = p->volume_ctx;
-    } else if (amp_vol > 1.0) {
-        double attack = 0.1;
-        double decay = 0.2;
-        const char *points = "-2/-2";
-        double soft_knee = 0.02;
-        double gain = gain_to_dB(vol);
-        double volume_param = 0.0;
-        double delay = 0.2;
-        snprintf(p->strbuf, sizeof(p->strbuf), "%f:%f:%s:%f:%f:%f:%f",
-                attack, decay, points, soft_knee, gain, volume_param, delay);
-        av_log(NULL, AV_LOG_INFO, "compand: %s\n", p->strbuf);
-        err = avfilter_graph_create_filter(&p->compand_ctx, compand, NULL,
-                p->strbuf, NULL, p->filter_graph);
-        if (err < 0) {
-            av_log(NULL, AV_LOG_ERROR, "error initializing compand filter\n");
-            return err;
-        }
-        err = avfilter_link(audio_src_ctx, 0, p->compand_ctx, 0);
-        if (err < 0) {
-            av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
-            return err;
-        }
-        audio_src_ctx = p->compand_ctx;
-    } else {
-        p->volume_ctx = NULL;
-    }
+    err = create_volume_filter(p, &audio_src_ctx, vol, amp_vol);
+    if (err < 0)
+        return err;
 
     // if only one sink, no need for asplit
-    if (p->sink_map_count < 2) {
-        p->asplit_ctx = NULL;
-    } else {
+    if (p->sink_map_count >= 2) {
+        AVFilterContext *asplit_ctx;
         snprintf(p->strbuf, sizeof(p->strbuf), "%d", p->sink_map_count);
         av_log(NULL, AV_LOG_INFO, "asplit: %s\n", p->strbuf);
-        err = avfilter_graph_create_filter(&p->asplit_ctx, asplit,
+        err = avfilter_graph_create_filter(&asplit_ctx, p->asplit_filter,
                 NULL, p->strbuf, NULL, p->filter_graph);
         if (err < 0) {
             av_log(NULL, AV_LOG_ERROR, "unable to create asplit filter\n");
             return err;
         }
-        err = avfilter_link(audio_src_ctx, 0, p->asplit_ctx, 0);
+        err = avfilter_link(audio_src_ctx, 0, asplit_ctx, 0);
         if (err < 0) {
             av_log(NULL, AV_LOG_ERROR, "unable to link to asplit\n");
             return err;
         }
-        audio_src_ctx = p->asplit_ctx;
+        audio_src_ctx = asplit_ctx;
     }
 
     // for each audio format, create aformat and abuffersink filters
@@ -394,6 +403,12 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
         struct GrooveAudioFormat *audio_format = &example_sink->audio_format;
 
         AVFilterContext *inner_audio_src_ctx = audio_src_ctx;
+
+        // create volume filter
+        err = create_volume_filter(p, &inner_audio_src_ctx, example_sink->gain, example_sink->gain);
+        if (err < 0)
+            return err;
+
         if (example_sink->disable_resample) {
             map_item->aformat_ctx = NULL;
         } else {
@@ -403,7 +418,7 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
                     av_get_sample_fmt_name((enum AVSampleFormat)audio_format->sample_fmt),
                     audio_format->sample_rate, audio_format->channel_layout);
             av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
-            err = avfilter_graph_create_filter(&map_item->aformat_ctx, aformat,
+            err = avfilter_graph_create_filter(&map_item->aformat_ctx, p->aformat_filter,
                     NULL, p->strbuf, NULL, p->filter_graph);
             if (err < 0) {
                 av_strerror(err, p->strbuf, sizeof(p->strbuf));
@@ -411,16 +426,17 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
                         p->strbuf);
                 return err;
             }
-            err = avfilter_link(audio_src_ctx, pad_index, map_item->aformat_ctx, 0);
+            err = avfilter_link(inner_audio_src_ctx, pad_index, map_item->aformat_ctx, 0);
             if (err < 0) {
-                av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
+                av_strerror(err, p->strbuf, sizeof(p->strbuf));
+                av_log(NULL, AV_LOG_ERROR, "unable to link aformat filter: %s\n", p->strbuf);
                 return err;
             }
             inner_audio_src_ctx = map_item->aformat_ctx;
         }
 
         // create abuffersink filter
-        err = avfilter_graph_create_filter(&map_item->abuffersink_ctx, abuffersink,
+        err = avfilter_graph_create_filter(&map_item->abuffersink_ctx, p->abuffersink_filter,
                 NULL, NULL, NULL, p->filter_graph);
         if (err < 0) {
             av_log(NULL, AV_LOG_ERROR, "unable to create abuffersink filter\n");
@@ -428,7 +444,8 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
         }
         err = avfilter_link(inner_audio_src_ctx, 0, map_item->abuffersink_ctx, 0);
         if (err < 0) {
-            av_log(NULL, AV_LOG_ERROR, "unable to link filters\n");
+            av_strerror(err, p->strbuf, sizeof(p->strbuf));
+            av_log(NULL, AV_LOG_ERROR, "unable to link abuffersink filter: %s\n", p->strbuf);
             return err;
         }
 
@@ -697,6 +714,8 @@ static void *decode_thread(void *arg) {
 static int sink_formats_equal(const struct GrooveSink *a, const struct GrooveSink *b) {
     if (a->buffer_sample_count != b->buffer_sample_count)
         return 0;
+    if (a->gain != b->gain)
+        return 0;
     if (a->disable_resample) {
         return b->disable_resample;
     } else {
@@ -916,6 +935,48 @@ struct GroovePlaylist * groove_playlist_create(void) {
     if (pthread_create(&p->thread_id, NULL, decode_thread, playlist) != 0) {
         groove_playlist_destroy(playlist);
         av_log(NULL, AV_LOG_ERROR, "unable to create playlist thread\n");
+        return NULL;
+    }
+
+    p->volume_filter = avfilter_get_by_name("volume");
+    if (!p->volume_filter) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to get volume filter\n");
+        return NULL;
+    }
+
+    p->compand_filter = avfilter_get_by_name("compand");
+    if (!p->compand_filter) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to get compand filter\n");
+        return NULL;
+    }
+
+    p->abuffer_filter = avfilter_get_by_name("abuffer");
+    if (!p->abuffer_filter) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to get abuffer filter\n");
+        return NULL;
+    }
+
+    p->asplit_filter = avfilter_get_by_name("asplit");
+    if (!p->asplit_filter) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to get asplit filter\n");
+        return NULL;
+    }
+
+    p->aformat_filter = avfilter_get_by_name("aformat");
+    if (!p->aformat_filter) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to get aformat filter\n");
+        return NULL;
+    }
+
+    p->abuffersink_filter = avfilter_get_by_name("abuffersink");
+    if (!p->abuffersink_filter) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to get abuffersink filter\n");
         return NULL;
     }
 
@@ -1171,6 +1232,7 @@ struct GrooveSink * groove_sink_create(void) {
     struct GrooveSink *sink = &s->externals;
 
     sink->buffer_size = 8192;
+    sink->gain = 1.0;
 
     s->audioq = groove_queue_create();
 
@@ -1199,4 +1261,29 @@ void groove_sink_destroy(struct GrooveSink *sink) {
         groove_queue_destroy(s->audioq);
 
     av_free(s);
+}
+
+int groove_sink_set_gain(struct GrooveSink *sink, double gain) {
+    // we must re-create the sink mapping and the filter graph
+    // if the gain changes
+
+    struct GroovePlaylist *playlist = sink->playlist;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+
+
+    pthread_mutex_lock(&p->decode_head_mutex);
+    sink->gain = gain;
+    int err = remove_sink_from_map(sink);
+    if (err) {
+        pthread_mutex_unlock(&p->decode_head_mutex);
+        return err;
+    }
+    err = add_sink_to_map(playlist, sink);
+    if (err) {
+        pthread_mutex_unlock(&p->decode_head_mutex);
+        return err;
+    }
+    p->rebuild_filter_graph_flag = 1;
+    pthread_mutex_unlock(&p->decode_head_mutex);
+    return 0;
 }

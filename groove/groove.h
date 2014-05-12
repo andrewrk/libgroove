@@ -307,6 +307,15 @@ struct GrooveSink {
      */
     int buffer_size;
 
+    /* This volume adjustment only applies to this sink.
+     * It is recommended that you leave this at 1.0 and instead adjust the
+     * gain of the playlist.
+     * If you want to change this value after you have already attached the
+     * sink to the playlist, you must use groove_sink_set_gain.
+     * float format. Defaults to 1.0
+     */
+    double gain;
+
     /* set to whatever you want */
     void *userdata;
     /* called when the audio queue is flushed. For example, if you seek to a
@@ -351,6 +360,12 @@ int groove_sink_buffer_get(struct GrooveSink *sink,
  * if block is 1, block until buffer is ready
  */
 int groove_sink_buffer_peek(struct GrooveSink *sink, int block);
+
+/* See the gain property of GrooveSink. It is recommended that you leave this
+ * at 1.0 and instead adjust the gain of the playlist.
+ * returns 0 on success, < 0 on error
+ */
+int groove_sink_set_gain(struct GrooveSink *sink, double gain);
 
 
 #ifdef __cplusplus

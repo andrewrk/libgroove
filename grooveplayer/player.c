@@ -212,6 +212,7 @@ struct GroovePlayer *groove_player_create(void) {
     // small because there is no way to clear the buffer.
     player->device_buffer_size = 1024;
     player->sink_buffer_size = 8192;
+    player->gain = p->sink->gain;
 
     return player;
 }
@@ -262,6 +263,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
     // based on spec that we got, attach a sink with those properties
     p->sink->buffer_size = player->sink_buffer_size;
     p->sink->audio_format = player->actual_audio_format;
+    p->sink->gain = player->gain;
 
     if (p->sink->audio_format.sample_fmt == GROOVE_SAMPLE_FMT_NONE) {
         groove_player_detach(player);
@@ -346,4 +348,10 @@ int groove_player_event_get(struct GroovePlayer *player,
 int groove_player_event_peek(struct GroovePlayer *player, int block) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
     return groove_queue_peek(p->eventq, block);
+}
+
+int groove_player_set_gain(struct GroovePlayer *player, double gain) {
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    player->gain = gain;
+    return groove_sink_set_gain(p->sink, gain);
 }
