@@ -326,6 +326,10 @@ struct GrooveSink {
      * all your references to the GroovePlaylistItem.
      */
     void (*purge)(struct GrooveSink *, struct GroovePlaylistItem *);
+    /* called when the playlist is paused */
+    void (*pause)(struct GrooveSink *);
+    /* called when the playlist is played */
+    void (*play)(struct GrooveSink *);
 
     /* read-only. set when you call groove_sink_attach. cleared when you call
      * groove_sink_detach

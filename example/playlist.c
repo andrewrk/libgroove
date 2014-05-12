@@ -31,7 +31,9 @@ int main(int argc, char * argv[]) {
         char *arg = argv[i];
         if (arg[0] == '-' && arg[1] == '-') {
             arg += 2;
-            if (i + 1 >= argc) {
+            if (strcmp(arg, "dummy") == 0) {
+                player->device_index = GROOVE_PLAYER_DUMMY_DEVICE;
+            } else if (i + 1 >= argc) {
                 return usage(exe);
             } else if (strcmp(arg, "volume") == 0) {
                 double volume = atof(argv[++i]);

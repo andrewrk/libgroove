@@ -29,10 +29,12 @@ union GroovePlayerEvent {
     enum GroovePlayerEventType type;
 };
 
+#define GROOVE_PLAYER_DEFAULT_DEVICE (-1)
+#define GROOVE_PLAYER_DUMMY_DEVICE   (-2)
+
 struct GroovePlayer {
     /* set this to the device you want to open
-     * -1 means default device
-     * -2 means dummy device
+     * could also be GROOVE_PLAYER_DEFAULT_DEVICE or GROOVE_PLAYER_DUMMY_DEVICE
      */
     int device_index;
 

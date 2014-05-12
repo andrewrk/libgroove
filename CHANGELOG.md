@@ -2,15 +2,16 @@
 
  * GrooveBuffer struct contains the presentation time stamp
  * move include statements to outside of extern C
- * player: specify device by index rather than name. closes #44
- * fingerprinter: encode/decode return 0 on success, < 0 on error
- * fingerprinter: info struct contains raw fingerprint instead of
-   compressed string. closes #61
  * ability to set true peak on playlist items. closes #50
+ * support per-sink gain adjustment. closes #41
  * GroovePlaylist: `volume` renamed to `gain`
    - `groove_playlist_set_gain` renamed to `groove_playlist_set_item_gain`
    - `groove_playlist_set_volume` renamed to `groove_playlist_set_gain`
- * support per-sink gain adjustment. closes #41
+ * player: specify device by index rather than name. closes #44
+ * player: ability to attach a dummy player device. closes #60
+ * fingerprinter: encode/decode return 0 on success, < 0 on error
+ * fingerprinter: info struct contains raw fingerprint instead of
+   compressed string. closes #61
 
 ### Version 3.1.1 (2014-04-21)
 

@@ -808,6 +808,20 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
     return 0;
 }
 
+static int groove_sink_play(struct GrooveSink *sink) {
+    if (sink->play)
+        sink->play(sink);
+
+    return 0;
+}
+
+static int groove_sink_pause(struct GrooveSink *sink) {
+    if (sink->pause)
+        sink->pause(sink);
+
+    return 0;
+}
+
 int groove_sink_detach(struct GrooveSink *sink) {
     struct GroovePlaylist *playlist = sink->playlist;
 
@@ -1014,13 +1028,19 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
 void groove_playlist_play(struct GroovePlaylist *playlist) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     // no mutex needed for this boolean flag
+    if (p->paused == 0)
+        return;
     p->paused = 0;
+    every_sink(playlist, groove_sink_play, 0);
 }
 
 void groove_playlist_pause(struct GroovePlaylist *playlist) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     // no mutex needed for this boolean flag
+    if (p->paused == 1)
+        return;
     p->paused = 1;
+    every_sink(playlist, groove_sink_pause, 0);
 }
 
 void groove_playlist_seek(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item, double seconds) {
