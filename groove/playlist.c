@@ -32,7 +32,6 @@ struct SinkStack {
 
 struct SinkMap {
     struct SinkStack *stack_head;
-    AVFilterContext *aformat_ctx;
     AVFilterContext *abuffersink_ctx;
     struct SinkMap *next;
 };
@@ -409,16 +408,15 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
         if (err < 0)
             return err;
 
-        if (example_sink->disable_resample) {
-            map_item->aformat_ctx = NULL;
-        } else {
+        if (!example_sink->disable_resample) {
+            AVFilterContext *aformat_ctx;
             // create aformat filter
             snprintf(p->strbuf, sizeof(p->strbuf),
                     "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%"PRIx64,
                     av_get_sample_fmt_name((enum AVSampleFormat)audio_format->sample_fmt),
                     audio_format->sample_rate, audio_format->channel_layout);
             av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
-            err = avfilter_graph_create_filter(&map_item->aformat_ctx, p->aformat_filter,
+            err = avfilter_graph_create_filter(&aformat_ctx, p->aformat_filter,
                     NULL, p->strbuf, NULL, p->filter_graph);
             if (err < 0) {
                 av_strerror(err, p->strbuf, sizeof(p->strbuf));
@@ -426,13 +424,13 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
                         p->strbuf);
                 return err;
             }
-            err = avfilter_link(inner_audio_src_ctx, pad_index, map_item->aformat_ctx, 0);
+            err = avfilter_link(inner_audio_src_ctx, pad_index, aformat_ctx, 0);
             if (err < 0) {
                 av_strerror(err, p->strbuf, sizeof(p->strbuf));
                 av_log(NULL, AV_LOG_ERROR, "unable to link aformat filter: %s\n", p->strbuf);
                 return err;
             }
-            inner_audio_src_ctx = map_item->aformat_ctx;
+            inner_audio_src_ctx = aformat_ctx;
         }
 
         // create abuffersink filter
