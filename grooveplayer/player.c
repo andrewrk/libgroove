@@ -40,6 +40,7 @@ struct GroovePlayerPrivate {
     int abort_request;
     double start_nanos;
     pthread_cond_t pause_cond;
+    pthread_condattr_t cond_attr;
     int pause_cond_inited;
     int paused;
 };
@@ -141,21 +142,23 @@ static void *dummy_thread(void *arg) {
                 double dbl_sample_rate = p->audio_buf->format.sample_rate;
                 double nanos_per_frame = 1000000000.0 / dbl_sample_rate;
                 int frames_to_kill = nanos_to_kill / nanos_per_frame;
-                if (frames_to_kill > p->audio_buf->frame_count) {
+                int new_index = p->audio_buf_index + frames_to_kill;
+                if (new_index > p->audio_buf->frame_count) {
                     more = 1;
-                    frames_to_kill = p->audio_buf->frame_count;
+                    new_index = p->audio_buf->frame_count;
+                    frames_to_kill = new_index - p->audio_buf_index;
                 }
                 double nanos_killed = frames_to_kill * nanos_per_frame;
                 p->start_nanos += nanos_killed;
-                p->audio_buf_index += frames_to_kill;
+                p->audio_buf_index = new_index;
                 p->play_pos += frames_to_kill / dbl_sample_rate;
             }
         }
 
         // sleep for a little while
         struct timespec tms;
-        clock_gettime(CLOCK_REALTIME, &tms);
-        tms.tv_nsec += 100000000;
+        clock_gettime(CLOCK_MONOTONIC, &tms);
+        tms.tv_nsec += 10000000;
         pthread_cond_timedwait(&p->pause_cond, &p->play_head_mutex, &tms);
         pthread_mutex_unlock(&p->play_head_mutex);
     }
@@ -316,7 +319,9 @@ struct GroovePlayer *groove_player_create(void) {
     }
     p->play_head_mutex_inited = 1;
 
-    if (pthread_cond_init(&p->pause_cond, NULL) != 0) {
+    pthread_condattr_init(&p->cond_attr);
+    pthread_condattr_setclock(&p->cond_attr, CLOCK_MONOTONIC);
+    if (pthread_cond_init(&p->pause_cond, &p->cond_attr) != 0) {
         groove_player_destroy(player);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex condition\n");
         return NULL;
