@@ -1216,10 +1216,14 @@ void groove_playlist_position(struct GroovePlaylist *playlist, struct GroovePlay
     if (item)
         *item = p->decode_head;
 
-    if (seconds && p->decode_head) {
-        struct GrooveFile *file = p->decode_head->file;
-        struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
-        *seconds = f->audio_clock;
+    if (seconds) {
+        if (p->decode_head) {
+            struct GrooveFile *file = p->decode_head->file;
+            struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
+            *seconds = f->audio_clock;
+        } else {
+            *seconds = -1.0;
+        }
     }
     pthread_mutex_unlock(&p->decode_head_mutex);
 }

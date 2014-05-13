@@ -217,6 +217,7 @@ void groove_playlist_remove(struct GroovePlaylist *playlist,
 /* get the position of the decode head
  * both the current playlist item and the position in seconds in the playlist
  * item are given. item will be set to NULL if the playlist is empty
+ * seconds will be set to -1.0 if item is NULL.
  * you may pass NULL for item or seconds
  * Note that typically you are more interested in the position of the play
  * head, not the decode head. For example, if you have a GroovePlayer attached,
