@@ -1,4 +1,4 @@
-### Version 4.0.0 (not yet released)
+### Version 4.0.0 (2014-05-12)
 
  * GrooveBuffer struct contains the presentation time stamp
  * move include statements to outside of extern C
