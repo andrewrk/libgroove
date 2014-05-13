@@ -380,6 +380,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
         // dummy device
         player->actual_audio_format = player->target_audio_format;
         p->sink->audio_format = player->actual_audio_format;
+        p->sink->disable_resample = 1;
     } else {
         SDL_AudioSpec wanted_spec, spec;
         wanted_spec.format = groove_fmt_to_sdl_fmt(player->target_audio_format.sample_fmt);

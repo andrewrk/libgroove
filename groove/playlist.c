@@ -316,7 +316,7 @@ static int create_volume_filter(struct GroovePlaylistPrivate *p, AVFilterContext
 }
 
 // abuffer -> volume -> asplit for each audio format
-//                     -> aformat -> abuffersink
+//                     -> volume -> aformat -> abuffersink
 // if the volume gain is > 1.0, we use a compand filter instead
 // for soft limiting.
 static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile *file) {
@@ -710,18 +710,18 @@ static void *decode_thread(void *arg) {
 }
 
 static int sink_formats_equal(const struct GrooveSink *a, const struct GrooveSink *b) {
-    if (a->buffer_sample_count != b->buffer_sample_count)
+    if (b->buffer_sample_count != 0 && a->buffer_sample_count != b->buffer_sample_count)
         return 0;
     if (a->gain != b->gain)
         return 0;
-    if (a->disable_resample) {
-        return b->disable_resample;
-    } else {
-        return b->disable_resample ? 0 :
-            (a->audio_format.sample_rate == b->audio_format.sample_rate &&
-            a->audio_format.channel_layout == b->audio_format.channel_layout &&
-            a->audio_format.sample_fmt == b->audio_format.sample_fmt);
+    if (!b->disable_resample &&
+        (a->audio_format.sample_rate != b->audio_format.sample_rate ||
+        a->audio_format.channel_layout != b->audio_format.channel_layout ||
+        a->audio_format.sample_fmt != b->audio_format.sample_fmt))
+    {
+        return 0;
     }
+    return 1;
 }
 
 static int remove_sink_from_map(struct GrooveSink *sink) {
@@ -782,6 +782,13 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
         // push our sink onto the stack and we're done
         struct GrooveSink *example_sink = map_item->stack_head->sink;
         if (sink_formats_equal(example_sink, sink)) {
+            stack_entry->next = map_item->stack_head->next;
+            map_item->stack_head->next = stack_entry;
+            return 0;
+        }
+        // maybe we need to swap the example sink with the new sink to make
+        // it work
+        if (sink_formats_equal(sink, example_sink)) {
             stack_entry->next = map_item->stack_head;
             map_item->stack_head = stack_entry;
             return 0;
