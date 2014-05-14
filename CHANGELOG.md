@@ -1,3 +1,12 @@
+### Version 4.0.1 (2014-05-13)
+
+ * groove_playlist_get_position: always set seconds even when item is NULL
+ * playlist: correct generation of the sink map
+   - fixes potential error when adding multiple sinks
+   - optimizes some cases where sinks can share filter graph chain
+   - dummy player now uses disable_resample optimization
+ * dummy player: avoid floating point error accumulation
+
 ### Version 4.0.0 (2014-05-12)
 
  * GrooveBuffer struct contains the presentation time stamp
