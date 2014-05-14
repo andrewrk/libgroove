@@ -38,7 +38,8 @@ struct GroovePlayerPrivate {
     // for dummy player
     pthread_t thread_id;
     int abort_request;
-    double start_nanos;
+    uint64_t start_nanos;
+    uint64_t frames_consumed;
     pthread_cond_t pause_cond;
     pthread_condattr_t cond_attr;
     int pause_cond_inited;
@@ -88,11 +89,10 @@ static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType typ
         av_log(NULL, AV_LOG_ERROR, "unable to put event on queue: out of memory\n");
 }
 
-static double now_nanos(void) {
+static uint64_t now_nanos(void) {
     struct timespec tms;
     clock_gettime(CLOCK_MONOTONIC, &tms);
-    uint64_t nanos = tms.tv_sec * 1000000000 + tms.tv_nsec;
-    return nanos;
+    return tms.tv_sec * 1000000000 + tms.tv_nsec;
 }
 
 // this thread is started if the user selects a dummy device instead of a
@@ -109,7 +109,7 @@ static void *dummy_thread(void *arg) {
             continue;
         }
 
-        double now = now_nanos();
+        uint64_t now = now_nanos();
         int more = 1;
         while (more) {
             more = 0;
@@ -133,25 +133,25 @@ static void *dummy_thread(void *arg) {
                     // errors are treated the same as no buffer ready
                     emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
                     p->start_nanos = now;
+                    p->frames_consumed = 0;
                     pthread_mutex_unlock(&p->play_head_mutex);
                     break;
                 }
             }
             if (p->audio_buf) {
-                double nanos_to_kill = now - p->start_nanos;
-                double dbl_sample_rate = p->audio_buf->format.sample_rate;
-                double nanos_per_frame = 1000000000.0 / dbl_sample_rate;
-                int frames_to_kill = nanos_to_kill / nanos_per_frame;
+                uint64_t nanos_per_frame = 1000000000 / p->audio_buf->format.sample_rate;
+                uint64_t total_nanos = now - p->start_nanos;
+                uint64_t total_frames = total_nanos / nanos_per_frame;
+                int frames_to_kill = total_frames - p->frames_consumed;
                 int new_index = p->audio_buf_index + frames_to_kill;
                 if (new_index > p->audio_buf->frame_count) {
                     more = 1;
                     new_index = p->audio_buf->frame_count;
                     frames_to_kill = new_index - p->audio_buf_index;
                 }
-                double nanos_killed = frames_to_kill * nanos_per_frame;
-                p->start_nanos += nanos_killed;
+                p->frames_consumed += frames_to_kill;
                 p->audio_buf_index = new_index;
-                p->play_pos += frames_to_kill / dbl_sample_rate;
+                p->play_pos += frames_to_kill / (double) p->audio_buf->format.sample_rate;
             }
         }
 
@@ -231,6 +231,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
         p->audio_buf_index = 0;
         p->audio_buf_size = 0;
         p->start_nanos = now_nanos();
+        p->frames_consumed = 0;
         emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
     }
 
@@ -263,6 +264,7 @@ static void sink_play(struct GrooveSink *sink) {
     // mark the position in time that we started playing at.
     pthread_mutex_lock(&p->play_head_mutex);
     p->start_nanos = now_nanos();
+    p->frames_consumed = 0;
     p->paused = 0;
     pthread_cond_signal(&p->pause_cond);
     pthread_mutex_unlock(&p->play_head_mutex);
@@ -278,6 +280,7 @@ static void sink_flush(struct GrooveSink *sink) {
     p->audio_buf_index = 0;
     p->audio_buf_size = 0;
     p->start_nanos = now_nanos();
+    p->frames_consumed = 0;
 
     pthread_mutex_unlock(&p->play_head_mutex);
 }
