@@ -249,6 +249,7 @@ set_target_properties(groove PROPERTIES
 if(LIBGROOVE_LDFLAGS)
   set_target_properties(groove PROPERTIES LINK_FLAGS ${LIBGROOVE_LDFLAGS})
 endif()
+include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_BINARY_DIR})
 if(LIBAV_IS_BUNDLED)
   target_link_libraries(groove
