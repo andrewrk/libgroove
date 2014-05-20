@@ -37,6 +37,7 @@ struct GroovePlayerPrivate {
 
     // for dummy player
     pthread_t thread_id;
+    int thread_inited;
     int abort_request;
     uint64_t start_nanos;
     uint64_t frames_consumed;
@@ -442,6 +443,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
             av_log(NULL, AV_LOG_ERROR, "unable to create dummy player thread\n");
             return -1;
         }
+        p->thread_inited = 1;
     } else {
         SDL_PauseAudioDevice(p->device_id, 0);
     }
@@ -463,8 +465,11 @@ int groove_player_detach(struct GroovePlayer *player) {
         SDL_CloseAudioDevice(p->device_id);
         p->device_id = 0;
     }
-    pthread_cond_signal(&p->pause_cond);
-    pthread_join(p->thread_id, NULL);
+    if (p->thread_inited) {
+        pthread_cond_signal(&p->pause_cond);
+        pthread_join(p->thread_id, NULL);
+        p->thread_inited = 0;
+    }
 
     player->playlist = NULL;
 
