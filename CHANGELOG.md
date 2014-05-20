@@ -1,3 +1,11 @@
+### Version 4.0.2 (2014-05-20)
+
+ * player: thread cleanup only if thread was initialized - fixes potential
+   crash on player detach
+ * build: look for includes in the current source tree. Fixes an issue when a
+   previous version of the library is installed.
+ * build: on unix link with -lm
+
 ### Version 4.0.1 (2014-05-13)
 
  * groove_playlist_get_position: always set seconds even when item is NULL
