@@ -793,10 +793,11 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
             return 0;
         }
         // maybe we need to swap the example sink with the new sink to make
-        // it work
+        // it work. In this case we need to rebuild the filter graph.
         if (sink_formats_compatible(sink, example_sink)) {
             stack_entry->next = map_item->stack_head;
             map_item->stack_head = stack_entry;
+            p->rebuild_filter_graph_flag = 1;
             return 0;
         }
         map_item = map_item->next;
