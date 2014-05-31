@@ -873,20 +873,22 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
     // add the sink to the entry that matches its audio format
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
+    // must do this above add_sink_to_map to avid race condition
+    sink->playlist = playlist;
+
     pthread_mutex_lock(&p->decode_head_mutex);
     int err = add_sink_to_map(playlist, sink);
     pthread_cond_signal(&p->sink_drain_cond);
     pthread_mutex_unlock(&p->decode_head_mutex);
 
     if (err < 0) {
+        sink->playlist = NULL;
         av_log(NULL, AV_LOG_ERROR, "unable to attach device: out of memory\n");
         return err;
     }
 
     // in case we've called abort on the queue, reset
     groove_queue_reset(s->audioq);
-
-    sink->playlist = playlist;
 
     return 0;
 }
