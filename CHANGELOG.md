@@ -1,3 +1,12 @@
+### Version 4.0.3 (2014-05-31)
+
+ * build: update bundled libav to latest stable 10 release
+ * build: link player with -lrt for clock_gettime. closes #67
+ * playlist: fix case where filter graph was not being rebuilt. closes #65
+ * playlist: fix race condition segfault when attaching a sink
+ * encoder: properly reset encoding when flush or playlist end is encountered.
+   closes #66
+
 ### Version 4.0.2 (2014-05-20)
 
  * player: thread cleanup only if thread was initialized - fixes potential
