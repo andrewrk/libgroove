@@ -24,6 +24,8 @@ struct GrooveEncoderPrivate {
     struct GrooveQueue *audioq;
     struct GrooveSink *sink;
     AVFormatContext *fmt_ctx;
+    AVOutputFormat *oformat;
+    AVCodec *codec;
     AVStream *stream;
     AVPacket pkt;
     int audioq_size; // in bytes
@@ -94,6 +96,60 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
     return 0;
 }
 
+static void cleanup_avcontext(struct GrooveEncoderPrivate *e) {
+    if (e->stream) {
+        avcodec_close(e->stream->codec);
+        // stream is freed by freeing the AVFormatContext
+        e->stream = NULL;
+    }
+
+    if (e->fmt_ctx) {
+        avformat_free_context(e->fmt_ctx);
+        e->fmt_ctx = NULL;
+    }
+
+    e->sent_header = 0;
+    e->encode_head = NULL;
+    e->encode_pos = -1.0;
+    e->encode_pts = 0;
+    e->next_pts = 0;
+}
+
+static int init_avcontext(struct GrooveEncoder *encoder) {
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
+    e->fmt_ctx = avformat_alloc_context();
+    if (!e->fmt_ctx) {
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate format context\n");
+        return -1;
+    }
+    e->fmt_ctx->pb = e->avio;
+    e->fmt_ctx->oformat = e->oformat;
+
+    e->stream = avformat_new_stream(e->fmt_ctx, e->codec);
+    if (!e->stream) {
+        av_log(NULL, AV_LOG_ERROR, "unable to create output stream\n");
+        return -1;
+    }
+
+    AVCodecContext *codec_ctx = e->stream->codec;
+    codec_ctx->bit_rate = encoder->bit_rate;
+    codec_ctx->sample_fmt = (enum AVSampleFormat)encoder->actual_audio_format.sample_fmt;
+    codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
+    codec_ctx->channel_layout = encoder->actual_audio_format.channel_layout;
+    codec_ctx->channels = av_get_channel_layout_nb_channels(encoder->actual_audio_format.channel_layout);
+    codec_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+
+    int err = avcodec_open2(codec_ctx, e->codec, NULL);
+    if (err < 0) {
+        av_strerror(err, e->strbuf, sizeof(e->strbuf));
+        av_log(NULL, AV_LOG_ERROR, "unable to open codec: %s\n", e->strbuf);
+        return -1;
+    }
+    e->stream->codec = codec_ctx;
+
+    return 0;
+}
+
 static void *encode_thread(void *arg) {
     struct GrooveEncoder *encoder = arg;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
@@ -125,9 +181,6 @@ static void *encode_thread(void *arg) {
 
             // send trailer
             avio_flush(e->avio);
-            e->sent_header = 0;
-            e->encode_head = NULL;
-            e->encode_pos = -1.0;
             av_log(NULL, AV_LOG_INFO, "encoder: writing trailer\n");
             if (av_write_trailer(e->fmt_ctx) < 0) {
                 av_log(NULL, AV_LOG_ERROR, "could not write trailer\n");
@@ -135,6 +188,9 @@ static void *encode_thread(void *arg) {
             avio_flush(e->avio);
 
             groove_queue_put(e->audioq, end_of_q_sentinel);
+
+            cleanup_avcontext(e);
+            init_avcontext(encoder);
 
             pthread_mutex_unlock(&e->encode_head_mutex);
             continue;
@@ -188,11 +244,16 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GrooveEncoderPrivate *e = sink->userdata;
+    struct GrooveEncoder *encoder = sink->userdata;
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     pthread_mutex_lock(&e->encode_head_mutex);
     groove_queue_flush(e->audioq);
-    avcodec_flush_buffers(e->stream->codec);
+
+    cleanup_avcontext(e);
+    init_avcontext(encoder);
+    groove_queue_put(e->audioq, end_of_q_sentinel);
+
     pthread_cond_signal(&e->drain_cond);
     pthread_mutex_unlock(&e->encode_head_mutex);
 }
@@ -501,21 +562,14 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
     encoder->playlist = playlist;
     groove_queue_reset(e->audioq);
 
-    e->fmt_ctx = avformat_alloc_context();
-    if (!e->fmt_ctx) {
-        groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate format context\n");
-        return -1;
-    }
-    e->fmt_ctx->pb = e->avio;
-
-    e->fmt_ctx->oformat = av_guess_format(encoder->format_short_name,
+    e->oformat = av_guess_format(encoder->format_short_name,
             encoder->filename, encoder->mime_type);
-    if (!e->fmt_ctx->oformat) {
+    if (!e->oformat) {
         groove_encoder_detach(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to determine format\n");
         return -1;
     }
+
     // av_guess_codec ignores mime_type, filename, and codec_short_name. see
     // https://bugzilla.libav.org/show_bug.cgi?id=580
     // because of this we do a workaround to return the correct codec based on
@@ -532,7 +586,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
         }
     }
     if (!codec) {
-        enum AVCodecID codec_id = av_guess_codec(e->fmt_ctx->oformat,
+        enum AVCodecID codec_id = av_guess_codec(e->oformat,
                 encoder->codec_short_name, encoder->filename, encoder->mime_type,
                 AVMEDIA_TYPE_AUDIO);
         codec = avcodec_find_encoder(codec_id);
@@ -542,14 +596,8 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
             return -1;
         }
     }
+    e->codec = codec;
     av_log(NULL, AV_LOG_INFO, "encoder: using codec: %s\n", codec->long_name);
-
-    e->stream = avformat_new_stream(e->fmt_ctx, codec);
-    if (!e->stream) {
-        groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to create output stream\n");
-        return -1;
-    }
 
     encoder->actual_audio_format.sample_fmt = closest_supported_sample_fmt(
             codec, encoder->target_audio_format.sample_fmt);
@@ -560,28 +608,16 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
 
     log_audio_fmt(&encoder->actual_audio_format);
 
-    AVCodecContext *codec_ctx = e->stream->codec;
-    codec_ctx->bit_rate = encoder->bit_rate;
-    codec_ctx->sample_fmt = (enum AVSampleFormat)encoder->actual_audio_format.sample_fmt;
-    codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
-    codec_ctx->channel_layout = encoder->actual_audio_format.channel_layout;
-    codec_ctx->channels = av_get_channel_layout_nb_channels(encoder->actual_audio_format.channel_layout);
-    codec_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
-
-    e->stream->codec = codec_ctx;
-
-    int errcode = avcodec_open2(codec_ctx, codec, NULL);
-    if (errcode < 0) {
+    int err = init_avcontext(encoder);
+    if (err < 0) {
         groove_encoder_detach(encoder);
-        av_strerror(errcode, e->strbuf, sizeof(e->strbuf));
-        av_log(NULL, AV_LOG_ERROR, "unable to open codec: %s\n", e->strbuf);
-        return -1;
+        return err;
     }
 
     e->sink->audio_format = encoder->actual_audio_format;
     e->sink->buffer_size = encoder->sink_buffer_size;
     e->sink->buffer_sample_count = (codec->capabilities & CODEC_CAP_VARIABLE_FRAME_SIZE) ?
-        0 : codec_ctx->frame_size;
+        0 : e->stream->codec->frame_size;
     e->sink->gain = encoder->gain;
 
     if (groove_sink_attach(e->sink, playlist) < 0) {
@@ -608,22 +644,11 @@ int groove_encoder_detach(struct GrooveEncoder *encoder) {
     groove_queue_abort(e->audioq);
     pthread_cond_signal(&e->drain_cond);
     pthread_join(e->thread_id, NULL);
-
-    if (e->stream) {
-        avcodec_close(e->stream->codec);
-        // stream is freed by freeing the AVFormatContext
-        e->stream = NULL;
-    }
-
-    if (e->fmt_ctx)
-        avformat_free_context(e->fmt_ctx);
-
-    e->encode_head = NULL;
-    e->encode_pos = -1.0;
-    e->encode_pts = 0;
-    e->sent_header = 0;
     e->abort_request = 0;
-    e->next_pts = 0;
+
+    cleanup_avcontext(e);
+    e->oformat = NULL;
+    e->codec = NULL;
 
     encoder->playlist = NULL;
     return 0;
