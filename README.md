@@ -1,8 +1,8 @@
 # libgroove
 
-Audio dispatching library. Generic sink-based interface. Provides decoding,
-encoding, resampling, and gain adjustment. Perfect for the backend of a
-music player.
+This library provides decoding and encoding of audio on a playlist.
+It is intended to be used as a backend for music player applications, however
+it is generic enough to be used as a backend for any audio processing utility.
 
 ## Features
 
