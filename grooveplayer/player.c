@@ -282,6 +282,8 @@ static void sink_flush(struct GrooveSink *sink) {
     p->audio_buf_size = 0;
     p->start_nanos = now_nanos();
     p->frames_consumed = 0;
+    p->play_pos = -1.0;
+    p->play_head = NULL;
 
     pthread_mutex_unlock(&p->play_head_mutex);
 }
