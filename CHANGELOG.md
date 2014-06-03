@@ -1,3 +1,9 @@
+### Version 4.0.4 (2014-06-03)
+
+ * Fixed a race condition where seeking to a different playlist item and then
+   back would have a window of time where it could report the wrong position.
+ * Properly play and pause network streams.
+
 ### Version 4.0.3 (2014-05-31)
 
  * build: update bundled libav to latest stable 10 release
