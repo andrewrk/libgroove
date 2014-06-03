@@ -33,6 +33,8 @@ struct GrooveFilePrivate {
     // state while saving
     AVFormatContext *oc;
     int tempfile_exists;
+
+    int paused;
 };
 
 #endif /* GROOVE_FILE_H_INCLUDED */

@@ -44,7 +44,6 @@ struct GroovePlaylistPrivate {
     AVPacket audio_pkt_temp;
     AVFrame *in_frame;
     int paused;
-    int last_paused;
 
     int in_sample_rate;
     uint64_t in_channel_layout;
@@ -537,29 +536,16 @@ static void every_sink_flush(struct GroovePlaylist *playlist) {
 }
 
 static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *file) {
-    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
     AVPacket *pkt = &f->audio_pkt;
-
-    // might need to rebuild the filter graph if certain things changed
-    if (maybe_init_filter_graph(playlist, file) < 0)
-        return -1;
 
     // abort_request is set if we are destroying the file
     if (f->abort_request)
         return -1;
 
-    // handle pause requests
-    // only read p->paused once so that we don't need a mutex
-    int paused = p->paused;
-    if (paused != p->last_paused) {
-        p->last_paused = paused;
-        if (paused) {
-            av_read_pause(f->ic);
-        } else {
-            av_read_play(f->ic);
-        }
-    }
+    // might need to rebuild the filter graph if certain things changed
+    if (maybe_init_filter_graph(playlist, file) < 0)
+        return -1;
 
     // handle seek requests
     pthread_mutex_lock(&f->seek_mutex);
@@ -680,13 +666,22 @@ static void *decode_thread(void *arg) {
         p->sent_end_of_q = 0;
 
         // if all sinks are filled up, no need to read more
-        if (every_sink_full(playlist)) {
+        struct GrooveFile *file = p->decode_head->file;
+        struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
+
+        if (every_sink_full(playlist) && (f->seek_pos < 0 || !f->seek_flush)) {
+            if (!f->paused) {
+                av_read_pause(f->ic);
+                f->paused = 1;
+            }
             pthread_cond_wait(&p->sink_drain_cond, &p->decode_head_mutex);
             pthread_mutex_unlock(&p->decode_head_mutex);
             continue;
         }
-
-        struct GrooveFile *file = p->decode_head->file;
+        if (f->paused) {
+            av_read_play(f->ic);
+            f->paused = 0;
+        }
 
         update_playlist_volume(playlist);
 
