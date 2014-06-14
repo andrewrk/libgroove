@@ -1,3 +1,8 @@
+### Version 4.1.0 (2014-06-13)
+
+ * playlist: added `groove_playlist_set_fill_mode`. Allows you to choose between
+   buffering until all sinks are full and buffering until any sinks are full.
+
 ### Version 4.0.4 (2014-06-03)
 
  * Fixed a race condition where seeking to a different playlist item and then
