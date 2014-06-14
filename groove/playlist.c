@@ -93,6 +93,8 @@ struct GroovePlaylistPrivate {
     int sent_end_of_q;
 
     struct GroovePlaylistItem *purge_item; // set temporarily
+
+    int (*detect_full_sinks)(struct GroovePlaylist*);
 };
 
 // this is used to tell the difference between a buffer underrun
@@ -511,6 +513,10 @@ static int every_sink_full(struct GroovePlaylist *playlist) {
     return every_sink(playlist, sink_is_full, 1);
 }
 
+static int any_sink_full(struct GroovePlaylist *playlist) {
+    return every_sink(playlist, sink_is_full, 0);
+}
+
 static int sink_signal_end(struct GrooveSink *sink) {
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     groove_queue_put(s->audioq, end_of_q_sentinel);
@@ -669,7 +675,7 @@ static void *decode_thread(void *arg) {
         struct GrooveFile *file = p->decode_head->file;
         struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
-        if (every_sink_full(playlist) && (f->seek_pos < 0 || !f->seek_flush)) {
+        if (p->detect_full_sinks(playlist) && (f->seek_pos < 0 || !f->seek_flush)) {
             if (!f->paused) {
                 av_read_pause(f->ic);
                 f->paused = 1;
@@ -925,6 +931,8 @@ struct GroovePlaylist * groove_playlist_create(void) {
     // set this flag to true so that a race condition does not send the end of
     // queue sentinel early.
     p->sent_end_of_q = 1;
+
+    p->detect_full_sinks = every_sink_full;
 
     if (pthread_mutex_init(&p->decode_head_mutex, NULL) != 0) {
         groove_playlist_destroy(playlist);
@@ -1319,4 +1327,18 @@ int groove_sink_set_gain(struct GrooveSink *sink, double gain) {
     p->rebuild_filter_graph_flag = 1;
     pthread_mutex_unlock(&p->decode_head_mutex);
     return 0;
+}
+
+void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, int mode) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+
+    pthread_mutex_lock(&p->decode_head_mutex);
+
+    if (mode == GROOVE_EVERY_SINK_FULL) {
+        p->detect_full_sinks = every_sink_full;
+    } else {
+        p->detect_full_sinks = any_sink_full;
+    }
+
+    pthread_mutex_unlock(&p->decode_head_mutex);
 }

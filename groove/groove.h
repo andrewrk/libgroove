@@ -180,8 +180,7 @@ struct GroovePlaylist {
     double gain;
 };
 
-/* a playlist manages keeping an audio buffer full
- * to send the buffer to your speakers, use groove_player_create
+/* a playlist keeps its sinks full.
  */
 struct GroovePlaylist *groove_playlist_create(void);
 /* this will not call groove_file_close on any files
@@ -243,6 +242,20 @@ void groove_playlist_set_item_gain(struct GroovePlaylist *playlist,
 
 void groove_playlist_set_item_peak(struct GroovePlaylist *playlist,
         struct GroovePlaylistItem *item, double peak);
+
+/* This is the default behavior. The playlist will decode audio if any sinks
+ * are not full. If any sinks do not drain fast enough the data will buffer up
+ * in the playlist.
+ */
+#define GROOVE_EVERY_SINK_FULL 0
+
+/* With this behavior, the playlist will stop decoding audio when any attached
+ * sink is full, and then resume decoding audio every sink is not full.
+ */
+#define GROOVE_ANY_SINK_FULL   1
+
+/* Use this to set the fill mode using the constants above */
+void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, int mode);
 
 /************ GrooveBuffer ****************/
 
