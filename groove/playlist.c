@@ -61,16 +61,19 @@ struct GroovePlaylistPrivate {
     AVFilter *aformat_filter;
     AVFilter *abuffersink_filter;
 
+    pthread_mutex_t drain_cond_mutex;
+    int drain_cond_mutex_inited;
+
     // this mutex applies to the variables in this block
     pthread_mutex_t decode_head_mutex;
-    char decode_head_mutex_inited;
+    int decode_head_mutex_inited;
     // decode_thread waits on this cond when the decode_head is NULL
     pthread_cond_t decode_head_cond;
-    char decode_head_cond_inited;
+    int decode_head_cond_inited;
     // decode_thread waits on this cond when every sink is full
     // should also signal when the first sink is attached.
     pthread_cond_t sink_drain_cond;
-    char sink_drain_cond_inited;
+    int sink_drain_cond_inited;
     // pointer to current playlist item being decoded
     struct GroovePlaylistItem *decode_head;
     // desired volume for the volume filter
@@ -618,8 +621,11 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
 
     struct GroovePlaylist *playlist = sink->playlist;
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
-    if (s->audioq_size < s->min_audioq_size)
+    if (s->audioq_size < s->min_audioq_size) {
+        pthread_mutex_lock(&p->drain_cond_mutex);
         pthread_cond_signal(&p->sink_drain_cond);
+        pthread_mutex_unlock(&p->drain_cond_mutex);
+    }
 }
 
 static void audioq_cleanup(struct GrooveQueue *queue, void *obj) {
@@ -675,15 +681,18 @@ static void *decode_thread(void *arg) {
         struct GrooveFile *file = p->decode_head->file;
         struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
+        pthread_mutex_lock(&p->drain_cond_mutex);
         if (p->detect_full_sinks(playlist) && (f->seek_pos < 0 || !f->seek_flush)) {
             if (!f->paused) {
                 av_read_pause(f->ic);
                 f->paused = 1;
             }
-            pthread_cond_wait(&p->sink_drain_cond, &p->decode_head_mutex);
             pthread_mutex_unlock(&p->decode_head_mutex);
+            pthread_cond_wait(&p->sink_drain_cond, &p->drain_cond_mutex);
+            pthread_mutex_unlock(&p->drain_cond_mutex);
             continue;
         }
+        pthread_mutex_unlock(&p->drain_cond_mutex);
         if (f->paused) {
             av_read_play(f->ic);
             f->paused = 0;
@@ -879,7 +888,9 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
 
     pthread_mutex_lock(&p->decode_head_mutex);
     int err = add_sink_to_map(playlist, sink);
+    pthread_mutex_lock(&p->drain_cond_mutex);
     pthread_cond_signal(&p->sink_drain_cond);
+    pthread_mutex_unlock(&p->drain_cond_mutex);
     pthread_mutex_unlock(&p->decode_head_mutex);
 
     if (err < 0) {
@@ -936,10 +947,17 @@ struct GroovePlaylist * groove_playlist_create(void) {
 
     if (pthread_mutex_init(&p->decode_head_mutex, NULL) != 0) {
         groove_playlist_destroy(playlist);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate mutex\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate decode head mutex\n");
         return NULL;
     }
     p->decode_head_mutex_inited = 1;
+
+    if (pthread_mutex_init(&p->drain_cond_mutex, NULL) != 0) {
+        groove_playlist_destroy(playlist);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate drain cond mutex\n");
+        return NULL;
+    }
+    p->drain_cond_mutex_inited = 1;
 
     if (pthread_cond_init(&p->decode_head_cond, NULL) != 0) {
         groove_playlist_destroy(playlist);
@@ -1032,6 +1050,9 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
 
     if (p->decode_head_mutex_inited)
         pthread_mutex_destroy(&p->decode_head_mutex);
+
+    if (p->drain_cond_mutex_inited)
+        pthread_mutex_destroy(&p->drain_cond_mutex);
 
     if (p->decode_head_cond_inited)
         pthread_cond_destroy(&p->decode_head_cond);
@@ -1174,7 +1195,9 @@ void groove_playlist_remove(struct GroovePlaylist *playlist, struct GroovePlayli
     every_sink(playlist, purge_sink, 0);
     p->purge_item = NULL;
 
+    pthread_mutex_lock(&p->drain_cond_mutex);
     pthread_cond_signal(&p->sink_drain_cond);
+    pthread_mutex_unlock(&p->drain_cond_mutex);
     pthread_mutex_unlock(&p->decode_head_mutex);
 
     av_free(item);
