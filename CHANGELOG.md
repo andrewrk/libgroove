@@ -1,3 +1,8 @@
+### Version 4.1.1 (2014-06-20)
+
+ * playlist: fix race condition which can cause decoder to hang
+ * dummy player: fix timing issues
+
 ### Version 4.1.0 (2014-06-13)
 
  * playlist: added `groove_playlist_set_fill_mode`. Allows you to choose between
