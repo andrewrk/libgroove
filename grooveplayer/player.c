@@ -93,7 +93,10 @@ static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType typ
 static uint64_t now_nanos(void) {
     struct timespec tms;
     clock_gettime(CLOCK_MONOTONIC, &tms);
-    return tms.tv_sec * 1000000000 + tms.tv_nsec;
+    uint64_t tv_sec = tms.tv_sec;
+    uint64_t sec_mult = 1000000000;
+    uint64_t tv_nsec = tms.tv_nsec;
+    return tv_sec * sec_mult + tv_nsec;
 }
 
 // this thread is started if the user selects a dummy device instead of a
@@ -131,10 +134,10 @@ static void *dummy_thread(void *arg) {
                     p->play_pos = p->audio_buf->pos;
                     p->audio_buf_size = p->audio_buf->size;
                 } else {
-                    // errors are treated the same as no buffer ready
-                    emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
-                    p->start_nanos = now;
-                    p->frames_consumed = 0;
+                    // since this is a dummy player whose only job is to keep
+                    // track of time, we're going to pretend that we did *not*
+                    // just get a buffer underrun. Instead we'll wait patiently
+                    // for the next buffer to appear and handle it appropriately.
                     pthread_mutex_unlock(&p->play_head_mutex);
                     break;
                 }
