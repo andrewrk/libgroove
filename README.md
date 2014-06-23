@@ -60,6 +60,11 @@ so that you can still compile if they cannot be found on your system.
    sudo apt-get update
    sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev libgroovefingerprinter-dev
    ```
+ * [FreeBSD Port](http://www.freshports.org/audio/libgroove/)
+
+   ```
+   pkg install audio/libgroove
+   ```
 
 ### From Source
 
