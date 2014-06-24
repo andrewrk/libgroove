@@ -53,18 +53,28 @@ so that you can still compile if they cannot be found on your system.
 
 ### Pre-Built Packages
 
- * [Ubuntu PPA](https://launchpad.net/~andrewrk/+archive/libgroove)
+#### [Ubuntu PPA](https://launchpad.net/~andrewrk/+archive/libgroove)
 
-   ```
-   sudo apt-add-repository ppa:andrewrk/libgroove
-   sudo apt-get update
-   sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev libgroovefingerprinter-dev
-   ```
- * [FreeBSD Port](http://www.freshports.org/audio/libgroove/)
+```
+sudo apt-add-repository ppa:andrewrk/libgroove
+sudo apt-get update
+sudo apt-get install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev libgroovefingerprinter-dev
+```
 
-   ```
-   pkg install audio/libgroove
-   ```
+#### [FreeBSD Port](http://www.freshports.org/audio/libgroove/)
+
+```
+pkg install audio/libgroove
+```
+
+#### [Debian](http://packages.qa.debian.org/libg/libgroove.html)
+
+[Configure your system](http://serverfault.com/questions/22414/) to be able
+to install packages from testing.
+
+```
+sudo apt-get -t testing install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev libgroovefingerprinter-dev
+```
 
 ### From Source
 
