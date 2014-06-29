@@ -15,6 +15,11 @@
 #include <pthread.h>
 #include <time.h>
 
+#ifdef __MACH__
+#include "mach_gettime.h"
+#include "mach_settime.h"
+#endif
+
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
     struct GrooveBuffer *audio_buf;

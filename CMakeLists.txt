@@ -193,7 +193,7 @@ else()
     COMPILE_FLAGS ${LIB_CFLAGS}
     )
   target_link_libraries(grooveplayer LINK_PUBLIC groove)
-  if(UNIX)
+  if(UNIX AND NOT APPLE)
     target_link_libraries(grooveplayer LINK_PRIVATE rt)
   endif(UNIX)
   add_dependencies(grooveplayer groove)
