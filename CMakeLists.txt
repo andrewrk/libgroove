@@ -268,7 +268,7 @@ else()
     )
   target_link_libraries(groovefingerprinter LINK_PUBLIC groove ${CMAKE_THREAD_LIBS_INIT})
   add_dependencies(groovefingerprinter groove)
-  target_link_libraries(groovefingerprinter LINK_PRIVATE ${CHROMAPRINT_LIBRARIES})
+  target_link_libraries(groovefingerprinter LINK_PRIVATE ${CHROMAPRINT_LIBRARY})
   include_directories(${CHROMAPRINT_INCLUDE_DIR})
 
   install(FILES "groovefingerprinter/fingerprinter.h" DESTINATION "include/groovefingerprinter")

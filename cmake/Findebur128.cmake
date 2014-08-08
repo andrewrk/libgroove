@@ -1,40 +1,22 @@
-# Locate libebur128 library  
-# This module defines
-# EBUR128_LIBRARY, the name of the library to link against
-# EBUR128_FOUND, if false, do not try to link
-# EBUR128_INCLUDE_DIR, where to find header
-#
-set(EBUR128_FOUND FALSE)
+# Copyright (c) 2014 Andrew Kelley
+# This file is MIT licensed.
+# See http://opensource.org/licenses/MIT
 
-find_path(EBUR128_INCLUDE_DIR ebur128.h
-  HINTS
-  PATH_SUFFIXES include 
-  PATHS
-  ~/Library/Frameworks
-  /Library/Frameworks
-  /usr/local/include
-  /usr/include
-  /sw/include
-  /opt/local/include
-  /opt/csw/include 
-  /opt/include
-  /mingw
-)
+# EBUR128_FOUND
+# EBUR128_INCLUDE_DIR
+# EBUR128_LIBRARY
 
-find_library(EBUR128_LIBRARY
-  NAMES ebur128
-  HINTS
-  PATH_SUFFIXES lib64 lib
-  PATHS
-  /usr/local
-  /usr
-  /sw
-  /opt/local
-  /opt/csw
-  /opt
-  /mingw
-)
+find_path(EBUR128_INCLUDE_DIR NAMES ebur128.h)
 
-if(EBUR128_LIBRARY)
+find_library(EBUR128_LIBRARY NAMES ebur128)
+
+if(EBUR128_LIBRARY AND EBUR128_INCLUDE_DIR)
   set(EBUR128_FOUND TRUE)
-endif(EBUR128_LIBRARY)
+else()
+  set(EBUR128_FOUND FALSE)
+endif()
+
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(EBUR128 DEFAULT_MSG EBUR128_LIBRARY EBUR128_INCLUDE_DIR)
+
+mark_as_advanced(EBUR128_INCLUDE_DIR EBUR128_LIBRARY)

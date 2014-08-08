@@ -1,22 +1,22 @@
-# copied from https://bitbucket.org/acoustid/acoustid-fingerprinter
-# GPLv2 license
-INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE(PkgConfig)
-PKG_CHECK_MODULES(PKG_LIBCHROMAPRINT libchromaprint)
+# Copyright (c) 2014 Andrew Kelley
+# This file is MIT licensed.
+# See http://opensource.org/licenses/MIT
 
-FIND_PATH(CHROMAPRINT_INCLUDE_DIR chromaprint.h
-    ${PKG_LIBCHROMAPRINT_INCLUDE_DIRS}
-    /usr/include
-    /usr/local/include
-)
+# CHROMAPRINT_FOUND
+# CHROMAPRINT_INCLUDE_DIR
+# CHROMAPRINT_LIBRARY
 
-FIND_LIBRARY(CHROMAPRINT_LIBRARIES
-    NAMES
-    chromaprint chromaprint.dll
-    PATHS
-    ${PKG_LIBCHROMAPRINT_LIBRARY_DIRS}
-    /usr/lib
-    /usr/local/lib
-)
+find_path(CHROMAPRINT_INCLUDE_DIR NAMES chromaprint.h)
 
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(Chromaprint DEFAULT_MSG CHROMAPRINT_LIBRARIES CHROMAPRINT_INCLUDE_DIR)
+find_library(CHROMAPRINT_LIBRARY NAMES chromaprint)
+
+if(CHROMAPRINT_LIBRARY AND CHROMAPRINT_INCLUDE_DIR)
+  set(CHROMAPRINT_FOUND TRUE)
+else()
+  set(CHROMAPRINT_FOUND FALSE)
+endif()
+
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(CHROMAPRINT DEFAULT_MSG CHROMAPRINT_LIBRARY CHROMAPRINT_INCLUDE_DIR)
+
+mark_as_advanced(CHROMAPRINT_INCLUDE_DIR CHROMAPRINT_LIBRARY)
