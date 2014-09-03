@@ -36,17 +36,15 @@ it is generic enough to be used as a backend for any audio processing utility.
 
 ## Dependencies
 
-You will need these to compile libgroove. Some dependencies are bundled
-so that you can still compile if they cannot be found on your system.
+You will need these to compile libgroove.
 
  * [cmake](http://www.cmake.org/)
- * [libav](http://libav.org). (bundled) if using bundled version, needs these:
-   - [libbz2-dev](http://www.bzip.org/)
-   - [yasm](http://yasm.tortall.net/)
-   - [libmp3lame-dev](http://lame.sourceforge.net/)
- * [libebur128](https://github.com/jiixyj/libebur128) (bundled) if using
-   bundled version, needs libspeexdsp-dev
- * [libsdl2-dev](http://www.libsdl.org/) (bundled)
+ * [libav](http://libav.org)
+   - suggested flags: `--enable-shared --disable-static --enable-libmp3lame --enable-libvorbis --enable-gpl`
+ * [libebur128](https://github.com/jiixyj/libebur128)
+   - make sure it is compiled with the speex dependency so that true peak
+     functions are available.
+ * [libsdl2-dev](http://www.libsdl.org/)
  * [libchromaprint-dev](http://acoustid.org/chromaprint)
 
 ## Installation
