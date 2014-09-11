@@ -14,11 +14,7 @@
 #include <SDL2/SDL_audio.h>
 #include <pthread.h>
 #include <time.h>
-
-#ifdef __MACH__
-#include "mach_gettime.h"
-#include "mach_settime.h"
-#endif
+#include "osx_time_shim.h"
 
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
