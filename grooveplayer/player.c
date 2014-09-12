@@ -14,6 +14,7 @@
 #include <SDL2/SDL_audio.h>
 #include <pthread.h>
 #include <time.h>
+#include "osx_time_shim.h"
 
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
