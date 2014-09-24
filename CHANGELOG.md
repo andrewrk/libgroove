@@ -1,3 +1,9 @@
+### Version 4.2.0 (UNRELEASED)
+
+ * build: remove bundled dependencies
+ * build: simpler cmake find modules, both code and license
+ * player: add shim to fix build failure on OSX
+
 ### Version 4.1.1 (2014-06-20)
 
  * playlist: fix race condition which can cause decoder to hang
