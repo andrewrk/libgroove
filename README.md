@@ -115,3 +115,5 @@ Feel free to make a pull request adding yours to this list.
    - [Groove Basin](https://github.com/andrewrk/groovebasin) - lazy
      multi-core replaygain scanning, web interface inspired by Amarok 1.4,
      http streaming, upload, download, dynamic playlist mode
+ * [ruby-groove](https://github.com/johnmuhl/ruby-groove) - Ruby FFI bindings
+   to libgroove.
