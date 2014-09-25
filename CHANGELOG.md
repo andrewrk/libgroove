@@ -1,4 +1,4 @@
-### Version 4.2.0 (UNRELEASED)
+### Version 4.2.0 (2014-09-25)
 
  * build: remove bundled dependencies
  * build: simpler cmake find modules, both code and license
