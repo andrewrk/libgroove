@@ -82,6 +82,40 @@ sudo apt-get -t testing install libgroove-dev libgrooveplayer-dev libgrooveloudn
  3. `make`
  4. `sudo make install`
 
+#### Mac OS X
+
+Install dependencies from [Homebrew](http://brew.sh/)
+
+```
+brew install chromaprint
+brew install libav --with-libvorbis --with-speex
+brew install sdl2
+```
+
+Install [libebur128](https://github.com/jiixyj/libebur128) from source
+
+```
+git clone https://github.com/jiixyj/libebur128
+cd libebur128
+mkdir build
+cd build
+cmake ..
+make
+make install
+```
+
+Install libgroove from source
+
+```
+git clone https://github.com/andrewrk/libgroove
+cd libgroove
+mkdir build
+cd build
+cmake ..
+make
+make install
+```
+
 ## Documentation
 
  * Check out the example programs in the example folder.
