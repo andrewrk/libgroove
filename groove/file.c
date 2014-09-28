@@ -262,6 +262,7 @@ int groove_file_save(struct GrooveFile *file) {
         }
         out_stream->id = in_stream->id;
         out_stream->disposition = in_stream->disposition;
+        out_stream->time_base = in_stream->time_base;
 
         AVCodecContext *icodec = in_stream->codec;
         AVCodecContext *ocodec = out_stream->codec;
@@ -294,7 +295,6 @@ int groove_file_save(struct GrooveFile *file) {
         }
         memcpy(ocodec->extradata, icodec->extradata, icodec->extradata_size);
         ocodec->extradata_size = icodec->extradata_size;
-        ocodec->time_base      = in_stream->time_base;
         switch (ocodec->codec_type) {
         case AVMEDIA_TYPE_AUDIO:
             ocodec->channel_layout     = icodec->channel_layout;
