@@ -88,20 +88,9 @@ Install dependencies from [Homebrew](http://brew.sh/)
 
 ```
 brew install chromaprint
-brew install libav --with-libvorbis --with-speex
+brew install libav --with-libvorbis
 brew install sdl2
-```
-
-Install [libebur128](https://github.com/jiixyj/libebur128) from source
-
-```
-git clone https://github.com/jiixyj/libebur128
-cd libebur128
-mkdir build
-cd build
-cmake ..
-make
-make install
+brew install libebur128
 ```
 
 Install libgroove from source
