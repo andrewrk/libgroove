@@ -34,6 +34,7 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
             pmutex = *mutex;
             int err = pthread_mutex_destroy(pmutex);
             av_free(pmutex);
+            *mutex = NULL;
             return err;
     }
     return 0;
