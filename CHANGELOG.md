@@ -1,5 +1,7 @@
 ### Version 4.2.1 (2014-10-07)
 
+ * updating metadata: set time_base on stream not the codec
+ * libav lockmgr: set mutex pointer to NULL on destroy
  * fix build on GNU/hurd
 
 ### Version 4.2.0 (2014-09-25)
