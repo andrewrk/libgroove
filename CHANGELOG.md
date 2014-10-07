@@ -1,3 +1,7 @@
+### Version 4.2.1 (2014-10-07)
+
+ * fix build on GNU/hurd
+
 ### Version 4.2.0 (2014-09-25)
 
  * build: remove bundled dependencies
