@@ -75,9 +75,30 @@ install packages from testing.
 sudo apt-get -t testing install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev libgroovefingerprinter-dev
 ```
 
-#### [archlinux](https://aur.archlinux.org/packages/libgroove/)
+#### [Arch Linux](https://aur.archlinux.org/packages/libgroove/)
 
-something to do with pacman or yaourt?
+libgroove is available through the [AUR](https://aur.archlinux.org/).
+
+```bash
+wget https://aur.archlinux.org/packages/li/libgroove/libgroove.tar.gz
+tar xzf libgroove.tar.gz
+cd libgroove
+makepkg
+sudo pacman -U libgroove-*
+```
+
+Some notes:
+
+* libgroove depends upon several other packages. Dependencies available through
+  the official repositories can be installed with pacman (e.g. `pacman -S
+  --asdeps sdl2`), and dependencies available through the AUR can be installed
+  via the procedure shown above.
+* An [AUR helper](https://wiki.archlinux.org/index.php/AUR_helper) can ease the
+  process of installing packages from the AUR.
+* The [AUR User
+  Guidelines](https://wiki.archlinux.org/index.php/AUR_User_Guidelines) page on
+  the Arch Wiki contains gobs of useful information. Please see that page if you
+  have any further questions about using the AUR.
 
 #### [Mac OS X Homebrew](http://brew.sh/)
 
