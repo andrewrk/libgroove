@@ -8,7 +8,7 @@
 
 #ifndef GROOVE_MACH_TIME_H_INCLUDED
 #define GROOVE_MACH_TIME_H_INCLUDED
-#ifdef __MACH__
+#ifdef __APPLE__
 
 #include <sys/types.h>
 #include <sys/_types/_timespec.h>
