@@ -68,11 +68,21 @@ pkg install audio/libgroove
 
 #### [Debian](http://packages.qa.debian.org/libg/libgroove.html)
 
-[Configure your system](http://serverfault.com/questions/22414/) to be able
-to install packages from testing.
+[Configure your system](http://serverfault.com/questions/22414/) to be able to
+install packages from testing.
 
 ```
 sudo apt-get -t testing install libgroove-dev libgrooveplayer-dev libgrooveloudness-dev libgroovefingerprinter-dev
+```
+
+#### [archlinux](https://aur.archlinux.org/packages/libgroove/)
+
+something to do with pacman or yaourt?
+
+#### [Mac OS X Homebrew](http://brew.sh/)
+
+```
+brew install libgroove
 ```
 
 ### From Source
@@ -81,29 +91,6 @@ sudo apt-get -t testing install libgroove-dev libgrooveplayer-dev libgrooveloudn
  2. Verify that the configure output is to your liking.
  3. `make`
  4. `sudo make install`
-
-#### Mac OS X
-
-Install dependencies from [Homebrew](http://brew.sh/)
-
-```
-brew install chromaprint
-brew install libav --with-libvorbis
-brew install sdl2
-brew install libebur128
-```
-
-Install libgroove from source
-
-```
-git clone https://github.com/andrewrk/libgroove
-cd libgroove
-mkdir build
-cd build
-cmake ..
-make
-make install
-```
 
 ## Documentation
 
