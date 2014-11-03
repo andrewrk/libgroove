@@ -10,12 +10,6 @@ find_path(SDL2_INCLUDE_DIR NAMES SDL2/SDL.h)
 
 find_library(SDL2_LIBRARY NAMES SDL2)
 
-if(SDL2_LIBRARY AND SDL2_INCLUDE_DIR)
-  set(SDL2_FOUND TRUE)
-else()
-  set(SDL2_FOUND FALSE)
-endif()
-
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(SDL2 DEFAULT_MSG SDL2_LIBRARY SDL2_INCLUDE_DIR)
 

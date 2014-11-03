@@ -10,12 +10,6 @@ find_path(CHROMAPRINT_INCLUDE_DIR NAMES chromaprint.h)
 
 find_library(CHROMAPRINT_LIBRARY NAMES chromaprint)
 
-if(CHROMAPRINT_LIBRARY AND CHROMAPRINT_INCLUDE_DIR)
-  set(CHROMAPRINT_FOUND TRUE)
-else()
-  set(CHROMAPRINT_FOUND FALSE)
-endif()
-
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(CHROMAPRINT DEFAULT_MSG CHROMAPRINT_LIBRARY CHROMAPRINT_INCLUDE_DIR)
 

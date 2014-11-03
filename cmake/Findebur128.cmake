@@ -10,12 +10,6 @@ find_path(EBUR128_INCLUDE_DIR NAMES ebur128.h)
 
 find_library(EBUR128_LIBRARY NAMES ebur128)
 
-if(EBUR128_LIBRARY AND EBUR128_INCLUDE_DIR)
-  set(EBUR128_FOUND TRUE)
-else()
-  set(EBUR128_FOUND FALSE)
-endif()
-
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(EBUR128 DEFAULT_MSG EBUR128_LIBRARY EBUR128_INCLUDE_DIR)
 
