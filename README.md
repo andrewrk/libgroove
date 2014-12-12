@@ -30,8 +30,8 @@ Features
     produces are compatible with the
     [ReplayGain](http://wiki.hydrogenaudio.org/index.php?title=ReplayGain_1.0_specification)
     specification.
-  * **fingerprint sink** - Uses [chromaprint](acoustid.org/chromaprint) to
-    generate unique song IDs that can be used with the acoustid service.
+  * **fingerprint sink** - Uses [chromaprint](http://acoustid.org/chromaprint)
+    to generate unique song IDs that can be used with the acoustid service.
 * Thread-safe.
 * Example programs included:
   * `playlist` - Play a series of songs with gapless playback.
