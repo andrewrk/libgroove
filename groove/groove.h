@@ -83,7 +83,7 @@ const char *groove_version(void);
 /************* GrooveFile *************/
 struct GrooveFile {
     int dirty; /* read-only */
-    char *filename; /* read-only */
+    const char *filename; /* read-only */
 };
 
 /* flags to groove_file_metadata_*
@@ -104,7 +104,7 @@ const char *groove_tag_value(struct GrooveTag *tag);
 /* you are always responsible for calling groove_file_close on the
  * returned GrooveFile.
  */
-struct GrooveFile *groove_file_open(char *filename);
+struct GrooveFile *groove_file_open(const char *filename);
 void groove_file_close(struct GrooveFile *file);
 
 struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file,

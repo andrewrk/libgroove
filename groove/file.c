@@ -15,7 +15,7 @@ static int decode_interrupt_cb(void *ctx) {
     return f ? f->abort_request : 0;
 }
 
-struct GrooveFile *groove_file_open(char *filename) {
+struct GrooveFile *groove_file_open(const char *filename) {
     struct GrooveFilePrivate *f = av_mallocz(sizeof(struct GrooveFilePrivate));
     if (!f) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate file context\n");
