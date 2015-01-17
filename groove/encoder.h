@@ -40,20 +40,20 @@ struct GrooveEncoder {
      * to help libgroove guess which format to use
      * use `avconv -formats` to get a list of possibilities
      */
-    char *format_short_name;
+    const char *format_short_name;
     /* optional - choose a short name for the codec
      * to help libgroove guess which codec to use
      * use `avconv -codecs` to get a list of possibilities
      */
-    char *codec_short_name;
+    const char *codec_short_name;
     /* optional - provide an example filename
      * to help libgroove guess which format/codec to use
      */
-    char *filename;
+    const char *filename;
     /* optional - provide a mime type string
      * to help libgroove guess which format/codec to use
      */
-    char *mime_type;
+    const char *mime_type;
 
     /* how big the sink buffer should be, in sample frames.
      * groove_encoder_create defaults this to 8192
