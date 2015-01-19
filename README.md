@@ -156,12 +156,14 @@ Feel free to make a pull request adding yours to this list.
 
 * [waveform](https://github.com/andrewrk/waveform) generates PNG waveform
   visualizations.
-* [TrenchBowl](https://github.com/andrewrk/TrenchBowl) is a simple Qt GUI
-  on top of libgroove.
 * [node-groove](https://github.com/andrewrk/node-groove) provides
   [Node.js](http://nodejs.org/) bindings to libgroove.
 * [Groove Basin](https://github.com/andrewrk/groovebasin) is a music player with
   lazy multi-core replaygain scanning, a web interface inspired by Amarok 1.4,
   http streaming, upload, download and a dynamic playlist mode.
+* [rust-groove](https://github.com/andrewrk/rust-groove) provides
+  [rust](http://rust-lang.org) bindings to libgroove.
 * [ruby-groove](https://github.com/johnmuhl/ruby-groove) provides Ruby FFI
   bindings to libgroove.
+* [TrenchBowl](https://github.com/andrewrk/TrenchBowl) is a simple Qt GUI
+  on top of libgroove.
