@@ -36,7 +36,6 @@ int main(int argc, char * argv[]) {
         fprintf(stderr, "error opening file\n");
         return 1;
     }
-
     for (i = 2; i < argc; i += 1) {
         arg = argv[i];
         if (strcmp("--update", arg) == 0) {
@@ -61,6 +60,10 @@ int main(int argc, char * argv[]) {
             return usage(exe);
         }
     }
+    struct GrooveAudioFormat audio_format;
+    groove_file_audio_format(file, &audio_format);
+    printf("channels=%d\n", groove_channel_layout_count(audio_format.channel_layout));
+
     tag = NULL;
     printf("duration=%f\n", groove_file_duration(file));
     while ((tag = groove_file_metadata_get(file, "", tag, 0)))
