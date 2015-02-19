@@ -200,7 +200,7 @@ void groove_playlist_seek(struct GroovePlaylist *playlist,
  * next: the item to insert before. if NULL, you will append to the playlist.
  * gain: see GroovePlaylistItem structure. use 1.0 for no adjustment.
  * peak: see GroovePlaylistItem structure. use 1.0 for no adjustment.
- * returns the newly created playlist item.
+ * returns the newly created playlist item, or NULL if out of memory.
  */
 struct GroovePlaylistItem *groove_playlist_insert(
         struct GroovePlaylist *playlist, struct GrooveFile *file,
