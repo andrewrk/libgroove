@@ -62,6 +62,9 @@ source are also provided at the end of this list.
 
 ### [Ubuntu PPA](https://launchpad.net/~andrewrk/+archive/libgroove)
 
+Note: as of Ubuntu 14.10 Utopic Unicorn, libgroove is included in the default
+repository index so you don't need a PPA.
+
 ```sh
 sudo apt-add-repository ppa:andrewrk/libgroove
 sudo apt-get update
@@ -77,11 +80,10 @@ pkg install audio/libgroove
 
 ### [Debian](http://packages.qa.debian.org/libg/libgroove.html)
 
-[Configure your system](http://serverfault.com/questions/22414/) to be able to
-install packages from testing.
+libgroove ships with Debian Jessie.
 
 ```sh
-sudo apt-get -t testing install libgroove-dev libgrooveplayer-dev \
+sudo apt-get install libgroove-dev libgrooveplayer-dev \
     libgrooveloudness-dev libgroovefingerprinter-dev
 ```
 
