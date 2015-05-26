@@ -22,7 +22,10 @@ enum GroovePlayerEventType {
     GROOVE_EVENT_NOWPLAYING,
 
     /* when something tries to read from an empty buffer */
-    GROOVE_EVENT_BUFFERUNDERRUN
+    GROOVE_EVENT_BUFFERUNDERRUN,
+
+    /* when the audio device is re-opened due to audio format changing*/
+    GROOVE_EVENT_DEVICEREOPENED
 };
 
 union GroovePlayerEvent {
@@ -75,6 +78,13 @@ struct GroovePlayer {
      * ideally will be the same as target_audio_format but might not be.
      */
     struct GrooveAudioFormat actual_audio_format;
+
+    /* If you set this to 1, target_audio_format and actual_audio_format are
+     * ignored and no resampling, channel layout remapping, or sample format
+     * conversion will occur. The audio device will be reopened with exact
+     * parameters whenever necessary.
+     */
+    int use_exact_audio_format;
 };
 
 /* Returns the number of available devices exposed by the current driver or -1
@@ -131,6 +141,13 @@ int groove_player_event_peek(struct GroovePlayer *player, int block);
  * returns 0 on success, < 0 on error
  */
 int groove_player_set_gain(struct GroovePlayer *player, double gain);
+
+/* When you set the use_exact_audio_format field to 1, the audio device is
+ * closed and re-opened as necessary. When this happens, a
+ * GROOVE_EVENT_DEVICEREOPENED event is emitted, and you can use this function
+ * to discover the audio format of the device.
+ */
+struct GrooveAudioFormat groove_player_get_device_audio_format(struct GroovePlayer *player);
 
 #ifdef __cplusplus
 }

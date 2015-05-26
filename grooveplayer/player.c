@@ -14,17 +14,21 @@
 #include <SDL2/SDL_audio.h>
 #include <pthread.h>
 #include <time.h>
+#include <stdbool.h>
 #include "osx_time_shim.h"
 
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
     struct GrooveBuffer *audio_buf;
-    size_t audio_buf_size; // in bytes
-    size_t audio_buf_index; // in bytes
+    size_t audio_buf_size; // in frames
+    size_t audio_buf_index; // in frames
+    int channel_count;
+    int bytes_per_sample;
+    int bytes_per_frame;
 
     // this mutex applies to the variables in this block
     pthread_mutex_t play_head_mutex;
-    char play_head_mutex_inited;
+    bool play_head_mutex_inited;
     // pointer to current item where the buffered audio is reaching the device
     struct GroovePlaylistItem *play_head;
     // number of seconds into the play_head song where the buffered audio
@@ -37,26 +41,44 @@ struct GroovePlayerPrivate {
     struct GrooveQueue *eventq;
 
     // for dummy player
-    pthread_t thread_id;
-    int thread_inited;
-    int abort_request;
+    pthread_t dummy_thread_id;
+    bool dummy_thread_inited;
+    bool abort_request;
     uint64_t start_nanos;
     uint64_t frames_consumed;
     pthread_cond_t pause_cond;
     pthread_condattr_t cond_attr;
-    int pause_cond_inited;
+    bool pause_cond_inited;
     int paused;
+
+    // watchdog thread for opening and closing audio device
+    pthread_t device_thread_id;
+    int device_thread_inited;
+    pthread_cond_t device_thread_cond;
+    bool device_thread_cond_inited;
+    int silence_bytes_left;
+    bool request_device_reopen;
+    struct GrooveAudioFormat device_format;
+    int device_buffer_size;
 };
+
+static int open_audio_device(struct GroovePlayer *player,
+        const struct GrooveAudioFormat *target_format, struct GrooveAudioFormat *actual_format,
+        int use_exact_audio_format);
 
 static Uint16 groove_fmt_to_sdl_fmt(enum GrooveSampleFormat fmt) {
     switch (fmt) {
         case GROOVE_SAMPLE_FMT_U8:
+        case GROOVE_SAMPLE_FMT_U8P:
             return AUDIO_U8;
         case GROOVE_SAMPLE_FMT_S16:
+        case GROOVE_SAMPLE_FMT_S16P:
             return AUDIO_S16SYS;
         case GROOVE_SAMPLE_FMT_S32:
+        case GROOVE_SAMPLE_FMT_S32P:
             return AUDIO_S32SYS;
         case GROOVE_SAMPLE_FMT_FLT:
+        case GROOVE_SAMPLE_FMT_FLTP:
             return AUDIO_F32SYS;
         default:
             av_log(NULL, AV_LOG_ERROR,
@@ -98,6 +120,43 @@ static uint64_t now_nanos(void) {
     uint64_t sec_mult = 1000000000;
     uint64_t tv_nsec = tms.tv_nsec;
     return tv_sec * sec_mult + tv_nsec;
+}
+
+static void close_audio_device(struct GroovePlayerPrivate *p) {
+    if (p->device_id > 0) {
+        SDL_CloseAudioDevice(p->device_id);
+        p->device_id = 0;
+    }
+}
+
+static void *device_thread_run(void *arg) {
+    struct GroovePlayer *player = arg;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+
+    for (;;) {
+        if (p->abort_request)
+            break;
+
+        pthread_mutex_lock(&p->play_head_mutex);
+        if (!p->request_device_reopen) {
+            pthread_cond_wait(&p->device_thread_cond, &p->play_head_mutex);
+            pthread_mutex_unlock(&p->play_head_mutex);
+            continue;
+        }
+
+        p->request_device_reopen = false;
+
+        close_audio_device(p);
+
+        p->device_format = p->audio_buf->format;
+        open_audio_device(player, &p->audio_buf->format, NULL, player->use_exact_audio_format);
+        SDL_PauseAudioDevice(p->device_id, 0);
+        emit_event(p->eventq, GROOVE_EVENT_DEVICEREOPENED);
+
+        pthread_mutex_unlock(&p->play_head_mutex);
+    }
+
+    return NULL;
 }
 
 // this thread is started if the user selects a dummy device instead of a
@@ -170,6 +229,19 @@ static void *dummy_thread(void *arg) {
     return NULL;
 }
 
+static bool is_planar(enum GrooveSampleFormat fmt) {
+    switch (fmt) {
+        default:
+            return false;
+        case GROOVE_SAMPLE_FMT_U8P:
+        case GROOVE_SAMPLE_FMT_S16P:
+        case GROOVE_SAMPLE_FMT_S32P:
+        case GROOVE_SAMPLE_FMT_FLTP:
+        case GROOVE_SAMPLE_FMT_DBLP:
+            return true;
+    }
+}
+
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     struct GroovePlayerPrivate *p = opaque;
 
@@ -182,7 +254,10 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
     pthread_mutex_lock(&p->play_head_mutex);
 
     while (len > 0) {
-        if (!paused && p->audio_buf_index >= p->audio_buf_size) {
+        bool waiting_for_silence = (p->silence_bytes_left > 0);
+        if (!p->request_device_reopen && !waiting_for_silence &&
+            !paused && p->audio_buf_index >= p->audio_buf_size)
+        {
             groove_buffer_unref(p->audio_buf);
             p->audio_buf_index = 0;
             p->audio_buf_size = 0;
@@ -199,25 +274,59 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len) {
 
                 p->play_head = p->audio_buf->item;
                 p->play_pos = p->audio_buf->pos;
-                p->audio_buf_size = p->audio_buf->size;
+                p->audio_buf_size = p->audio_buf->frame_count;
+                p->channel_count = groove_channel_layout_count(p->audio_buf->format.channel_layout);
+                p->bytes_per_sample = groove_sample_format_bytes_per_sample(p->audio_buf->format.sample_fmt);
+                p->bytes_per_frame = p->bytes_per_sample * p->channel_count;
+
+                if (p->device_thread_inited &&
+                    !groove_audio_formats_equal(&p->audio_buf->format, &p->device_format))
+                {
+                    p->silence_bytes_left = p->device_buffer_size;
+                    waiting_for_silence = true;
+                }
             } else {
                 // errors are treated the same as no buffer ready
                 emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
             }
         }
-        if (paused || !p->audio_buf) {
+        if (p->request_device_reopen || waiting_for_silence || paused || !p->audio_buf) {
             // fill with silence
             memset(stream, 0, len);
+
+            if (waiting_for_silence) {
+                p->silence_bytes_left -= len;
+                if (p->silence_bytes_left <= 0) {
+                    p->request_device_reopen = true;
+                    pthread_cond_signal(&p->device_thread_cond);
+                }
+            }
             break;
         }
-        size_t len1 = p->audio_buf_size - p->audio_buf_index;
-        if (len1 > len)
-            len1 = len;
-        memcpy(stream, p->audio_buf->data[0] + p->audio_buf_index, len1);
-        len -= len1;
-        stream += len1;
-        p->audio_buf_index += len1;
-        p->play_pos += len1 / bytes_per_sec;
+        size_t read_frame_count = p->audio_buf_size - p->audio_buf_index;
+        int write_frame_count = len / p->bytes_per_frame;
+        int frame_count = (read_frame_count < write_frame_count) ? read_frame_count : write_frame_count;
+        int bytes_consumed = frame_count * p->bytes_per_frame;
+
+        if (is_planar(p->audio_buf->format.sample_fmt)) {
+            int end_frame = p->audio_buf_index + frame_count;
+            for (; p->audio_buf_index < end_frame; p->audio_buf_index += 1) {
+                for (int ch = 0; ch < p->channel_count; ch += 1) {
+                    memcpy(stream,
+                        &p->audio_buf->data[ch][p->audio_buf_index * p->bytes_per_sample],
+                        p->bytes_per_sample);
+                    stream += p->bytes_per_sample;
+                }
+            }
+        } else {
+            memcpy(stream,
+                p->audio_buf->data[0] + p->audio_buf_index * p->bytes_per_frame,
+                bytes_consumed);
+            stream += bytes_consumed;
+            p->audio_buf_index += frame_count;
+        }
+        len -= bytes_consumed;
+        p->play_pos += bytes_consumed / bytes_per_sec;
     }
 
     pthread_mutex_unlock(&p->play_head_mutex);
@@ -327,7 +436,7 @@ struct GroovePlayer *groove_player_create(void) {
         av_log(NULL, AV_LOG_ERROR,"unable to create play head mutex: out of memory\n");
         return NULL;
     }
-    p->play_head_mutex_inited = 1;
+    p->play_head_mutex_inited = true;
 
     pthread_condattr_init(&p->cond_attr);
     pthread_condattr_setclock(&p->cond_attr, CLOCK_MONOTONIC);
@@ -336,7 +445,7 @@ struct GroovePlayer *groove_player_create(void) {
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex condition\n");
         return NULL;
     }
-    p->pause_cond_inited = 1;
+    p->pause_cond_inited = true;
 
     p->eventq = groove_queue_create();
     if (!p->eventq) {
@@ -344,6 +453,13 @@ struct GroovePlayer *groove_player_create(void) {
         av_log(NULL, AV_LOG_ERROR,"unable to create event queue: out of memory\n");
         return NULL;
     }
+
+    if (pthread_cond_init(&p->device_thread_cond, NULL) != 0) {
+        groove_player_destroy(player);
+        av_log(NULL, AV_LOG_ERROR, "unable to create mutex condition\n");
+        return NULL;
+    }
+    p->device_thread_cond_inited = true;
 
     // set some nice defaults
     player->target_audio_format.sample_rate = 44100;
@@ -366,6 +482,9 @@ void groove_player_destroy(struct GroovePlayer *player) {
 
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
+    if (p->device_thread_cond_inited)
+        pthread_cond_destroy(&p->device_thread_cond);
+
     if (p->play_head_mutex_inited)
         pthread_mutex_destroy(&p->play_head_mutex);
 
@@ -380,9 +499,47 @@ void groove_player_destroy(struct GroovePlayer *player) {
     av_free(p);
 }
 
+static int open_audio_device(struct GroovePlayer *player,
+        const struct GrooveAudioFormat *target_format,
+        struct GrooveAudioFormat *actual_format,
+        int use_exact_audio_format)
+{
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+
+    SDL_AudioSpec wanted_spec, spec;
+    wanted_spec.format = groove_fmt_to_sdl_fmt(target_format->sample_fmt);
+    wanted_spec.freq = target_format->sample_rate;
+    wanted_spec.channels = groove_channel_layout_count(target_format->channel_layout);
+    wanted_spec.samples = p->device_buffer_size;
+    wanted_spec.callback = sdl_audio_callback;
+    wanted_spec.userdata = player;
+
+    const char* device_name = NULL;
+
+    if (player->device_index >= 0)
+        device_name = SDL_GetAudioDeviceName(player->device_index, 0);
+
+    int allowed_changes = use_exact_audio_format ? 0 : SDL_AUDIO_ALLOW_ANY_CHANGE;
+    p->device_id = SDL_OpenAudioDevice(device_name, 0, &wanted_spec, &spec, allowed_changes);
+
+    if (p->device_id == 0) {
+        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    if (actual_format) {
+        actual_format->sample_rate = spec.freq;
+        actual_format->channel_layout = groove_channel_layout_default(spec.channels);
+        actual_format->sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
+    }
+
+    return 0;
+}
+
 int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *playlist) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
+    p->device_buffer_size = player->device_buffer_size;
     p->sink->gain = player->gain;
     p->sink->buffer_size = player->sink_buffer_size;
 
@@ -392,29 +549,11 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
         p->sink->audio_format = player->actual_audio_format;
         p->sink->disable_resample = 1;
     } else {
-        SDL_AudioSpec wanted_spec, spec;
-        wanted_spec.format = groove_fmt_to_sdl_fmt(player->target_audio_format.sample_fmt);
-        wanted_spec.freq = player->target_audio_format.sample_rate;
-        wanted_spec.channels = groove_channel_layout_count(player->target_audio_format.channel_layout);
-        wanted_spec.samples = player->device_buffer_size;
-        wanted_spec.callback = sdl_audio_callback;
-        wanted_spec.userdata = player;
-
-        const char* device_name = NULL;
-
-        if (player->device_index >= 0)
-            device_name = SDL_GetAudioDeviceName(player->device_index, 0);
-        p->device_id = SDL_OpenAudioDevice(device_name, 0, &wanted_spec,
-                &spec, SDL_AUDIO_ALLOW_ANY_CHANGE);
-        if (p->device_id == 0) {
-            av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
+        if (open_audio_device(player, &player->target_audio_format, &player->actual_audio_format,
+                    player->use_exact_audio_format))
+        {
             return -1;
         }
-
-        // save the actual spec back into the struct
-        player->actual_audio_format.sample_rate = spec.freq;
-        player->actual_audio_format.channel_layout = groove_channel_layout_default(spec.channels);
-        player->actual_audio_format.sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
 
         // based on spec that we got, attach a sink with those properties
         p->sink->audio_format = player->actual_audio_format;
@@ -423,6 +562,17 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
             groove_player_detach(player);
             av_log(NULL, AV_LOG_ERROR, "unsupported audio device sample format\n");
             return -1;
+        }
+
+        if (player->use_exact_audio_format) {
+            p->sink->disable_resample = 1;
+
+            if (pthread_create(&p->device_thread_id, NULL, device_thread_run, player) != 0) {
+                groove_player_detach(player);
+                av_log(NULL, AV_LOG_ERROR, "unable to create device thread\n");
+                return -1;
+            }
+            p->device_thread_inited = true;
         }
     }
 
@@ -444,12 +594,12 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
             sink_pause(p->sink);
 
         // set up thread to keep track of time
-        if (pthread_create(&p->thread_id, NULL, dummy_thread, player) != 0) {
+        if (pthread_create(&p->dummy_thread_id, NULL, dummy_thread, player) != 0) {
             groove_player_detach(player);
             av_log(NULL, AV_LOG_ERROR, "unable to create dummy player thread\n");
             return -1;
         }
-        p->thread_inited = 1;
+        p->dummy_thread_inited = true;
     } else {
         SDL_PauseAudioDevice(p->device_id, 0);
     }
@@ -459,7 +609,14 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
 
 int groove_player_detach(struct GroovePlayer *player) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
-    p->abort_request = 1;
+    p->abort_request = true;
+    if (p->device_thread_inited) {
+        pthread_mutex_lock(&p->play_head_mutex);
+        pthread_cond_signal(&p->device_thread_cond);
+        pthread_mutex_unlock(&p->play_head_mutex);
+        pthread_join(p->device_thread_id, NULL);
+        p->device_thread_inited = false;
+    }
     if (p->eventq) {
         groove_queue_flush(p->eventq);
         groove_queue_abort(p->eventq);
@@ -467,20 +624,23 @@ int groove_player_detach(struct GroovePlayer *player) {
     if (p->sink->playlist) {
         groove_sink_detach(p->sink);
     }
-    if (p->device_id > 0) {
-        SDL_CloseAudioDevice(p->device_id);
-        p->device_id = 0;
-    }
-    if (p->thread_inited) {
+    close_audio_device(p);
+    if (p->dummy_thread_inited) {
+        pthread_mutex_lock(&p->play_head_mutex);
         pthread_cond_signal(&p->pause_cond);
-        pthread_join(p->thread_id, NULL);
-        p->thread_inited = 0;
+        pthread_mutex_unlock(&p->play_head_mutex);
+        pthread_join(p->dummy_thread_id, NULL);
+        p->dummy_thread_inited = false;
     }
 
     player->playlist = NULL;
 
     groove_buffer_unref(p->audio_buf);
     p->audio_buf = NULL;
+
+    p->request_device_reopen = false;
+    p->silence_bytes_left = 0;
+    p->abort_request = false;
 
     return 0;
 }
@@ -531,4 +691,13 @@ int groove_player_set_gain(struct GroovePlayer *player, double gain) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
     player->gain = gain;
     return groove_sink_set_gain(p->sink, gain);
+}
+
+struct GrooveAudioFormat groove_player_get_device_audio_format(struct GroovePlayer *player) {
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    struct GrooveAudioFormat result;
+    pthread_mutex_lock(&p->play_head_mutex);
+    result = p->device_format;
+    pthread_mutex_unlock(&p->play_head_mutex);
+    return result;
 }

@@ -6,7 +6,7 @@
 #include <string.h>
 
 static int usage(const char *exe) {
-    fprintf(stderr, "Usage: %s [--volume 1.0] file1 file2 ...\n", exe);
+    fprintf(stderr, "Usage: %s [--volume 1.0] [--exact] [--dummy] file1 file2 ...\n", exe);
     return 1;
 }
 
@@ -33,6 +33,8 @@ int main(int argc, char * argv[]) {
             arg += 2;
             if (strcmp(arg, "dummy") == 0) {
                 player->device_index = GROOVE_PLAYER_DUMMY_DEVICE;
+            } else if (strcmp(arg, "exact") == 0) {
+                player->use_exact_audio_format = 1;
             } else if (i + 1 >= argc) {
                 return usage(exe);
             } else if (strcmp(arg, "volume") == 0) {
@@ -58,6 +60,9 @@ int main(int argc, char * argv[]) {
         switch (event.type) {
         case GROOVE_EVENT_BUFFERUNDERRUN:
             fprintf(stderr, "buffer underrun\n");
+            break;
+        case GROOVE_EVENT_DEVICEREOPENED:
+            fprintf(stderr, "device re-opened\n");
             break;
         case GROOVE_EVENT_NOWPLAYING:
             groove_player_position(player, &item, NULL);

@@ -80,6 +80,12 @@ int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format) {
     return av_get_bytes_per_sample((enum AVSampleFormat)format);
 }
 
+int groove_audio_formats_equal(const struct GrooveAudioFormat *a, const struct GrooveAudioFormat *b) {
+    return (a->sample_rate    == b->sample_rate &&
+            a->channel_layout == b->channel_layout &&
+            a->sample_fmt     == b->sample_fmt);
+}
+
 const char *groove_version(void) {
     return GROOVE_VERSION_STRING;
 }

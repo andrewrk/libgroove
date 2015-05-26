@@ -119,6 +119,11 @@ struct GrooveAudioFormat {
 
 int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format);
 
+/* returns 1 if the audio formats have the same sample rate, channel layout,
+ * and sample format. returns 0 otherwise. */
+int groove_audio_formats_equal(const struct GrooveAudioFormat *a, const struct GrooveAudioFormat *b);
+
+
 int groove_version_major(void);
 int groove_version_minor(void);
 int groove_version_patch(void);
