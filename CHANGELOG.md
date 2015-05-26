@@ -1,3 +1,15 @@
+### Version 4.3.0 (2015-05-25)
+
+ * player: Add support for "exact mode" - re-opens the audio device when a
+   buffer is encountered that does not match the open audio device's sound
+   parameters.
+ * build: Simplify cmake find modules.
+ * Add const qualifier to some fields and functions.
+ * metadata example: print the number of channels.
+ * Add documentation.
+ * Add more channel layouts.
+ * build: Compile in Debug mode by default.
+
 ### Version 4.2.1 (2014-10-07)
 
  * updating metadata: set time_base on stream not the codec

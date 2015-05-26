@@ -17,6 +17,11 @@ Features
 * Per-playlist-item gain adjustment so you can implement loudness compensation
   without audio glitches.
 * Read and write metadata tags.
+* Choose between smooth mode and exact mode during playback.
+  * **smooth mode** - open the audio device once and resample everything to
+    fit that sample rate and format.
+  * **exact mode** - open and close the audio device as necessary in effort
+    to open the audio device with parameters matching the incoming audio data.
 * Extensible sink-based interface. A sink provides resampling and keeps its
   buffer full. Types of sinks:
   * **raw sink** - Provides reference-counted raw audio buffers you can do
