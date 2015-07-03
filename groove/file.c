@@ -212,10 +212,7 @@ static void cleanup_save(struct GrooveFile *file) {
     }
 }
 
-int groove_file_save(struct GrooveFile *file) {
-    if (!file->dirty)
-        return 0;
-
+int groove_file_save_as(struct GrooveFile *file, const char *filename) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     // detect output format
@@ -234,12 +231,7 @@ int groove_file_save(struct GrooveFile *file) {
     }
 
     f->oc->oformat = ofmt;
-    snprintf(f->oc->filename, sizeof(f->oc->filename), "%s", f->ic->filename);
-    if (tempfileify(f->oc->filename, sizeof(f->oc->filename)) < 0) {
-        cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "could not create temp file - filename too long\n");
-        return -1;
-    }
+    snprintf(f->oc->filename, sizeof(f->oc->filename), "%s", filename);
 
     // open output file if needed
     if (!(ofmt->flags & AVFMT_NOFILE)) {
@@ -364,13 +356,38 @@ int groove_file_save(struct GrooveFile *file) {
         return -1;
     }
 
+    f->tempfile_exists = 0;
+    cleanup_save(file);
+
+    return 0;
+}
+
+int groove_file_save(struct GrooveFile *file) {
+    if (!file->dirty)
+        return 0;
+
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
+
+    char temp_filename[sizeof(f->oc->filename)];
+    snprintf(temp_filename, sizeof(f->oc->filename), "%s", f->ic->filename);
+
+    if (tempfileify(temp_filename, sizeof(temp_filename)) < 0) {
+        cleanup_save(file);
+        av_log(NULL, AV_LOG_ERROR, "could not create temp file - filename too long\n");
+        return -1;
+    }
+
+    if (groove_file_save_as(file, temp_filename) < 0) {
+        cleanup_save(file);
+        return -1;
+    }
+
     if (rename(f->oc->filename, f->ic->filename) != 0) {
+        f->tempfile_exists = 1;
         cleanup_save(file);
         av_log(NULL, AV_LOG_ERROR, "error renaming tmp file to original file\n");
         return -1;
     }
-    f->tempfile_exists = 0;
-    cleanup_save(file);
 
     file->dirty = 0;
     return 0;

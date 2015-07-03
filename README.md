@@ -44,6 +44,11 @@ Features
   * `replaygain` - Report the suggested replaygain for a set of files.
   * `transcode` - Transcode one or more files into one output file.
   * `fingerprint` - Generate acoustid fingerprints for one or more files.
+  * `metadata_checksum` - Read or update song metadata. This program scans the
+    audio of the file before the metadata change, changes the metadata in a
+    temporary file, scans the audio of the temporary file to make sure it
+    matches the original, and then atomically renames the temporary file over
+    the original file.
 
 Dependencies
 ------------
@@ -161,13 +166,13 @@ Projects Using libgroove
 
 Feel free to make a pull request adding yours to this list.
 
+* [Groove Basin](https://github.com/andrewrk/groovebasin) is a music player with
+  lazy multi-core replaygain scanning, a web interface inspired by Amarok 1.4,
+  http streaming, upload, download and a dynamic playlist mode.
 * [waveform](https://github.com/andrewrk/waveform) generates PNG waveform
   visualizations.
 * [node-groove](https://github.com/andrewrk/node-groove) provides
   [Node.js](http://nodejs.org/) bindings to libgroove.
-* [Groove Basin](https://github.com/andrewrk/groovebasin) is a music player with
-  lazy multi-core replaygain scanning, a web interface inspired by Amarok 1.4,
-  http streaming, upload, download and a dynamic playlist mode.
 * [groove-rs](https://github.com/andrewrk/groove-rs) provides
   [rust](http://rust-lang.org) bindings to libgroove.
 * [ruby-groove](https://github.com/johnmuhl/ruby-groove) provides Ruby FFI

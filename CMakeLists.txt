@@ -183,6 +183,12 @@ include_directories(${EXAMPLE_INCLUDES})
 target_link_libraries(metadata groove)
 add_dependencies(metadata groove)
 
+add_executable(metadata_checksum example/metadata_checksum.c)
+set_target_properties(metadata_checksum PROPERTIES
+  COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+include_directories(${EXAMPLE_INCLUDES})
+target_link_libraries(metadata_checksum groove)
+add_dependencies(metadata_checksum groove)
 
 add_executable(transcode example/transcode.c)
 set_target_properties(transcode PROPERTIES

@@ -176,6 +176,7 @@ const char *groove_file_short_names(struct GrooveFile *file);
  * return < 0 on error
  */
 int groove_file_save(struct GrooveFile *file);
+int groove_file_save_as(struct GrooveFile *file, const char *filename);
 
 /* main audio stream duration in seconds. note that this relies on a
  * combination of format headers and heuristics. It can be inaccurate.
