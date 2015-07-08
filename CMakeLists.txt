@@ -48,18 +48,6 @@ else(DISABLE_FINGERPRINTER)
   file(GLOB_RECURSE LIBGROOVE_FINGERPRINTER_HEADERS ${CMAKE_SOURCE_DIR}/groovefingerprinter/*.h)
 endif(DISABLE_FINGERPRINTER)
 
-# check for C99
-find_package(C99)
-if(C99_FLAG_DETECTED)
-  set(HAVE_C99 TRUE)
-  set(STATUS_C99 "OK")
-else(C99_FLAG_DETECTED)
-  set(STATUS_C99 "not found")
-  set(LIBGROOVE_STATUS "missing dependencies")
-  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
-  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
-endif(C99_FLAG_DETECTED)
-
 # check for ebur128
 if(DISABLE_LOUDNESS)
   set(STATUS_EBUR128 "not needed")
@@ -96,8 +84,8 @@ else(DISABLE_PLAYER)
   endif(SDL2_FOUND)
 endif(DISABLE_PLAYER)
 
-# check for libav
-find_package(LibAV)
+# check for ffmpeg
+find_package(ffmpeg)
 if(AVCODEC_FOUND)
   set(STATUS_LIBAVCODEC "OK")
 else()
@@ -135,8 +123,8 @@ configure_file (
   "${PROJECT_BINARY_DIR}/config.h"
   )
 
-set(LIB_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT -D_POSIX_C_SOURCE=200809L")
-set(EXAMPLE_CFLAGS "${C99_C_FLAGS} -pedantic -Werror -Wall -g")
+set(LIB_CFLAGS "-std=c99 -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT -D_POSIX_C_SOURCE=200809L")
+set(EXAMPLE_CFLAGS "-std=c99 -pedantic -Werror -Wall -g")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}")
 
 add_library(groove SHARED ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
@@ -158,7 +146,7 @@ target_link_libraries(groove LINK_PUBLIC ${AVUTIL_LIBRARIES})
 if(UNIX)
   target_link_libraries(groove LINK_PRIVATE m)
 endif(UNIX)
-include_directories(${LIBAV_INCLUDE_DIRS})
+include_directories(${FFMPEG_INCLUDE_DIRS})
 target_link_libraries(groove LINK_PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 
@@ -321,7 +309,6 @@ message("\n"
 message(
 "System Dependencies\n"
 "-------------------\n"
-"* C99 Compiler                 : ${STATUS_C99}\n"
 "* threads                      : ${STATUS_THREADS}\n"
 "* SDL2                         : ${STATUS_SDL2}\n"
 "* ebur128                      : ${STATUS_EBUR128}\n"

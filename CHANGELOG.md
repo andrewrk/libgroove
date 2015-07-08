@@ -1,3 +1,12 @@
+### Version 5.0.0 (UNRELEASED)
+
+ * Depend on ffmpeg instead of libav.
+ * Add `groove_file_save_as` API.
+ * Add `metadata_checksum.c` example. It updates metadata of a song just like
+   `metadata.c` but it compares a checksum of the audio before and after
+   updating metadata, and only atomically replaces the original song with the
+   update if the checksum passed.
+
 ### Version 4.3.0 (2015-05-25)
 
  * player: Add support for "exact mode" - re-opens the audio device when a
@@ -12,7 +21,7 @@
 
 ### Version 4.2.1 (2014-10-07)
 
- * updating metadata: set time_base on stream not the codec
+ * updating metadata: set `time_base` on stream not the codec
  * libav lockmgr: set mutex pointer to NULL on destroy
  * fix build on GNU/hurd
 
@@ -41,7 +50,7 @@
 ### Version 4.0.3 (2014-05-31)
 
  * build: update bundled libav to latest stable 10 release
- * build: link player with -lrt for clock_gettime. closes #67
+ * build: link player with -lrt for `clock_gettime`. closes #67
  * playlist: fix case where filter graph was not being rebuilt. closes #65
  * playlist: fix race condition segfault when attaching a sink
  * encoder: properly reset encoding when flush or playlist end is encountered.
@@ -57,11 +66,11 @@
 
 ### Version 4.0.1 (2014-05-13)
 
- * groove_playlist_get_position: always set seconds even when item is NULL
+ * `groove_playlist_get_position`: always set seconds even when item is NULL
  * playlist: correct generation of the sink map
    - fixes potential error when adding multiple sinks
    - optimizes some cases where sinks can share filter graph chain
-   - dummy player now uses disable_resample optimization
+   - dummy player now uses `disable_resample` optimization
  * dummy player: avoid floating point error accumulation
 
 ### Version 4.0.0 (2014-05-12)
@@ -105,8 +114,8 @@
 
  * build: fix cmake warnings
  * use ebur128 true peak instead of sample peak
- * fix bug where accessing "album" metadata would instead
-   return the "album_artist"
+ * fix bug where accessing `"album"` metadata would instead
+   return the `"album_artist"`
  * update to libav 10 beta2
  * use the compand filter to allow setting the gain to > 1.0. Closes #45
  * log error when cannot set up filter graph
@@ -154,7 +163,7 @@
 ### Version 2.0.4 (2013-11-23)
 
  * update libav to d4df02131b5522
- * playlist: set sent_end_of_q at playlist create
+ * playlist: set `sent_end_of_q` at playlist create
  * better timestamp setting
 
 ### Version 2.0.3 (2013-11-22)
@@ -176,7 +185,7 @@
  * update libav to 1c01b0253eb
  * build system: bundle SDL2 but try to use system SDL2 if possible
  * when doing bundled SDL2, use the cmake build
- * enable SDL_File because osx needs it
+ * enable `SDL_File` because osx needs it
  * try to build against system libebur128 and fall back on bundled. closes #38
 
 ### Version 2.0.0 (2013-11-16)
