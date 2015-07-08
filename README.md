@@ -9,9 +9,9 @@ utility.
 Features
 --------
 
-* Uses [libav](http://www.libav.org/) for robust decoding and encoding. A list
+* Uses [ffmpeg](http://ffmpeg.org/) for robust decoding and encoding. A list
   of supported file formats and codecs [is
-  available](http://www.libav.org/general.html#Supported-File-Formats-and-Codecs).
+  available](http://ffmpeg.org/ffmpeg-formats.html).
 * Add and remove entries on a playlist for gapless playback.
 * Supports idempotent pause, play, and seek.
 * Per-playlist-item gain adjustment so you can implement loudness compensation
@@ -51,7 +51,7 @@ Dependencies
 You will need these to compile libgroove.
 
 * [cmake](http://www.cmake.org/)
-* [libav](http://libav.org)
+* [ffmpeg](http://ffmpeg.org/)
   * suggested flags: `--enable-shared --disable-static --enable-libmp3lame --enable-libvorbis --enable-gpl`
 * [libebur128](https://github.com/jiixyj/libebur128)
   * make sure it is compiled with the speex dependency so that true peak
