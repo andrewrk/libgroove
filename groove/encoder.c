@@ -571,7 +571,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
     }
 
     // av_guess_codec ignores mime_type, filename, and codec_short_name. see
-    // https://bugzilla.libav.org/show_bug.cgi?id=580
+    // https://trac.ffmpeg.org/ticket/4706
     // because of this we do a workaround to return the correct codec based on
     // the codec_short_name.
     AVCodec *codec = NULL;
