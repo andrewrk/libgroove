@@ -6,6 +6,10 @@
    `metadata.c` but it compares a checksum of the audio before and after
    updating metadata, and only atomically replaces the original song with the
    update if the checksum passed.
+ * Add `groove_create_rand_name` - allocates a new file path str which is in the
+   same directory as another file but with a random filename with the same
+   extension. The purpose is to use this file to atomically rename it into
+   place for metadata updates.
 
 ### Version 4.3.0 (2015-05-25)
 

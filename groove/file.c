@@ -179,23 +179,6 @@ const char *groove_tag_value(struct GrooveTag *tag) {
     return e->value;
 }
 
-static int tempfileify(char * str, size_t max_len) {
-    size_t len = strlen(str);
-    if (len + 10 > max_len)
-        return -1;
-    char prepend[11];
-    int n = rand() % 99999;
-    snprintf(prepend, 11, ".tmp%05d-", n);
-    // find the last slash and insert after it
-    // if no slash, insert at beginning
-    char * slash = strrchr(str, '/');
-    char * pos = slash ? slash + 1 : str;
-    size_t orig_len = len - (pos - str);
-    memmove(pos + 10, pos, orig_len);
-    strncpy(pos, prepend, 10);
-    return 0;
-}
-
 static void cleanup_save(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
@@ -368,12 +351,12 @@ int groove_file_save(struct GrooveFile *file) {
 
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
-    char temp_filename[sizeof(f->oc->filename)];
-    snprintf(temp_filename, sizeof(f->oc->filename), "%s", f->ic->filename);
+    int temp_filename_len;
+    char *temp_filename = groove_create_rand_name(&temp_filename_len, f->ic->filename, strlen(f->ic->filename));
 
-    if (tempfileify(temp_filename, sizeof(temp_filename)) < 0) {
+    if (!temp_filename) {
         cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "could not create temp file - filename too long\n");
+        av_log(NULL, AV_LOG_ERROR, "could not create temp file name - out of memory\n");
         return -1;
     }
 

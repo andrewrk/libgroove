@@ -129,6 +129,13 @@ int groove_version_minor(void);
 int groove_version_patch(void);
 const char *groove_version(void);
 
+/* given a file path and the length of the file path, allocates a new file path
+ * which is in the same directory but a random filename with the same extension.
+ * the file name will start with a '.'. The caller owns the memory. The length
+ * of the returned path is returned in out_len. You can pass NULL for out_len.
+ */
+char *groove_create_rand_name(int *out_len, const char *file, int file_len);
+
 /************* GrooveFile *************/
 struct GrooveFile {
     int dirty; /* read-only */

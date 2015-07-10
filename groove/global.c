@@ -101,3 +101,75 @@ int groove_version_minor(void) {
 int groove_version_patch(void) {
     return GROOVE_VERSION_PATCH;
 }
+
+static void get_rand_str(char *dest, int len) {
+   static const char *alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+   static const int alphanumeric_len = 64;
+
+   for(int i = 0; i < len; i += 1) {
+       int index = rand() % alphanumeric_len;
+       dest[i] = alphanumeric[index];
+   }
+}
+
+static const char *get_file_extension(int *out_ext_len, const char *file, int file_len) {
+    for (int i = file_len - 1; i >= 0; i -= 1) {
+        if (file[i] == '.') {
+            if (i == 0 || file[i-1] == '/') {
+                *out_ext_len = 0;
+                return NULL;
+            } else {
+                *out_ext_len = file_len - i;
+                return &file[i];
+            }
+        } else if (file[i] == '/') {
+            *out_ext_len = 0;
+            return NULL;
+        }
+    }
+    *out_ext_len = 0;
+    return NULL;
+}
+
+static const char *find_str_chr_rev(const char *str, int str_len, char c) {
+    for (int i = str_len - 1; i >= 0; i -= 1) {
+        if (str[i] == c)
+            return &str[i];
+    }
+    return NULL;
+}
+
+char *groove_create_rand_name(int *out_len, const char *file, int file_len) {
+    static const int random_len = 16;
+    static const int max_ext_len = 16;
+    static const char *prefix = ".tmp";
+    static const int prefix_len = 4;
+    int ext_len;
+    const char *ext = get_file_extension(&ext_len, file, file_len);
+    if (ext_len > max_ext_len)
+        ext_len = 0;
+
+    const char *slash = find_str_chr_rev(file, file_len, '/');
+
+    char *result;
+    char *basename;
+    if (!slash) {
+        *out_len = prefix_len + random_len + ext_len;
+        result = calloc(*out_len + 1, sizeof(char));
+        if (!result)
+            return NULL;
+        basename = result;
+    } else {
+        int basename_start = slash - file + 1;
+        *out_len = basename_start + prefix_len + random_len + ext_len;
+        result = calloc(*out_len + 1, sizeof(char));
+        if (!result)
+            return NULL;
+        basename = result + basename_start;
+        memcpy(result, file, basename_start);
+    }
+    strcpy(basename, prefix);
+    get_rand_str(&basename[prefix_len], random_len);
+    memcpy(&basename[prefix_len+random_len], ext, ext_len);
+    return result;
+}

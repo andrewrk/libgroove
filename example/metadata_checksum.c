@@ -104,23 +104,6 @@ static uint32_t crc32(uint32_t crc, const unsigned char *buf, int len) {
     return crc ^ 0xffffffff;
 }
 
-static int tempfileify(char * str, size_t max_len) {
-    size_t len = strlen(str);
-    if (len + 10 > max_len)
-        return -1;
-    char prepend[11];
-    int n = rand() % 99999;
-    snprintf(prepend, 11, ".tmp%05d-", n);
-    // find the last slash and insert after it
-    // if no slash, insert at beginning
-    char * slash = strrchr(str, '/');
-    char * pos = slash ? slash + 1 : str;
-    size_t orig_len = len - (pos - str);
-    memmove(pos + 10, pos, orig_len);
-    strncpy(pos, prepend, 10);
-    return 0;
-}
-
 int main(int argc, char * argv[]) {
     char *exe = argv[0];
     if (argc < 2)
@@ -133,13 +116,10 @@ int main(int argc, char * argv[]) {
     struct GroovePlaylist *playlist = groove_playlist_create();
 
     const char *filename = argv[1];
-    int temp_filename_size = strlen(filename) + 32;
-    char *temp_filename = malloc(temp_filename_size);
+    int temp_filename_len;
+    char *temp_filename = groove_create_rand_name(&temp_filename_len, filename, strlen(filename));
     if (!temp_filename)
         panic("out of memory");
-    strcpy(temp_filename, filename);
-    if (tempfileify(temp_filename, temp_filename_size))
-        panic("temp filename too long");
 
     fprintf(stderr, "Scanning file...\n");
     struct GrooveFile *file = groove_file_open(filename);
@@ -158,18 +138,18 @@ int main(int argc, char * argv[]) {
 
     uint32_t crc_begin = 0;
     int byte_count_begin = 0;
-    struct GroovePlaylistItem *item = groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
+    groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
     struct GrooveBuffer *buffer;
     while (groove_sink_buffer_get(sink, &buffer, 1) == GROOVE_BUFFER_YES) {
         byte_count_begin += buffer->size; 
         crc_begin = crc32(crc_begin, buffer->data[0], buffer->size);
         groove_buffer_unref(buffer);
     }
-    groove_playlist_remove(playlist, item);
-    groove_playlist_destroy(playlist);
-    playlist = NULL;
+    groove_sink_detach(sink);
     groove_sink_destroy(sink);
     sink = NULL;
+    groove_playlist_destroy(playlist);
+    playlist = NULL;
     groove_file_close(file);
     file = groove_file_open(filename);
     if (!file)
@@ -231,24 +211,39 @@ int main(int argc, char * argv[]) {
 
     uint32_t crc_end = 0;
     int byte_count_end = 0;
-    item = groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
+    groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
     while (groove_sink_buffer_get(sink, &buffer, 1) == GROOVE_BUFFER_YES) {
         byte_count_end += buffer->size; 
         crc_end = crc32(crc_end, buffer->data[0], buffer->size);
         groove_buffer_unref(buffer);
     }
-    groove_playlist_remove(playlist, item);
     fprintf(stderr, "after checksum: %x\n", crc_end);
     fprintf(stderr, "after byte count: %d\n", byte_count_end);
 
+    groove_sink_detach(sink);
+    groove_sink_destroy(sink);
+    sink = NULL;
+    groove_playlist_destroy(playlist);
+    playlist = NULL;
+    groove_file_close(file);
+
     groove_finish();
 
-    if (crc_begin != crc_end || byte_count_begin != byte_count_end)
-        panic("checksum failed");
+    if (crc_begin != crc_end || byte_count_begin != byte_count_end) {
+        fprintf(stderr, "checksum failed");
+        remove(temp_filename);
+        free(temp_filename);
+        return EXIT_FAILURE;
+    }
 
-    if (rename(temp_filename, filename) != 0)
-        panic("rename failed");
+    if (rename(temp_filename, filename) != 0) {
+        fprintf(stderr, "rename failed");
+        remove(temp_filename);
+        free(temp_filename);
+        return EXIT_FAILURE;
+    }
 
+    free(temp_filename);
     fprintf(stderr, "OK\n");
     return 0;
 }
