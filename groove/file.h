@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_FILE_H_INCLUDED
-#define GROOVE_FILE_H_INCLUDED
+#ifndef GROOVE_FILE_H
+#define GROOVE_FILE_H
 
 #include "groove.h"
 
@@ -37,4 +37,4 @@ struct GrooveFilePrivate {
     int paused;
 };
 
-#endif /* GROOVE_FILE_H_INCLUDED */
+#endif

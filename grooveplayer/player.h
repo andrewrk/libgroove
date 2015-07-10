@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_PLAYER_H_INCLUDED
-#define GROOVE_PLAYER_H_INCLUDED
+#ifndef GROOVE_PLAYER_H
+#define GROOVE_PLAYER_H
 
 #include <groove/groove.h>
 
@@ -153,4 +153,4 @@ struct GrooveAudioFormat groove_player_get_device_audio_format(struct GroovePlay
 }
 #endif /* __cplusplus */
 
-#endif /* GROOVE_PLAYER_H_INCLUDED */
+#endif

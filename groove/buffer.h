@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_BUFFER_H_INCLUDED
-#define GROOVE_BUFFER_H_INCLUDED
+#ifndef GROOVE_BUFFER_H
+#define GROOVE_BUFFER_H
 
 #include "groove.h"
 
@@ -26,4 +26,4 @@ struct GrooveBufferPrivate {
     uint8_t *data;
 };
 
-#endif /* GROOVE_BUFFER_H_INCLUDED */
+#endif

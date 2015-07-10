@@ -6,8 +6,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_MACH_TIME_H_INCLUDED
-#define GROOVE_MACH_TIME_H_INCLUDED
+#ifndef GROOVE_OSX_TIME_SHIM_H
+#define GROOVE_OSX_TIME_SHIM_H
 #ifdef __APPLE__
 
 #include <sys/types.h>

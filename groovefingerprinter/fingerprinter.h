@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_FINGERPRINTER_H_INCLUDED
-#define GROOVE_FINGERPRINTER_H_INCLUDED
+#ifndef GROOVE_FINGERPRINTER_H
+#define GROOVE_FINGERPRINTER_H
 
 #include <groove/groove.h>
 
@@ -124,4 +124,4 @@ void groove_fingerprinter_dealloc(void *ptr);
 }
 #endif /* __cplusplus */
 
-#endif /* GROOVE_FINGERPRINTER_H_INCLUDED */
+#endif

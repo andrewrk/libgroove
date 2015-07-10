@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_ENCODER_H_INCLUDED
-#define GROOVE_ENCODER_H_INCLUDED
+#ifndef GROOVE_ENCODER_H
+#define GROOVE_ENCODER_H
 
 #include "groove.h"
 
@@ -135,4 +135,4 @@ int groove_encoder_set_gain(struct GrooveEncoder *encoder, double gain);
 }
 #endif /* __cplusplus */
 
-#endif /* GROOVE_ENCODER_H_INCLUDED */
+#endif

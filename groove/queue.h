@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_QUEUE_H_INCLUDED
-#define GROOVE_QUEUE_H_INCLUDED
+#ifndef GROOVE_QUEUE_H
+#define GROOVE_QUEUE_H
 
 struct GrooveQueue {
     void *context;
@@ -37,4 +37,4 @@ void groove_queue_purge(struct GrooveQueue *queue);
 
 void groove_queue_cleanup_default(struct GrooveQueue *queue, void *obj);
 
-#endif /* GROOVE_QUEUE_H_INCLUDED */
+#endif

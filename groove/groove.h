@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_H_INCLUDED
-#define GROOVE_H_INCLUDED
+#ifndef GROOVE_GROOVE_H
+#define GROOVE_GROOVE_H
 
 #include <stdint.h>
 
@@ -447,4 +447,4 @@ int groove_sink_set_gain(struct GrooveSink *sink, double gain);
 }
 #endif /* __cplusplus */
 
-#endif /* GROOVE_H_INCLUDED */
+#endif

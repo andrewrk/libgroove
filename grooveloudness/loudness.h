@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_LOUDNESS_H_INCLUDED
-#define GROOVE_LOUDNESS_H_INCLUDED
+#ifndef GROOVE_LOUDNESS_H
+#define GROOVE_LOUDNESS_H
 
 #include <groove/groove.h>
 
@@ -94,4 +94,4 @@ void groove_loudness_detector_position(struct GrooveLoudnessDetector *detector,
 }
 #endif /* __cplusplus */
 
-#endif /* GROOVE_LOUDNESS_H_INCLUDED */
+#endif
