@@ -24,10 +24,6 @@ else(DISABLE_PLAYER)
   message("Configuring libgrooveplayer version ${LIBGROOVE_VERSION}")
   set(LIBGROOVE_PLAYER_SOURCES ${CMAKE_SOURCE_DIR}/grooveplayer/player.c)
   file(GLOB_RECURSE LIBGROOVE_PLAYER_HEADERS ${CMAKE_SOURCE_DIR}/grooveplayer/*.h)
-  if(APPLE)
-    set(LIBGROOVE_PLAYER_SOURCES ${LIBGROOVE_PLAYER_SOURCES}
-      ${CMAKE_SOURCE_DIR}/grooveplayer/osx_time_shim.c)
-  endif(APPLE)
 endif(DISABLE_PLAYER)
 
 if(DISABLE_LOUDNESS)
@@ -72,16 +68,16 @@ else(DISABLE_FINGERPRINTER)
   endif(CHROMAPRINT_FOUND)
 endif(DISABLE_FINGERPRINTER)
 
-# check for SDL2
+# check for libsoundio
 if(DISABLE_PLAYER)
-  set(STATUS_SDL2 "not needed")
+  set(STATUS_SOUNDIO "not needed")
 else(DISABLE_PLAYER)
-  find_package(SDL2)
-  if(SDL2_FOUND)
-    set(STATUS_SDL2 "OK")
-  else(SDL2_FOUND)
-    set(STATUS_SDL2 "not found")
-  endif(SDL2_FOUND)
+  find_package(soundio)
+  if(SOUNDIO_FOUND)
+    set(STATUS_SOUNDIO "OK")
+  else(SOUNDIO_FOUND)
+    set(STATUS_SOUNDIO "not found")
+  endif(SOUNDIO_FOUND)
 endif(DISABLE_PLAYER)
 
 # check for ffmpeg
@@ -186,8 +182,7 @@ target_link_libraries(transcode groove)
 add_dependencies(transcode groove)
 
 
-if(DISABLE_PLAYER)
-else()
+if(NOT DISABLE_PLAYER)
   add_library(grooveplayer SHARED
     ${LIBGROOVE_PLAYER_SOURCES}
     ${LIBGROOVE_PLAYER_HEADERS})
@@ -201,8 +196,8 @@ else()
     target_link_libraries(grooveplayer LINK_PRIVATE rt)
   endif()
   add_dependencies(grooveplayer groove)
-  target_link_libraries(grooveplayer LINK_PRIVATE ${SDL2_LIBRARY})
-  include_directories(${SDL2_INCLUDE_DIR})
+  target_link_libraries(grooveplayer LINK_PRIVATE ${SOUNDIO_LIBRARY})
+  include_directories(${SOUNDIO_INCLUDE_DIR})
 
   install(FILES "grooveplayer/player.h" DESTINATION "include/grooveplayer")
   install(TARGETS grooveplayer DESTINATION lib)
@@ -224,8 +219,7 @@ else()
   add_dependencies(playlist groove grooveplayer)
 endif()
 
-if(DISABLE_LOUDNESS)
-else()
+if(NOT DISABLE_LOUDNESS)
   add_library(grooveloudness SHARED
     ${LIBGROOVE_LOUDNESS_SOURCES}
     ${LIBGROOVE_LOUDNESS_HEADERS})
@@ -260,8 +254,7 @@ else()
   add_dependencies(replaygain groove grooveloudness)
 endif()
 
-if(DISABLE_FINGERPRINTER)
-else()
+if(NOT DISABLE_FINGERPRINTER)
   add_library(groovefingerprinter SHARED
     ${LIBGROOVE_FINGERPRINTER_SOURCES}
     ${LIBGROOVE_FINGERPRINTER_HEADERS})
@@ -310,7 +303,7 @@ message(
 "System Dependencies\n"
 "-------------------\n"
 "* threads                      : ${STATUS_THREADS}\n"
-"* SDL2                         : ${STATUS_SDL2}\n"
+"* libsoundio                   : ${STATUS_SOUNDIO}\n"
 "* ebur128                      : ${STATUS_EBUR128}\n"
 "* chromaprint                  : ${STATUS_CHROMAPRINT}\n"
 "* libavformat                  : ${STATUS_LIBAVFORMAT}\n"

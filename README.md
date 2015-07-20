@@ -61,7 +61,7 @@ You will need these to compile libgroove.
 * [libebur128](https://github.com/jiixyj/libebur128)
   * make sure it is compiled with the speex dependency so that true peak
     functions are available.
-* [libsdl2-dev](http://www.libsdl.org/)
+* [libsoundio](https://github.com/andrewrk/libsoundio)
 * [libchromaprint-dev](http://acoustid.org/chromaprint)
 
 Installation
@@ -112,9 +112,8 @@ sudo pacman -U libgroove-*
 Some notes:
 
 * libgroove depends upon several other packages. Dependencies available through
-  the official repositories can be installed with pacman (e.g. `pacman -S
-  --asdeps sdl2`), and dependencies available through the AUR can be installed
-  via the procedure shown above.
+  the official repositories can be installed with pacman and dependencies
+  available through the AUR can be installed via the procedure shown above.
 * An [AUR helper](https://wiki.archlinux.org/index.php/AUR_helper) can ease the
   process of installing packages from the AUR.
 * The [AUR User

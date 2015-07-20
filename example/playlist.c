@@ -4,6 +4,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+
+__attribute__ ((cold))
+__attribute__ ((noreturn))
+__attribute__ ((format (printf, 1, 2)))
+static void panic(const char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(stderr, format, ap);
+    fprintf(stderr, "\n");
+    va_end(ap);
+    abort();
+}
 
 static int usage(const char *exe) {
     fprintf(stderr, "Usage: %s [--volume 1.0] [--exact] [--dummy] file1 file2 ...\n", exe);
@@ -20,19 +33,25 @@ int main(int argc, char * argv[]) {
     groove_set_logging(GROOVE_LOG_INFO);
     struct GroovePlaylist *playlist = groove_playlist_create();
 
-    if (!playlist) {
-        fprintf(stderr, "Error creating playlist.\n");
-        return 1;
-    }
+    if (!playlist)
+        panic("create playlist: out of memory");
 
-    struct GroovePlayer *player = groove_player_create();
+    struct GroovePlayerContext *player_context = groove_player_context_create();
+    int err;
+    if ((err = groove_player_context_connect(player_context)))
+        panic("error connecting player context");
+
+    struct GroovePlayer *player = groove_player_create(player_context);
+
+    if (!player_context || !player)
+        panic("out of memory");
 
     for (int i = 1; i < argc; i += 1) {
         char *arg = argv[i];
         if (arg[0] == '-' && arg[1] == '-') {
             arg += 2;
             if (strcmp(arg, "dummy") == 0) {
-                player->device_index = GROOVE_PLAYER_DUMMY_DEVICE;
+                player->use_dummy_device = 1;
             } else if (strcmp(arg, "exact") == 0) {
                 player->use_exact_audio_format = 1;
             } else if (i + 1 >= argc) {
@@ -52,7 +71,8 @@ int main(int argc, char * argv[]) {
             groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
         }
     }
-    groove_player_attach(player, playlist);
+    if ((err = groove_player_attach(player, playlist)))
+        panic("error attaching player");
 
     union GroovePlayerEvent event;
     struct GroovePlaylistItem *item;
@@ -63,6 +83,10 @@ int main(int argc, char * argv[]) {
             break;
         case GROOVE_EVENT_DEVICEREOPENED:
             fprintf(stderr, "device re-opened\n");
+            break;
+        case GROOVE_EVENT_DEVICE_REOPEN_ERROR:
+            panic("error re-opening device");
+        case GROOVE_EVENT_WAKEUP:
             break;
         case GROOVE_EVENT_NOWPLAYING:
             groove_player_position(player, &item, NULL);
@@ -78,6 +102,7 @@ int main(int argc, char * argv[]) {
                 }
                 groove_player_detach(player);
                 groove_player_destroy(player);
+                groove_player_context_destroy(player_context);
                 groove_playlist_destroy(playlist);
                 return 0;
             }

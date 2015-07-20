@@ -10,6 +10,7 @@
    same directory as another file but with a random filename with the same
    extension. The purpose is to use this file to atomically rename it into
    place for metadata updates.
+ * Depend on libsoundio instead of SDL2.
 
 ### Version 4.3.0 (2015-05-25)
 

@@ -24,28 +24,34 @@ enum GroovePlayerEventType {
     /* when something tries to read from an empty buffer */
     GROOVE_EVENT_BUFFERUNDERRUN,
 
-    /* when the audio device is re-opened due to audio format changing*/
-    GROOVE_EVENT_DEVICEREOPENED
+    /* when the audio device is re-opened due to audio format changing */
+    GROOVE_EVENT_DEVICEREOPENED,
+
+    /* when the audio device gets an error re-opening */
+    GROOVE_EVENT_DEVICE_REOPEN_ERROR,
+
+    /* user requested wakeup */
+    GROOVE_EVENT_WAKEUP
 };
 
 union GroovePlayerEvent {
     enum GroovePlayerEventType type;
 };
 
-#define GROOVE_PLAYER_DEFAULT_DEVICE (-1)
-#define GROOVE_PLAYER_DUMMY_DEVICE   (-2)
+struct GrooveDevice;
 
 struct GroovePlayer {
-    /* set this to the device you want to open
-     * could also be GROOVE_PLAYER_DEFAULT_DEVICE or GROOVE_PLAYER_DUMMY_DEVICE
+    /* Set this to the device you want to open. You may use NULL for default.
+     * If you set `use_dummy_device` to 1, this field is ignored.
      */
-    int device_index;
+    struct GrooveDevice *device;
 
     /* The desired audio format settings with which to open the device.
-     * groove_player_create defaults these to 44100 Hz,
-     * signed 16-bit int, stereo.
+     * groove_player_create defaults these to 48000 Hz,
+     * signed 32-bit native endian integer, stereo.
      * These are preferences; if a setting cannot be used, a substitute will be
      * used instead. actual_audio_format is set to the actual values.
+     * If you set `use_exact_audio_format` to 1, this field is ignored.
      */
     struct GrooveAudioFormat target_audio_format;
 
@@ -60,7 +66,7 @@ struct GroovePlayer {
      */
     int sink_buffer_size;
 
-    /* This volume adjustment to make to this player.
+    /* Volume adjustment to make to this player.
      * It is recommended that you leave this at 1.0 and instead adjust the
      * gain of the underlying playlist.
      * If you want to change this value after you have already attached the
@@ -85,27 +91,65 @@ struct GroovePlayer {
      * parameters whenever necessary.
      */
     int use_exact_audio_format;
+
+    /* If you set this to 1, `device` is ignored and a dummy device is opened
+     * instead.
+     */
+    int use_dummy_device;
 };
 
-/* Returns the number of available devices exposed by the current driver or -1
- * if an explicit list of devices can't be determined. A return value of -1
- * does not necessarily mean an error condition.
- * In many common cases, when this function returns a value <= 0, it can still
- * successfully open the default device (NULL for the device name)
- * This function may trigger a complete redetect of available hardware. It
- * should not be called for each iteration of a loop, but rather once at the
- * start of a loop.
- */
-int groove_device_count(void);
+struct GroovePlayerContext {
+    // Defaults to NULL. Put whatever you want here.
+    void *userdata;
+    // Optional callback. Called when the list of devices change. Only called
+    // during a call to groove_player_context_flush_events or
+    // groove_player_context_flush_events
+    void (*on_devices_change)(struct GroovePlayerContext *);
+    // Optional callback. Called from an unknown thread that you should not use
+    // to call any groove functions. You may use this to signal a condition
+    // variable to wake up. Called when groove_wait_events would be woken up.
+    void (*on_events_signal)(struct GroovePlayerContext *);
+};
 
-/* Returns the name of the audio device at the requested index, or NULL on error
- * The string returned by this function is UTF-8 encoded, read-only, and
- * managed internally. You are not to free it. If you need to keep the string
- * for any length of time, you should make your own copy of it.
- */
-const char *groove_device_name(int index);
+struct GroovePlayerContext *groove_player_context_create(void);
+void groove_player_context_destroy(struct GroovePlayerContext *player_context);
 
-struct GroovePlayer *groove_player_create(void);
+int groove_player_context_connect(struct GroovePlayerContext *player_context);
+void groove_player_context_disconnect(struct GroovePlayerContext *player_context);
+
+/* when you call this, the on_devices_change and on_events_signal callbacks
+ * might be called. This is the only time those callbacks will be called.
+ */
+void groove_player_context_flush_events(struct GroovePlayerContext *player_context);
+
+/* flushes events as they occur, blocks until you call groove_player_context_wakeup.
+ * be ready for spurious wakeups
+ */
+void groove_player_context_wait(struct GroovePlayerContext *player_context);
+
+/* wake up groove_player_context_wait */
+void groove_player_context_wakeup(struct GroovePlayerContext *player_context);
+
+/* Returns the number of available devices. */
+int groove_player_context_device_count(struct GroovePlayerContext *player_context);
+
+/* Returns the index of the default device */
+int groove_player_context_device_default(struct GroovePlayerContext *player_context);
+
+/* Call groove_device_unref when done */
+struct GrooveDevice *groove_player_context_get_device(
+        struct GroovePlayerContext *player_context, int index);
+
+
+
+const char *groove_device_id(struct GrooveDevice *device);
+const char *groove_device_name(struct GrooveDevice *device);
+int groove_device_is_raw(struct GrooveDevice *device);
+void groove_device_ref(struct GrooveDevice *device);
+void groove_device_unref(struct GrooveDevice *device);
+
+
+struct GroovePlayer *groove_player_create(struct GroovePlayerContext *);
 void groove_player_destroy(struct GroovePlayer *player);
 
 /* Attaches the player to the playlist instance and opens the device to
@@ -135,6 +179,11 @@ int groove_player_event_get(struct GroovePlayer *player,
  * if block is 1, block until event is ready
  */
 int groove_player_event_peek(struct GroovePlayer *player, int block);
+
+/* wakes up a blocking call to groove_player_event_get or
+ * groove_player_event_peek with a GROOVE_EVENT_WAKEUP.
+ */
+void groove_player_event_wakeup(struct GroovePlayer *player);
 
 /* See the gain property of GrooveSink. It is recommended that you leave this
  * at 1.0 and instead adjust the gain of the playlist.
