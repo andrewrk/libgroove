@@ -55,12 +55,6 @@ struct GroovePlayer {
      */
     struct GrooveAudioFormat target_audio_format;
 
-    /* how big the device buffer should be, in sample frames.
-     * must be a power of 2.
-     * groove_player_create defaults this to 1024
-     */
-    int device_buffer_size;
-
     /* how big the sink buffer should be, in sample frames.
      * groove_player_create defaults this to 8192
      */
