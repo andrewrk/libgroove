@@ -119,11 +119,13 @@ void groove_player_context_disconnect(struct GroovePlayerContext *player_context
 
 /* when you call this, the on_devices_change and on_events_signal callbacks
  * might be called. This is the only time those callbacks will be called.
+ * When devices are updated on the system, you won't see the updates until you
+ * call this function.
  */
 void groove_player_context_flush_events(struct GroovePlayerContext *player_context);
 
-/* flushes events as they occur, blocks until you call groove_player_context_wakeup.
- * be ready for spurious wakeups
+/* Flushes events as they occur, blocks until you call groove_player_context_wakeup.
+ * Be ready for spurious wakeups.
  */
 void groove_player_context_wait(struct GroovePlayerContext *player_context);
 
