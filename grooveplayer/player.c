@@ -179,13 +179,13 @@ static bool is_planar(enum GrooveSampleFormat fmt) {
 }
 
 static void error_callback(struct SoundIoOutStream *outstream, int err) {
+    // TODO destroy stream and emit error
+    panic("stream error: %s", soundio_strerror(err));
+}
+
+static void underflow_callback(struct SoundIoOutStream *outstream) {
     struct GroovePlayerPrivate *p = outstream->userdata;
-    if (err == SoundIoErrorUnderflow) {
-        emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
-    } else {
-        // TODO destroy stream and emit error
-        panic("stream error: %s", soundio_strerror(err));
-    }
+    emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
 }
 
 static void audio_callback(struct SoundIoOutStream *outstream, int requested_frame_count) {
@@ -261,7 +261,7 @@ static void audio_callback(struct SoundIoOutStream *outstream, int requested_fra
                     pthread_cond_signal(&p->device_thread_cond);
                 }
             }
-            if ((err = soundio_outstream_write(outstream, write_frame_count)))
+            if ((err = soundio_outstream_end_write(outstream, write_frame_count)))
                 panic("%s", soundio_strerror(err));
             break;
         }
@@ -290,7 +290,7 @@ static void audio_callback(struct SoundIoOutStream *outstream, int requested_fra
         }
         p->play_pos += frame_count / (double) outstream->sample_rate;
 
-        if ((err = soundio_outstream_write(outstream, frame_count)))
+        if ((err = soundio_outstream_end_write(outstream, frame_count)))
             panic("%s", soundio_strerror(err));
         requested_frame_count -= frame_count;
 
@@ -438,7 +438,7 @@ static int open_audio_device(struct GroovePlayer *player,
             device = (struct SoundIoDevice *) player->device;
             soundio_device_ref(device);
         } else {
-            int default_index = soundio_get_default_output_device_index(p->pc->soundio);
+            int default_index = soundio_default_output_device_index(p->pc->soundio);
             device = soundio_get_output_device(p->pc->soundio, default_index);
         }
     }
@@ -476,6 +476,7 @@ static int open_audio_device(struct GroovePlayer *player,
 
     p->outstream->userdata = player;
     p->outstream->error_callback = error_callback;
+    p->outstream->underflow_callback = underflow_callback;
     p->outstream->write_callback = audio_callback;
 
     int err;
@@ -518,7 +519,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
             return -1;
         }
 
-        int dummy_device_index = soundio_get_default_output_device_index(p->dummy_soundio);
+        int dummy_device_index = soundio_default_output_device_index(p->dummy_soundio);
         p->dummy_device = soundio_get_output_device(p->dummy_soundio, dummy_device_index);
     }
 
@@ -729,12 +730,12 @@ void groove_player_context_wakeup(struct GroovePlayerContext *player_context) {
 
 int groove_player_context_device_count(struct GroovePlayerContext *player_context) {
     struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    return soundio_get_output_device_count(pc->soundio);
+    return soundio_output_device_count(pc->soundio);
 }
 
 int groove_player_context_device_default(struct GroovePlayerContext *player_context) {
     struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    return soundio_get_default_output_device_index(pc->soundio);
+    return soundio_default_output_device_index(pc->soundio);
 }
 
 struct GrooveDevice *groove_player_context_get_device(struct GroovePlayerContext *player_context, int index) {
