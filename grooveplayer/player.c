@@ -73,7 +73,46 @@ static void panic(const char *format, ...) {
 
 static int open_audio_device(struct GroovePlayer *player,
         const struct GrooveAudioFormat *target_format, struct GrooveAudioFormat *actual_format,
-        int use_exact_audio_format);
+        bool use_exact_audio_format);
+
+const int prioritized_formats_len = 5; // TODO array_length() this
+static enum GrooveSampleFormat prioritized_formats[] = {
+    GROOVE_SAMPLE_FMT_FLT,
+    GROOVE_SAMPLE_FMT_S32,
+    GROOVE_SAMPLE_FMT_DBL,
+    GROOVE_SAMPLE_FMT_S16,
+    GROOVE_SAMPLE_FMT_U8,
+};
+
+const int prioritized_layouts_len = 26; // TODO array_length() this
+static uint64_t prioritized_layouts[] = {
+    GROOVE_CH_LAYOUT_OCTAGONAL,
+    GROOVE_CH_LAYOUT_7POINT1_WIDE_BACK,
+    GROOVE_CH_LAYOUT_7POINT1_WIDE,
+    GROOVE_CH_LAYOUT_7POINT1,
+    GROOVE_CH_LAYOUT_7POINT0_FRONT,
+    GROOVE_CH_LAYOUT_7POINT0,
+    GROOVE_CH_LAYOUT_6POINT1_FRONT,
+    GROOVE_CH_LAYOUT_6POINT1_BACK,
+    GROOVE_CH_LAYOUT_6POINT1,
+    GROOVE_CH_LAYOUT_HEXAGONAL,
+    GROOVE_CH_LAYOUT_6POINT0_FRONT,
+    GROOVE_CH_LAYOUT_6POINT0,
+    GROOVE_CH_LAYOUT_5POINT1_BACK,
+    GROOVE_CH_LAYOUT_5POINT0_BACK,
+    GROOVE_CH_LAYOUT_5POINT1,
+    GROOVE_CH_LAYOUT_5POINT0,
+    GROOVE_CH_LAYOUT_4POINT1,
+    GROOVE_CH_LAYOUT_QUAD,
+    GROOVE_CH_LAYOUT_2_2,
+    GROOVE_CH_LAYOUT_4POINT0,
+    GROOVE_CH_LAYOUT_3POINT1,
+    GROOVE_CH_LAYOUT_SURROUND,
+    GROOVE_CH_LAYOUT_2_1,
+    GROOVE_CH_LAYOUT_2POINT1,
+    GROOVE_CH_LAYOUT_STEREO,
+    GROOVE_CH_LAYOUT_MONO,
+};
 
 static enum SoundIoFormat to_soundio_fmt(enum GrooveSampleFormat fmt) {
     switch (fmt) {
@@ -103,13 +142,98 @@ static enum SoundIoFormat to_soundio_fmt(enum GrooveSampleFormat fmt) {
     return SoundIoFormatInvalid;
 }
 
+static int find_best_format(struct SoundIoDevice *device, bool exact,
+        enum GrooveSampleFormat target_fmt,
+        enum GrooveSampleFormat *actual_fmt_groove,
+        enum SoundIoFormat *actual_fmt_soundio)
+{
+    // if exact format is supported, that's obviously the best pick
+    enum SoundIoFormat fmt = to_soundio_fmt(target_fmt);
+    if (soundio_device_supports_format(device, fmt)) {
+        *actual_fmt_groove = target_fmt;
+        *actual_fmt_soundio = fmt;
+        return 0;
+    }
+
+    if (exact)
+        return -1;
+
+    for (int i = 0; i < prioritized_formats_len; i += 1) {
+        enum GrooveSampleFormat try_fmt = prioritized_formats[i];
+        enum SoundIoFormat fmt = to_soundio_fmt(try_fmt);
+
+        if (soundio_device_supports_format(device, fmt)) {
+            *actual_fmt_groove = try_fmt;
+            *actual_fmt_soundio = fmt;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+static int clamp_int(int min, int x, int max) {
+    if (x < min)
+        x = min;
+    else if (x > max)
+        x = max;
+    return x;
+}
+
+static int find_best_sample_rate(struct SoundIoDevice *device, bool exact,
+        int target_rate, int *actual_rate_groove, int *actual_rate_soundio)
+{
+    // if exact rate is supported, that's obviously the best pick
+    if (device->sample_rate_min <= target_rate && target_rate <= device->sample_rate_max) {
+        *actual_rate_groove = target_rate;
+        *actual_rate_soundio = target_rate;
+        return 0;
+    }
+
+    if (exact)
+        return -1;
+
+    *actual_rate_groove = clamp_int(device->sample_rate_min, target_rate, device->sample_rate_max);
+    *actual_rate_soundio = *actual_rate_groove;
+    return 0;
+}
+
+
 static void to_soundio_layout(uint64_t in_layout, struct SoundIoChannelLayout *out_layout) {
     if (in_layout != GROOVE_CH_LAYOUT_STEREO)
-        panic("TODO libroove's channel layout handling needs to be revamped using genesis as a guide");
+        panic("TODO libgroove's channel layout handling needs to be revamped using libsoundio as a guide");
     out_layout->name = "Stereo";
     out_layout->channel_count = 2;
     out_layout->channels[0] = SoundIoChannelIdFrontLeft;
     out_layout->channels[1] = SoundIoChannelIdFrontRight;
+}
+
+static int find_best_channel_layout(struct SoundIoDevice *device, bool exact, uint64_t target_layout,
+        uint64_t *actual_layout_groove, struct SoundIoChannelLayout *actual_layout_soundio)
+{
+    // if exact layout is supported, that's obviousy the best pick
+    struct SoundIoChannelLayout layout;
+    to_soundio_layout(target_layout, &layout);
+    if (soundio_device_supports_layout(device, &layout)) {
+        *actual_layout_groove = target_layout;
+        *actual_layout_soundio = layout;
+        return 0;
+    }
+
+    if (exact)
+        return -1;
+
+    for (int i = 0; i < prioritized_layouts_len; i += 1) {
+        uint64_t try_layout = prioritized_layouts[i];
+        to_soundio_layout(try_layout, &layout);
+        if (soundio_device_supports_layout(device, &layout)) {
+            *actual_layout_groove = try_layout;
+            *actual_layout_soundio = layout;
+            return 0;
+        }
+    }
+
+    return -1;
 }
 
 static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType type) {
@@ -151,7 +275,10 @@ static void *device_thread_run(void *arg) {
 
         p->device_format = p->audio_buf->format;
         int err;
-        if ((err = open_audio_device(player, &p->audio_buf->format, NULL, player->use_exact_audio_format))) {
+        struct GrooveAudioFormat actual_audio_format;
+        if ((err = open_audio_device(player, &p->audio_buf->format,
+                        &actual_audio_format, player->use_exact_audio_format)))
+        {
             pthread_mutex_unlock(&p->play_head_mutex);
             emit_event(p->eventq, GROOVE_EVENT_DEVICE_REOPEN_ERROR);
         } else {
@@ -425,9 +552,10 @@ void groove_player_destroy(struct GroovePlayer *player) {
 static int open_audio_device(struct GroovePlayer *player,
         const struct GrooveAudioFormat *target_format,
         struct GrooveAudioFormat *actual_format,
-        int use_exact_audio_format)
+        bool use_exact_audio_format)
 {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    int err;
 
     struct SoundIoDevice *device;
     if (player->use_dummy_device) {
@@ -451,44 +579,41 @@ static int open_audio_device(struct GroovePlayer *player,
         return -1;
     }
 
-    soundio_device_unref(device);
-
-    // support best sample format
-    enum SoundIoFormat fmt = to_soundio_fmt(target_format->sample_fmt);
-    if (!soundio_device_supports_format(device, fmt)) {
-        panic("TODO: sample format conversion if necessary");
-    }
-    p->outstream->format = to_soundio_fmt(target_format->sample_fmt);
-
-    if (target_format->sample_rate < device->sample_rate_min ||
-        target_format->sample_rate > device->sample_rate_max)
+    if ((err = find_best_format(device, use_exact_audio_format, target_format->sample_fmt,
+                    &actual_format->sample_fmt, &p->outstream->format)))
     {
-        panic("TODO: resample if necessary");
+        soundio_device_unref(device);
+        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: no supported sample format\n");
+        return err;
     }
-    p->outstream->sample_rate = target_format->sample_rate;
 
-    struct SoundIoChannelLayout layout;
-    to_soundio_layout(target_format->channel_layout, &layout);
-    if (!soundio_device_supports_layout(device, &layout)) {
-        panic("TODO: remap if necessary");
+    if ((err = find_best_sample_rate(device, use_exact_audio_format, target_format->sample_rate,
+                    &actual_format->sample_rate, &p->outstream->sample_rate)))
+    {
+        soundio_device_unref(device);
+        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: no supported sample rate\n");
+        return err;
     }
-    p->outstream->layout = layout;
+
+    if ((err = find_best_channel_layout(device, use_exact_audio_format, target_format->channel_layout,
+                    &actual_format->channel_layout, &p->outstream->layout)))
+    {
+        soundio_device_unref(device);
+        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: no supported channel layout\n");
+        return err;
+    }
+
+    soundio_device_unref(device);
 
     p->outstream->userdata = player;
     p->outstream->error_callback = error_callback;
     p->outstream->underflow_callback = underflow_callback;
     p->outstream->write_callback = audio_callback;
 
-    int err;
     if ((err = soundio_outstream_open(p->outstream))) {
+        soundio_device_unref(device);
         av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", soundio_strerror(err));
         return -1;
-    }
-
-    if (actual_format) {
-        actual_format->sample_rate = target_format->sample_rate;
-        actual_format->channel_layout = target_format->channel_layout;
-        actual_format->sample_fmt = target_format->sample_fmt;
     }
 
     return 0;
