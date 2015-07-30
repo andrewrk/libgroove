@@ -315,6 +315,10 @@ static void underflow_callback(struct SoundIoOutStream *outstream) {
     emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
 }
 
+static inline int min_int(int a, int b) {
+    return (a < b) ? a : b;
+}
+
 static void audio_callback(struct SoundIoOutStream *outstream, int requested_frame_count) {
     struct GroovePlayerPrivate *p = outstream->userdata;
 
@@ -346,7 +350,7 @@ static void audio_callback(struct SoundIoOutStream *outstream, int requested_fra
             p->audio_buf_size = 0;
 
             // TODO problematic when this function blocks for a long time
-            int ret = groove_sink_buffer_get(p->sink, &p->audio_buf, 1);
+            int ret = groove_sink_buffer_get(p->sink, &p->audio_buf, 0);
             if (ret == GROOVE_BUFFER_END) {
                 p->play_head = NULL;
                 p->play_pos = -1.0;
@@ -370,6 +374,10 @@ static void audio_callback(struct SoundIoOutStream *outstream, int requested_fra
                     p->silence_frames_left = outstream->buffer_duration * outstream->sample_rate;
                     waiting_for_silence = true;
                 }
+            } else {
+                if ((err = soundio_outstream_end_write(outstream, 0)))
+                    panic("%s", soundio_strerror(err));
+                break;
             }
         }
         if (p->request_device_reopen || waiting_for_silence || paused || !p->audio_buf) {
@@ -393,7 +401,7 @@ static void audio_callback(struct SoundIoOutStream *outstream, int requested_fra
             break;
         }
         size_t read_frame_count = p->audio_buf_size - p->audio_buf_index;
-        int frame_count = (read_frame_count < write_frame_count) ? read_frame_count : write_frame_count;
+        int frame_count = min_int(read_frame_count, write_frame_count);
 
         if (is_planar(p->audio_buf->format.sample_fmt)) {
             int end_frame = p->audio_buf_index + frame_count;
@@ -522,7 +530,6 @@ struct GroovePlayer *groove_player_create(struct GroovePlayerContext *player_con
     player->target_audio_format.sample_rate = 44100;
     player->target_audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
     player->target_audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
-    // small because there is no way to clear the buffer.
     player->sink_buffer_size = 8192;
     player->gain = p->sink->gain;
 
