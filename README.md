@@ -184,6 +184,8 @@ Feel free to make a pull request adding yours to this list.
   visualizations.
 * [node-groove](https://github.com/andrewrk/node-groove) provides
   [Node.js](http://nodejs.org/) bindings to libgroove.
+* [playa](https://github.com/moonwave99/playa) OS X Audio Player that thinks
+  in albums.
 * [groove-rs](https://github.com/andrewrk/groove-rs) provides
   [rust](http://rust-lang.org) bindings to libgroove.
 * [ruby-groove](https://github.com/johnmuhl/ruby-groove) provides Ruby FFI
