@@ -125,8 +125,10 @@ brew install libgroove
 
 ### From Source
 
-```sh
-mkdir build && cd build && cmake ../
+```
+mkdir build
+cd build
+cmake ..
 # Verify that the configure output is to your liking.
 make
 sudo make install
@@ -146,15 +148,14 @@ Read header files for the relevant APIs:
   * GrooveSink
 * groove/encoder.h
   * GrooveEncoder
-* grooveplayer/player.h
+* groove/player.h
   * GroovePlayer
-* grooveloudness/loudness.h
+* groove/loudness.h
   * GrooveLoudnessDetector
-* groovefingerprinter/fingerprinter.h
+* groove/fingerprinter.h
   * GrooveFingerprinter
 
 Join #libgroove on irc.freenode.org and ask questions.
-
 
 ## Contributing
 

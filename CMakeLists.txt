@@ -28,9 +28,6 @@ else(Threads_FOUND)
     set(STATUS_THREADS "not found")
 endif(Threads_FOUND)
 
-# TODO find_library(RT_LIBRARY NAMES rt)
-# TODO find_library(M_LIBRARY NAMES m)
-
 find_package(ebur128)
 if(EBUR128_FOUND)
     set(STATUS_EBUR128 "OK")
