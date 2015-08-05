@@ -5,12 +5,11 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove.h"
+#include "groove/groove.h"
 #include "config.h"
+#include "ffmpeg.hpp"
+#include "util.hpp"
 
-#include <libavfilter/avfilter.h>
-#include <libavformat/avformat.h>
-#include <libavutil/channel_layout.h>
 #include <pthread.h>
 
 static int should_deinit_network = 0;
@@ -21,19 +20,19 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
     pthread_mutex_t *pmutex;
     switch (op) {
         case AV_LOCK_CREATE:
-            pmutex = av_mallocz(sizeof(pthread_mutex_t));
+            pmutex = allocate<pthread_mutex_t>(1);
             *mutex = pmutex;
             return pthread_mutex_init(pmutex, NULL);
         case AV_LOCK_OBTAIN:
-            pmutex = *mutex;
+            pmutex = (pthread_mutex_t *) *mutex;
             return pthread_mutex_lock(pmutex);
         case AV_LOCK_RELEASE:
-            pmutex = *mutex;
+            pmutex = (pthread_mutex_t *) *mutex;
             return pthread_mutex_unlock(pmutex);
         case AV_LOCK_DESTROY:
-            pmutex = *mutex;
+            pmutex = (pthread_mutex_t *) *mutex;
             int err = pthread_mutex_destroy(pmutex);
-            av_free(pmutex);
+            deallocate(pmutex);
             *mutex = NULL;
             return err;
     }
@@ -155,14 +154,14 @@ char *groove_create_rand_name(int *out_len, const char *file, int file_len) {
     char *basename;
     if (!slash) {
         *out_len = prefix_len + random_len + ext_len;
-        result = calloc(*out_len + 1, sizeof(char));
+        result = allocate<char>(*out_len + 1);
         if (!result)
             return NULL;
         basename = result;
     } else {
         int basename_start = slash - file + 1;
         *out_len = basename_start + prefix_len + random_len + ext_len;
-        result = calloc(*out_len + 1, sizeof(char));
+        result = allocate<char>(*out_len + 1);
         if (!result)
             return NULL;
         basename = result + basename_start;

@@ -1,13 +1,11 @@
-libgroove
-=========
+# libgroove
 
 This library provides decoding and encoding of audio on a playlist. It is
 intended to be used as a backend for music player applications. That said, it is
 also generic enough to be used as a backend for any streaming audio processing
 utility.
 
-Features
---------
+## Features
 
 * Uses [ffmpeg](http://ffmpeg.org/) for robust decoding and encoding. A list
   of supported file formats and codecs [is
@@ -50,8 +48,7 @@ Features
     matches the original, and then atomically renames the temporary file over
     the original file.
 
-Dependencies
-------------
+## Dependencies
 
 You will need these to compile libgroove.
 
@@ -64,8 +61,7 @@ You will need these to compile libgroove.
 * [libsoundio](https://github.com/andrewrk/libsoundio)
 * [libchromaprint-dev](http://acoustid.org/chromaprint)
 
-Installation
-------------
+## Installation
 
 Installing from a package is recommended, but instructions for installing from
 source are also provided at the end of this list.
@@ -136,8 +132,7 @@ make
 sudo make install
 ```
 
-Documentation
--------------
+## Documentation
 
 Check out the example programs in the example folder.
 
@@ -160,8 +155,24 @@ Read header files for the relevant APIs:
 
 Join #libgroove on irc.freenode.org and ask questions.
 
-Projects Using libgroove
-------------------------
+
+## Contributing
+
+libsoundio is programmed in a tiny subset of C++11:
+
+ * No STL.
+ * No `new` or `delete`.
+ * No `class`. All fields in structs are `public`.
+ * No constructors or destructors.
+ * No exceptions or run-time type information.
+ * No references.
+ * No linking against libstdc++.
+
+Do not be fooled - this is a *C library*, not a C++ library. We just take
+advantage of a select few C++11 compiler features such as templates, and then
+link against libc.
+
+## Projects Using libgroove
 
 Feel free to make a pull request adding yours to this list.
 

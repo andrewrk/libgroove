@@ -5,17 +5,12 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "encoder.h"
-#include "queue.h"
-#include "buffer.h"
+#include "groove/encoder.h"
+#include "queue.hpp"
+#include "buffer.hpp"
+#include "ffmpeg.hpp"
+#include "util.hpp"
 
-#include <libavutil/mem.h>
-#include <libavutil/log.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/dict.h>
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libavformat/avio.h>
 #include <string.h>
 #include <pthread.h>
 
@@ -151,7 +146,7 @@ static int init_avcontext(struct GrooveEncoder *encoder) {
 }
 
 static void *encode_thread(void *arg) {
-    struct GrooveEncoder *encoder = arg;
+    struct GrooveEncoder *encoder = (GrooveEncoder *)arg;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     struct GrooveBuffer *buffer;
@@ -227,7 +222,7 @@ static void *encode_thread(void *arg) {
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
-    struct GrooveEncoder *encoder = sink->userdata;
+    struct GrooveEncoder *encoder = (GrooveEncoder *)sink->userdata;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     pthread_mutex_lock(&e->encode_head_mutex);
@@ -244,7 +239,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GrooveEncoder *encoder = sink->userdata;
+    struct GrooveEncoder *encoder = (GrooveEncoder *)sink->userdata;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     pthread_mutex_lock(&e->encode_head_mutex);
@@ -259,35 +254,35 @@ static void sink_flush(struct GrooveSink *sink) {
 }
 
 static int audioq_purge(struct GrooveQueue* queue, void *obj) {
-    struct GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return 0;
-    struct GrooveEncoderPrivate *e = queue->context;
+    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
     return buffer->item == e->purge_item;
 }
 
 static void audioq_cleanup(struct GrooveQueue* queue, void *obj) {
-    struct GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return;
-    struct GrooveEncoderPrivate *e = queue->context;
+    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
     e->audioq_size -= buffer->size;
     groove_buffer_unref(buffer);
 }
 
 static void audioq_put(struct GrooveQueue *queue, void *obj) {
-    struct GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return;
-    struct GrooveEncoderPrivate *e = queue->context;
+    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
     e->audioq_size += buffer->size;
 }
 
 static void audioq_get(struct GrooveQueue *queue, void *obj) {
-    struct GrooveBuffer *buffer = obj;
+    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return;
-    struct GrooveEncoderPrivate *e = queue->context;
+    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
     struct GrooveEncoder *encoder = &e->externals;
     e->audioq_size -= buffer->size;
 
@@ -296,9 +291,9 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
 }
 
 static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
-    struct GrooveEncoderPrivate *e = opaque;
+    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)opaque;
 
-    struct GrooveBufferPrivate *b = av_mallocz(sizeof(struct GrooveBufferPrivate));
+    struct GrooveBufferPrivate *b = allocate<GrooveBufferPrivate>(1);
 
     if (!b) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer\n");
@@ -308,7 +303,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     struct GrooveBuffer *buffer = &b->externals;
 
     if (pthread_mutex_init(&b->mutex, NULL) != 0) {
-        av_free(b);
+        deallocate(b);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return -1;
     }
@@ -319,10 +314,10 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     buffer->format = e->encode_format;
 
     b->is_packet = 1;
-    b->data = av_malloc(buf_size);
+    b->data = allocate_nonzero<uint8_t>(buf_size);
     if (!b->data) {
-        av_free(buffer);
-        av_free(b);
+        deallocate(buffer);
+        deallocate(b);
         pthread_mutex_destroy(&b->mutex);
         av_log(NULL, AV_LOG_ERROR, "unable to create data buffer\n");
         return -1;
@@ -340,7 +335,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
 }
 
 struct GrooveEncoder *groove_encoder_create(void) {
-    struct GrooveEncoderPrivate *e = av_mallocz(sizeof(struct GrooveEncoderPrivate));
+    struct GrooveEncoderPrivate *e = allocate<GrooveEncoderPrivate>(1);
 
     if (!e) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate encoder\n");
@@ -349,7 +344,7 @@ struct GrooveEncoder *groove_encoder_create(void) {
     struct GrooveEncoder *encoder = &e->externals;
 
     const int buffer_size = 4 * 1024;
-    e->avio_buf = av_malloc(buffer_size);
+    e->avio_buf = allocate_nonzero<unsigned char>(buffer_size);
     if (!e->avio_buf) {
         groove_encoder_destroy(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate avio buffer\n");
@@ -429,15 +424,15 @@ void groove_encoder_destroy(struct GrooveEncoder *encoder) {
         pthread_cond_destroy(&e->drain_cond);
 
     if (e->avio)
-        av_free(e->avio);
+        deallocate(e->avio);
 
     if (e->avio_buf)
-        av_free(e->avio_buf);
+        deallocate(e->avio_buf);
 
     if (e->metadata)
         av_dict_free(&e->metadata);
 
-    av_free(e);
+    deallocate(e);
 }
 
 static int abs_diff(int a, int b) {

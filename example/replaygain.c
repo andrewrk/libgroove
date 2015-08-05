@@ -1,6 +1,6 @@
 /* replaygain scanner */
 
-#include <grooveloudness/loudness.h>
+#include <groove/loudness.h>
 #include <stdio.h>
 #include <stdlib.h>
 

@@ -55,11 +55,6 @@ struct GroovePlayer {
      */
     struct GrooveAudioFormat target_audio_format;
 
-    /* how big the sink buffer should be, in sample frames.
-     * groove_player_create defaults this to 8192
-     */
-    int sink_buffer_size;
-
     /* Volume adjustment to make to this player.
      * It is recommended that you leave this at 1.0 and instead adjust the
      * gain of the underlying playlist.

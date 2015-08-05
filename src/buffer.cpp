@@ -5,9 +5,9 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "buffer.h"
-
-#include <libavutil/mem.h>
+#include "buffer.hpp"
+#include "ffmpeg.hpp"
+#include "util.hpp"
 
 void groove_buffer_ref(struct GrooveBuffer *buffer) {
     struct GrooveBufferPrivate *b = (struct GrooveBufferPrivate *) buffer;
@@ -25,16 +25,16 @@ void groove_buffer_unref(struct GrooveBuffer *buffer) {
 
     pthread_mutex_lock(&b->mutex);
     b->ref_count -= 1;
-    int free = b->ref_count == 0;
+    int is_free = b->ref_count == 0;
     pthread_mutex_unlock(&b->mutex);
 
-    if (free) {
+    if (is_free) {
         pthread_mutex_destroy(&b->mutex);
         if (b->is_packet && b->data) {
-            av_free(b->data);
+            deallocate(b->data);
         } else if (b->frame) {
             av_frame_free(&b->frame);
         }
-        av_free(b);
+        deallocate(b);
     }
 }

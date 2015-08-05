@@ -1,6 +1,6 @@
 /* play several files in a row and then exit */
 
-#include <grooveplayer/player.h>
+#include <groove/player.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

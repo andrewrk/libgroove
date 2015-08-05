@@ -5,13 +5,12 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_BUFFER_H
-#define GROOVE_BUFFER_H
+#ifndef GROOVE_BUFFER_HPP
+#define GROOVE_BUFFER_HPP
 
-#include "groove.h"
+#include "groove/groove.h"
+#include "ffmpeg.hpp"
 
-#include <libavutil/frame.h>
-#include <libavcodec/avcodec.h>
 #include <pthread.h>
 
 struct GrooveBufferPrivate {

@@ -1,318 +1,216 @@
 cmake_minimum_required(VERSION 2.8)
+cmake_policy(SET CMP0042 NEW)
+cmake_policy(SET CMP0046 NEW)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING
-      "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
+        "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
 endif()
 
-project(groove C)
+project(libgroove C CXX)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
-set(LIBGROOVE_STATUS "yes")
-set(LIBGROOVE_VERSION_MAJOR 4)
-set(LIBGROOVE_VERSION_MINOR 3)
+set(LIBGROOVE_VERSION_MAJOR 5)
+set(LIBGROOVE_VERSION_MINOR 0)
 set(LIBGROOVE_VERSION_PATCH 0)
 set(LIBGROOVE_VERSION "${LIBGROOVE_VERSION_MAJOR}.${LIBGROOVE_VERSION_MINOR}.${LIBGROOVE_VERSION_PATCH}")
 message("Configuring libgroove version ${LIBGROOVE_VERSION}")
-file(GLOB_RECURSE LIBGROOVE_SOURCES ${CMAKE_SOURCE_DIR}/groove/*.c)
-file(GLOB_RECURSE LIBGROOVE_HEADERS ${CMAKE_SOURCE_DIR}/groove/*.h)
 
-if(DISABLE_PLAYER)
-  set(LIBGROOVE_PLAYER_STATUS "no")
-else(DISABLE_PLAYER)
-  set(LIBGROOVE_PLAYER_STATUS "yes")
-  message("Configuring libgrooveplayer version ${LIBGROOVE_VERSION}")
-  set(LIBGROOVE_PLAYER_SOURCES ${CMAKE_SOURCE_DIR}/grooveplayer/player.c)
-  file(GLOB_RECURSE LIBGROOVE_PLAYER_HEADERS ${CMAKE_SOURCE_DIR}/grooveplayer/*.h)
-endif(DISABLE_PLAYER)
+include_directories(
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_BINARY_DIR}
+)
 
-if(DISABLE_LOUDNESS)
-  set(LIBGROOVE_LOUDNESS_STATUS "no")
-else(DISABLE_LOUDNESS)
-  set(LIBGROOVE_LOUDNESS_STATUS "yes")
-  message("Configuring libgrooveloudness version ${LIBGROOVE_VERSION}")
-  file(GLOB_RECURSE LIBGROOVE_LOUDNESS_SOURCES ${CMAKE_SOURCE_DIR}/grooveloudness/*.c)
-  file(GLOB_RECURSE LIBGROOVE_LOUDNESS_HEADERS ${CMAKE_SOURCE_DIR}/grooveloudness/*.h)
-endif(DISABLE_LOUDNESS)
-
-if(DISABLE_FINGERPRINTER)
-  set(LIBGROOVE_FINGERPRINTER_STATUS "no")
-else(DISABLE_FINGERPRINTER)
-  set(LIBGROOVE_FINGERPRINTER_STATUS "yes")
-  message("Configuring libgroovefingerprinter version ${LIBGROOVE_VERSION}")
-  file(GLOB_RECURSE LIBGROOVE_FINGERPRINTER_SOURCES ${CMAKE_SOURCE_DIR}/groovefingerprinter/*.c)
-  file(GLOB_RECURSE LIBGROOVE_FINGERPRINTER_HEADERS ${CMAKE_SOURCE_DIR}/groovefingerprinter/*.h)
-endif(DISABLE_FINGERPRINTER)
-
-# check for ebur128
-if(DISABLE_LOUDNESS)
-  set(STATUS_EBUR128 "not needed")
-else(DISABLE_LOUDNESS)
-  find_package(ebur128)
-  if(EBUR128_FOUND)
-    set(STATUS_EBUR128 "OK")
-  else(EBUR128_FOUND)
-    set(STATUS_EBUR128 "not found")
-  endif(EBUR128_FOUND)
-endif(DISABLE_LOUDNESS)
-
-# check for chromaprint
-if(DISABLE_FINGERPRINTER)
-  set(STATUS_CHROMAPRINT "not needed")
-else(DISABLE_FINGERPRINTER)
-  find_package(Chromaprint)
-  if(CHROMAPRINT_FOUND)
-    set(STATUS_CHROMAPRINT "OK")
-  else(CHROMAPRINT_FOUND)
-    set(STATUS_CHROMAPRINT "not found")
-  endif(CHROMAPRINT_FOUND)
-endif(DISABLE_FINGERPRINTER)
-
-# check for libsoundio
-if(DISABLE_PLAYER)
-  set(STATUS_SOUNDIO "not needed")
-else(DISABLE_PLAYER)
-  find_package(soundio)
-  if(SOUNDIO_FOUND)
-    set(STATUS_SOUNDIO "OK")
-  else(SOUNDIO_FOUND)
-    set(STATUS_SOUNDIO "not found")
-  endif(SOUNDIO_FOUND)
-endif(DISABLE_PLAYER)
-
-# check for ffmpeg
-find_package(ffmpeg)
-if(AVCODEC_FOUND)
-  set(STATUS_LIBAVCODEC "OK")
-else()
-  set(STATUS_LIBAVCODEC "not found")
-endif()
-if(AVFILTER_FOUND)
-  set(STATUS_LIBAVFILTER "OK")
-else()
-  set(STATUS_LIBAVFILTER "not found")
-endif()
-if(AVFORMAT_FOUND)
-  set(STATUS_LIBAVFORMAT "OK")
-else()
-  set(STATUS_LIBAVFORMAT "not found")
-endif()
-if(AVUTIL_FOUND)
-  set(STATUS_LIBAVUTIL "OK")
-else()
-  set(STATUS_LIBAVUTIL "not found")
-endif()
-
-# check for pthreads
 find_package(Threads)
 if(Threads_FOUND)
-  set(STATUS_THREADS "OK")
+    set(STATUS_THREADS "OK")
 else(Threads_FOUND)
-  set(STATUS_THREADS "not found")
-  set(LIBGROOVE_STATUS "missing dependencies")
-  set(LIBGROOVE_PLAYER_STATUS "missing dependencies")
-  set(LIBGROOVE_LOUDNESS_STATUS "missing dependencies")
+    set(STATUS_THREADS "not found")
 endif(Threads_FOUND)
 
-configure_file (
-  "${PROJECT_SOURCE_DIR}/groove/config.h.in"
-  "${PROJECT_BINARY_DIR}/config.h"
-  )
+# TODO find_library(RT_LIBRARY NAMES rt)
+# TODO find_library(M_LIBRARY NAMES m)
 
-set(LIB_CFLAGS "-std=c99 -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT -D_POSIX_C_SOURCE=200809L")
-set(EXAMPLE_CFLAGS "-std=c99 -pedantic -Werror -Wall -g")
-set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}")
+find_package(ebur128)
+if(EBUR128_FOUND)
+    set(STATUS_EBUR128 "OK")
+    include_directories(${EBUR128_INCLUDE_DIR})
+else(EBUR128_FOUND)
+    set(STATUS_EBUR128 "not found")
+endif(EBUR128_FOUND)
 
-add_library(groove SHARED ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
-set_target_properties(groove PROPERTIES
-  SOVERSION ${LIBGROOVE_VERSION_MAJOR}
-  VERSION ${LIBGROOVE_VERSION}
-  COMPILE_FLAGS ${LIB_CFLAGS}
-  )
-if(LIBGROOVE_LDFLAGS)
-  set_target_properties(groove PROPERTIES LINK_FLAGS ${LIBGROOVE_LDFLAGS})
+find_package(Chromaprint)
+if(CHROMAPRINT_FOUND)
+    set(STATUS_CHROMAPRINT "OK")
+    include_directories(${CHROMAPRINT_INCLUDE_DIR})
+else(CHROMAPRINT_FOUND)
+    set(STATUS_CHROMAPRINT "not found")
+endif(CHROMAPRINT_FOUND)
+
+find_package(soundio)
+if(SOUNDIO_FOUND)
+    set(STATUS_SOUNDIO "OK")
+    include_directories(${SOUNDIO_INCLUDE_DIR})
+else(SOUNDIO_FOUND)
+    set(STATUS_SOUNDIO "not found")
+endif(SOUNDIO_FOUND)
+
+find_package(ffmpeg)
+if(AVCODEC_FOUND)
+    set(STATUS_LIBAVCODEC "OK")
+    include_directories(${AVCODEC_INCLUDE_DIRS})
+else()
+    set(STATUS_LIBAVCODEC "not found")
 endif()
-include_directories(${PROJECT_SOURCE_DIR})
-include_directories(${PROJECT_BINARY_DIR})
-target_link_libraries(groove LINK_PRIVATE
-  ${AVCODEC_LIBRARIES}
-  ${AVFILTER_LIBRARIES}
-  ${AVFORMAT_LIBRARIES})
-target_link_libraries(groove LINK_PUBLIC ${AVUTIL_LIBRARIES})
-if(UNIX)
-  target_link_libraries(groove LINK_PRIVATE m)
-endif(UNIX)
-include_directories(${FFMPEG_INCLUDE_DIRS})
-target_link_libraries(groove LINK_PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+if(AVFILTER_FOUND)
+    set(STATUS_LIBAVFILTER "OK")
+    include_directories(${AVFILTER_INCLUDE_DIRS})
+else()
+    set(STATUS_LIBAVFILTER "not found")
+endif()
+if(AVFORMAT_FOUND)
+    set(STATUS_LIBAVFORMAT "OK")
+    include_directories(${AVFORMAT_INCLUDE_DIRS})
+else()
+    set(STATUS_LIBAVFORMAT "not found")
+endif()
+if(AVUTIL_FOUND)
+    set(STATUS_LIBAVUTIL "OK")
+    include_directories(${AVUTIL_INCLUDE_DIRS})
+else()
+    set(STATUS_LIBAVUTIL "not found")
+endif()
+
+set(LIBGROOVE_SOURCES
+    "${CMAKE_SOURCE_DIR}/src/buffer.cpp"
+    "${CMAKE_SOURCE_DIR}/src/file.cpp"
+    "${CMAKE_SOURCE_DIR}/src/global.cpp"
+    "${CMAKE_SOURCE_DIR}/src/player.cpp"
+    "${CMAKE_SOURCE_DIR}/src/queue.cpp"
+    "${CMAKE_SOURCE_DIR}/src/encoder.cpp"
+    "${CMAKE_SOURCE_DIR}/src/fingerprinter.cpp"
+    "${CMAKE_SOURCE_DIR}/src/loudness.cpp"
+    "${CMAKE_SOURCE_DIR}/src/playlist.cpp"
+    "${CMAKE_SOURCE_DIR}/src/util.cpp"
+)
+
+set(CONFIGURE_OUT_FILE "${CMAKE_BINARY_DIR}/config.h")
+set(LIBGROOVE_HEADERS
+    "${CMAKE_SOURCE_DIR}/groove/encoder.h"
+    "${CMAKE_SOURCE_DIR}/groove/fingerprinter.h"
+    "${CMAKE_SOURCE_DIR}/groove/groove.h"
+    "${CMAKE_SOURCE_DIR}/groove/loudness.h"
+    "${CMAKE_SOURCE_DIR}/groove/player.h"
+    ${CONFIGURE_OUT_FILE}
+)
+
+# GTFO, -lstdc++ !!
+set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "")
+set(CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "")
+
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-variable -Wno-unused-but-set-variable")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-variable -Wno-unused-but-set-variable")
+
+set(LIB_CFLAGS "-std=c++11 -fno-exceptions -fno-rtti -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes")
+set(EXAMPLE_CFLAGS "-std=c99 -pedantic -Werror -Wall")
+
+configure_file (
+    "${CMAKE_SOURCE_DIR}/src/config.h.in"
+    ${CONFIGURE_OUT_FILE}
+)
+
+add_library(libgroove_shared SHARED ${LIBGROOVE_SOURCES})
+set_target_properties(libgroove_shared PROPERTIES
+    OUTPUT_NAME groove
+    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
+    VERSION ${LIBGROOVE_VERSION}
+    COMPILE_FLAGS ${LIB_CFLAGS}
+    LINKER_LANGUAGE C
+)
+
+target_link_libraries(libgroove_shared LINK_PUBLIC
+    ${CHROMAPRINT_LIBRARY}
+    ${AVCODEC_LIBRARIES}
+    ${AVFILTER_LIBRARIES}
+    ${AVFORMAT_LIBRARIES}
+    ${AVUTIL_LIBRARIES}
+    ${SOUNDIO_LIBRARY}
+    ${EBUR128_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    m
+)
+
+install(TARGETS libgroove_shared DESTINATION lib)
 
 
-add_library(groove_static STATIC ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
-set_target_properties(groove_static PROPERTIES
-  OUTPUT_NAME groove
-  COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
-install(TARGETS groove_static DESTINATION lib)
+add_library(libgroove_static STATIC ${LIBGROOVE_SOURCES})
+set_target_properties(libgroove_static PROPERTIES
+    OUTPUT_NAME groove
+    COMPILE_FLAGS ${LIB_CFLAGS}
+    LINKER_LANGUAGE C
+)
+install(TARGETS libgroove_static DESTINATION lib)
 
+install(FILES ${LIBGROOVE_HEADERS} DESTINATION "include/groove")
 
-install(FILES
-  "groove/groove.h"
-  "groove/queue.h"
-  "groove/encoder.h"
-  DESTINATION "include/groove")
-install(TARGETS groove DESTINATION lib)
-
+# Example Programs
 add_executable(metadata example/metadata.c)
 set_target_properties(metadata PROPERTIES
-  COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-include_directories(${EXAMPLE_INCLUDES})
-target_link_libraries(metadata groove)
-add_dependencies(metadata groove)
+    LINKER_LANGUAGE C
+    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+target_link_libraries(metadata libgroove_shared)
+add_dependencies(metadata libgroove_shared)
 
 add_executable(metadata_checksum example/metadata_checksum.c)
 set_target_properties(metadata_checksum PROPERTIES
-  COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-include_directories(${EXAMPLE_INCLUDES})
-target_link_libraries(metadata_checksum groove)
-add_dependencies(metadata_checksum groove)
+    LINKER_LANGUAGE C
+    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+target_link_libraries(metadata_checksum libgroove_shared)
+add_dependencies(metadata_checksum libgroove_shared)
 
 add_executable(transcode example/transcode.c)
 set_target_properties(transcode PROPERTIES
-  COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-include_directories(${EXAMPLE_INCLUDES})
-target_link_libraries(transcode groove)
-add_dependencies(transcode groove)
-
-
-if(NOT DISABLE_PLAYER)
-  add_library(grooveplayer SHARED
-    ${LIBGROOVE_PLAYER_SOURCES}
-    ${LIBGROOVE_PLAYER_HEADERS})
-  set_target_properties(grooveplayer PROPERTIES
-    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
-    VERSION ${LIBGROOVE_VERSION}
-    COMPILE_FLAGS ${LIB_CFLAGS}
-    )
-  target_link_libraries(grooveplayer LINK_PUBLIC groove)
-  if(UNIX AND NOT APPLE)
-    target_link_libraries(grooveplayer LINK_PRIVATE rt)
-  endif()
-  add_dependencies(grooveplayer groove)
-  target_link_libraries(grooveplayer LINK_PRIVATE ${SOUNDIO_LIBRARY})
-  include_directories(${SOUNDIO_INCLUDE_DIR})
-
-  install(FILES "grooveplayer/player.h" DESTINATION "include/grooveplayer")
-  install(TARGETS grooveplayer DESTINATION lib)
-
-  add_library(grooveplayer_static STATIC
-    ${LIBGROOVE_PLAYER_SOURCES}
-    ${LIBGROOVE_PLAYER_HEADERS})
-  set_target_properties(grooveplayer_static PROPERTIES
-    OUTPUT_NAME grooveplayer
-    COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
-  install(TARGETS grooveplayer_static DESTINATION lib)
-
-
-  add_executable(playlist example/playlist.c ${PROJECT_SOURCE_DIR}/grooveplayer/player.h)
-  set_target_properties(playlist PROPERTIES
+    LINKER_LANGUAGE C
     COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-  include_directories(${EXAMPLE_INCLUDES})
-  target_link_libraries(playlist groove grooveplayer)
-  add_dependencies(playlist groove grooveplayer)
-endif()
+target_link_libraries(transcode libgroove_shared)
+add_dependencies(transcode libgroove_shared)
 
-if(NOT DISABLE_LOUDNESS)
-  add_library(grooveloudness SHARED
-    ${LIBGROOVE_LOUDNESS_SOURCES}
-    ${LIBGROOVE_LOUDNESS_HEADERS})
-  set_target_properties(grooveloudness PROPERTIES
-    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
-    VERSION ${LIBGROOVE_VERSION}
-    COMPILE_FLAGS ${LIB_CFLAGS}
-    )
-  target_link_libraries(grooveloudness LINK_PUBLIC groove ${CMAKE_THREAD_LIBS_INIT})
-  add_dependencies(grooveloudness groove)
-  target_link_libraries(grooveloudness LINK_PRIVATE ${EBUR128_LIBRARY})
-  include_directories(${EBUR128_INCLUDE_DIR})
-
-  install(FILES "grooveloudness/loudness.h" DESTINATION "include/grooveloudness")
-  install(TARGETS grooveloudness DESTINATION lib)
-
-
-  add_library(grooveloudness_static STATIC
-    ${LIBGROOVE_LOUDNESS_SOURCES}
-    ${LIBGROOVE_LOUDNESS_HEADERS})
-  set_target_properties(grooveloudness_static PROPERTIES
-    OUTPUT_NAME grooveloudness
-    COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
-  install(TARGETS grooveloudness_static DESTINATION lib)
-
-
-  add_executable(replaygain example/replaygain.c)
-  set_target_properties(replaygain PROPERTIES
+add_executable(playlist example/playlist.c)
+set_target_properties(playlist PROPERTIES
+    LINKER_LANGUAGE C
     COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-  include_directories(${EXAMPLE_INCLUDES})
-  target_link_libraries(replaygain groove grooveloudness)
-  add_dependencies(replaygain groove grooveloudness)
-endif()
+target_link_libraries(playlist libgroove_shared)
+add_dependencies(playlist libgroove_shared)
 
-if(NOT DISABLE_FINGERPRINTER)
-  add_library(groovefingerprinter SHARED
-    ${LIBGROOVE_FINGERPRINTER_SOURCES}
-    ${LIBGROOVE_FINGERPRINTER_HEADERS})
-  set_target_properties(groovefingerprinter PROPERTIES
-    SOVERSION ${LIBGROOVE_VERSION_MAJOR}
-    VERSION ${LIBGROOVE_VERSION}
-    COMPILE_FLAGS ${LIB_CFLAGS}
-    )
-  target_link_libraries(groovefingerprinter LINK_PUBLIC groove ${CMAKE_THREAD_LIBS_INIT})
-  add_dependencies(groovefingerprinter groove)
-  target_link_libraries(groovefingerprinter LINK_PRIVATE ${CHROMAPRINT_LIBRARY})
-  include_directories(${CHROMAPRINT_INCLUDE_DIR})
-
-  install(FILES "groovefingerprinter/fingerprinter.h" DESTINATION "include/groovefingerprinter")
-  install(TARGETS groovefingerprinter DESTINATION lib)
-
-
-  add_library(groovefingerprinter_static STATIC
-    ${LIBGROOVE_FINGERPRINTER_SOURCES}
-    ${LIBGROOVE_FINGERPRINTER_HEADERS})
-  set_target_properties(groovefingerprinter_static PROPERTIES
-    OUTPUT_NAME groovefingerprinter
-    COMPILE_FLAGS "${LIB_CFLAGS} -fPIC")
-  install(TARGETS groovefingerprinter_static DESTINATION lib)
-
-
-  add_executable(fingerprint example/fingerprint.c)
-  set_target_properties(fingerprint PROPERTIES
+add_executable(replaygain example/replaygain.c)
+set_target_properties(replaygain PROPERTIES
+    LINKER_LANGUAGE C
     COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-  include_directories(${EXAMPLE_INCLUDES})
-  target_link_libraries(fingerprint groove groovefingerprinter)
-  add_dependencies(fingerprint groove groovefingerprinter)
-endif()
+target_link_libraries(replaygain libgroove_shared)
+add_dependencies(replaygain libgroove_shared)
+
+add_executable(fingerprint example/fingerprint.c)
+set_target_properties(fingerprint PROPERTIES
+    LINKER_LANGUAGE C
+    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+target_link_libraries(fingerprint libgroove_shared)
+add_dependencies(fingerprint libgroove_shared)
 
 message("\n"
-"Installation Summary\n"
-"--------------------\n"
-"* Install Directory            : ${CMAKE_INSTALL_PREFIX}\n"
-"* Build libgroove              : ${LIBGROOVE_STATUS}\n"
-"* Build libgrooveplayer        : ${LIBGROOVE_PLAYER_STATUS}\n"
-"* Build libgrooveloudness      : ${LIBGROOVE_LOUDNESS_STATUS}\n"
-"* Build libgroovefingerprinter : ${LIBGROOVE_FINGERPRINTER_STATUS}\n"
+    "Installation Summary\n"
+    "--------------------\n"
+    "* Install Directory            : ${CMAKE_INSTALL_PREFIX}\n"
 )
 
 message(
-"System Dependencies\n"
-"-------------------\n"
-"* threads                      : ${STATUS_THREADS}\n"
-"* libsoundio                   : ${STATUS_SOUNDIO}\n"
-"* ebur128                      : ${STATUS_EBUR128}\n"
-"* chromaprint                  : ${STATUS_CHROMAPRINT}\n"
-"* libavformat                  : ${STATUS_LIBAVFORMAT}\n"
-"* libavcodec                   : ${STATUS_LIBAVCODEC}\n"
-"* libavfilter                  : ${STATUS_LIBAVFILTER}\n"
-"* libavutil                    : ${STATUS_LIBAVUTIL}"
-)
-
-message("\n"
-"If everything is looks good, proceed with\n"
-"make\n"
+    "System Dependencies\n"
+    "-------------------\n"
+    "* threads                      : ${STATUS_THREADS}\n"
+    "* libsoundio                   : ${STATUS_SOUNDIO}\n"
+    "* ebur128                      : ${STATUS_EBUR128}\n"
+    "* chromaprint                  : ${STATUS_CHROMAPRINT}\n"
+    "* libavformat                  : ${STATUS_LIBAVFORMAT}\n"
+    "* libavcodec                   : ${STATUS_LIBAVCODEC}\n"
+    "* libavfilter                  : ${STATUS_LIBAVFILTER}\n"
+    "* libavutil                    : ${STATUS_LIBAVUTIL}\n"
 )

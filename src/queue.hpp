@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_QUEUE_H
-#define GROOVE_QUEUE_H
+#ifndef GROOVE_QUEUE_HPP
+#define GROOVE_QUEUE_HPP
 
 struct GrooveQueue {
     void *context;

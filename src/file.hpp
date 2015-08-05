@@ -5,12 +5,12 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_FILE_H
-#define GROOVE_FILE_H
+#ifndef GROOVE_FILE_HPP
+#define GROOVE_FILE_HPP
 
-#include "groove.h"
+#include "groove/groove.h"
+#include "ffmpeg.hpp"
 
-#include <libavformat/avformat.h>
 #include <pthread.h>
 
 struct GrooveFilePrivate {

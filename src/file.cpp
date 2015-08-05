@@ -5,18 +5,16 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "file.h"
-
-#include <libavutil/mem.h>
-#include <libavutil/channel_layout.h>
+#include "file.hpp"
+#include "util.hpp"
 
 static int decode_interrupt_cb(void *ctx) {
-    struct GrooveFilePrivate *f = ctx;
+    struct GrooveFilePrivate *f = (GrooveFilePrivate *)ctx;
     return f ? f->abort_request : 0;
 }
 
 struct GrooveFile *groove_file_open(const char *filename) {
-    struct GrooveFilePrivate *f = av_mallocz(sizeof(struct GrooveFilePrivate));
+    struct GrooveFilePrivate *f = allocate<GrooveFilePrivate>(1);
     if (!f) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate file context\n");
         return NULL;
@@ -27,7 +25,7 @@ struct GrooveFile *groove_file_open(const char *filename) {
     f->seek_pos = -1;
 
     if (pthread_mutex_init(&f->seek_mutex, NULL) != 0) {
-        av_free(f);
+        deallocate(f);
         av_log(NULL, AV_LOG_ERROR, "unable to create seek mutex\n");
         return NULL;
     }
@@ -57,7 +55,14 @@ struct GrooveFile *groove_file_open(const char *filename) {
 
     // set all streams to discard. in a few lines here we will find the audio
     // stream and cancel discarding it
-    for (int i = 0; i < f->ic->nb_streams; i++)
+    if (f->ic->nb_streams > INT_MAX) {
+        groove_file_close(file);
+        av_log(NULL, AV_LOG_ERROR, "too many streams\n");
+        return NULL;
+    }
+    int stream_count = (int)f->ic->nb_streams;
+
+    for (int i = 0; i < stream_count; i++)
         f->ic->streams[i]->discard = AVDISCARD_ALL;
 
     f->audio_stream_index = av_find_best_stream(f->ic, AVMEDIA_TYPE_AUDIO, -1, -1, &f->decoder, 0);
@@ -127,7 +132,7 @@ void groove_file_close(struct GrooveFile *file) {
 
     pthread_mutex_destroy(&f->seek_mutex);
 
-    av_free(f);
+    deallocate(f);
 }
 
 
@@ -226,8 +231,15 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
         f->tempfile_exists = 1;
     }
 
+    if (f->ic->nb_streams > INT_MAX) {
+        cleanup_save(file);
+        av_log(NULL, AV_LOG_ERROR, "too many streams\n");
+        return -1;
+    }
+    int stream_count = (int)f->ic->nb_streams;
+
     // add all the streams
-    for (int i = 0; i < f->ic->nb_streams; i++) {
+    for (int i = 0; i < stream_count; i++) {
         AVStream *in_stream = f->ic->streams[i];
         AVStream *out_stream = avformat_new_stream(f->oc, NULL);
         if (!out_stream) {
@@ -262,7 +274,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
             av_log(NULL, AV_LOG_ERROR, "codec extra size too big\n");
             return AVERROR(EINVAL);
         }
-        ocodec->extradata      = av_mallocz(extra_size);
+        ocodec->extradata      = allocate<uint8_t>(extra_size);
         if (!ocodec->extradata) {
             cleanup_save(file);
             av_log(NULL, AV_LOG_ERROR, "could not allocate codec extradata: out of memory\n");

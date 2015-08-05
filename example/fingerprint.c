@@ -1,6 +1,6 @@
 /* compute the acoustid of a list of songs */
 
-#include <groovefingerprinter/fingerprinter.h>
+#include <groove/fingerprinter.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

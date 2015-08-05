@@ -442,6 +442,14 @@ int groove_sink_buffer_peek(struct GrooveSink *sink, int block);
  */
 int groove_sink_set_gain(struct GrooveSink *sink, double gain);
 
+/* Returns the number of bytes contained in this sink.
+ */
+int groove_sink_get_fill_level(struct GrooveSink *sink);
+
+/* Returns 1 if the sink contains the end of playlist sentinel, 0 otherwise.
+ */
+int groove_sink_contains_end_of_playlist(struct GrooveSink *sink);
+
 
 #ifdef __cplusplus
 }
