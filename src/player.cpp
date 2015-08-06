@@ -353,10 +353,11 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     int frames_to_write = min(frames_available, frame_count_max);
     int frames_left = frames_to_write;
     assert(frames_left >= 0);
+    bool read_anyway = queue_contains_end && (frame_count_max > frames_available);
 
     pthread_mutex_lock(&p->play_head_mutex);
 
-    while (frames_left || queue_contains_end) {
+    while (frames_left || read_anyway) {
         int write_frame_count = frames_left;
         if (write_frame_count) {
             if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frame_count)))
@@ -365,7 +366,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
 
         int write_frames_left = write_frame_count;
 
-        while (write_frames_left || queue_contains_end) {
+        while (write_frames_left || read_anyway) {
             bool waiting_for_silence = (p->silence_frames_left > 0);
             if (!p->request_device_reopen && !waiting_for_silence &&
                 !paused && p->audio_buf_index >= p->audio_buf_size)
@@ -399,10 +400,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                         waiting_for_silence = true;
                     }
                 } else {
-                    // fill the rest with silence
-                    // TODO pthread_mutex_unlock(&p->play_head_mutex);
-                    //emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
-                    groove_panic("unexpected buffer underrun");
+                    groove_panic("unexpected buffer error");
                 }
             }
             if (p->request_device_reopen || waiting_for_silence || paused || !p->audio_buf) {
@@ -496,19 +494,17 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_pause(struct GrooveSink *sink) {
-    //struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
-    //struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    // TODO only call from audio_callback
-    //soundio_outstream_pause(p->outstream, true);
+    soundio_outstream_pause(p->outstream, true);
 }
 
 static void sink_play(struct GrooveSink *sink) {
-    //struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
-    //struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    // TODO only call from audio_callback
-    //soundio_outstream_pause(p->outstream, false);
+    soundio_outstream_pause(p->outstream, false);
 }
 
 static void sink_flush(struct GrooveSink *sink) {
