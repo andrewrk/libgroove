@@ -424,6 +424,8 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     write_frames_left = frames_left;
                     if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frames_left)))
                         groove_panic("%s", soundio_strerror(err));
+                    if (!write_frames_left)
+                        break;
                 }
 
                 if (waiting_for_silence) {
