@@ -350,7 +350,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
         }
     }
 
-    int frames_to_write = min(frames_available, frame_count_max);
+    int frames_to_write = clamp(frame_count_min, frames_available, frame_count_max);
     int frames_left = frames_to_write;
     assert(frames_left >= 0);
     bool read_anyway = queue_contains_end && (frame_count_max > frames_available);
@@ -416,16 +416,19 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                         }
                     }
                     silence_frames_written += write_frames_left;
-                    if ((err = soundio_outstream_end_write(outstream)))
-                        groove_panic("%s", soundio_strerror(err));
+                    if (write_frame_count) {
+                        if ((err = soundio_outstream_end_write(outstream)))
+                            groove_panic("%s", soundio_strerror(err));
+                    }
                     frames_left -= write_frames_left;
                     if (frames_left <= 0)
                         break;
                     write_frames_left = frames_left;
+                    if (write_frames_left <= 0)
+                        break;
                     if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frames_left)))
                         groove_panic("%s", soundio_strerror(err));
-                    if (!write_frames_left)
-                        break;
+                    assert(write_frames_left);
                 }
 
                 if (waiting_for_silence) {
@@ -463,15 +466,13 @@ static void audio_callback(struct SoundIoOutStream *outstream,
             }
             p->play_pos += frame_count / (double) outstream->sample_rate;
             write_frames_left -= frame_count;
+            frames_left -= frame_count;
         }
 
         if (write_frame_count) {
             if ((err = soundio_outstream_end_write(outstream)))
                 groove_panic("%s", soundio_strerror(err));
         }
-
-        frames_left -= write_frame_count;
-        write_frame_count = frames_left;
     }
 
     pthread_mutex_unlock(&p->play_head_mutex);
