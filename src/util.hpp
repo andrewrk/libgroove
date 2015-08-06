@@ -14,6 +14,8 @@
 #include <string.h>
 #include <assert.h>
 
+#define BREAKPOINT __asm("int $0x03")
+
 template<typename T>
 __attribute__((malloc)) static inline T *allocate_nonzero(size_t count) {
     if (count >= INT_MAX / sizeof(T))

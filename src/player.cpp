@@ -58,24 +58,11 @@ struct GroovePlayerContextPrivate {
     struct SoundIo *soundio;
 };
 
-// TODO refactor this
-__attribute__ ((cold))
-__attribute__ ((noreturn))
-__attribute__ ((format (printf, 1, 2)))
-static void panic(const char *format, ...) {
-    va_list ap;
-    va_start(ap, format);
-    vfprintf(stderr, format, ap);
-    fprintf(stderr, "\n");
-    va_end(ap);
-    abort();
-}
-
+// TODO get rid of panics
 static int open_audio_device(struct GroovePlayer *player,
         const struct GrooveAudioFormat *target_format, struct GrooveAudioFormat *actual_format,
         bool use_exact_audio_format);
 
-const int prioritized_formats_len = 5; // TODO array_length() this
 static enum GrooveSampleFormat prioritized_formats[] = {
     GROOVE_SAMPLE_FMT_FLT,
     GROOVE_SAMPLE_FMT_S32,
@@ -84,7 +71,6 @@ static enum GrooveSampleFormat prioritized_formats[] = {
     GROOVE_SAMPLE_FMT_U8,
 };
 
-const int prioritized_layouts_len = 26; // TODO array_length() this
 static uint64_t prioritized_layouts[] = {
     GROOVE_CH_LAYOUT_OCTAGONAL,
     GROOVE_CH_LAYOUT_7POINT1_WIDE_BACK,
@@ -158,7 +144,7 @@ static int find_best_format(struct SoundIoDevice *device, bool exact,
     if (exact)
         return -1;
 
-    for (int i = 0; i < prioritized_formats_len; i += 1) {
+    for (int i = 0; i < array_length(prioritized_formats); i += 1) {
         enum GrooveSampleFormat try_fmt = prioritized_formats[i];
         enum SoundIoFormat fmt = to_soundio_fmt(try_fmt);
 
@@ -201,7 +187,7 @@ static int find_best_sample_rate(struct SoundIoDevice *device, bool exact,
 
 static void to_soundio_layout(uint64_t in_layout, struct SoundIoChannelLayout *out_layout) {
     if (in_layout != GROOVE_CH_LAYOUT_STEREO)
-        panic("TODO libgroove's channel layout handling needs to be revamped using libsoundio as a guide");
+        groove_panic("TODO libgroove's channel layout handling needs to be revamped using libsoundio as a guide");
     out_layout->name = "Stereo";
     out_layout->channel_count = 2;
     out_layout->channels[0] = SoundIoChannelIdFrontLeft;
@@ -223,7 +209,7 @@ static int find_best_channel_layout(struct SoundIoDevice *device, bool exact, ui
     if (exact)
         return -1;
 
-    for (int i = 0; i < prioritized_layouts_len; i += 1) {
+    for (int i = 0; i < array_length(prioritized_layouts); i += 1) {
         uint64_t try_layout = prioritized_layouts[i];
         to_soundio_layout(try_layout, &layout);
         if (soundio_device_supports_layout(device, &layout)) {
@@ -307,7 +293,7 @@ static bool is_planar(enum GrooveSampleFormat fmt) {
 
 static void error_callback(struct SoundIoOutStream *outstream, int err) {
     // TODO destroy stream and emit error
-    panic("stream error: %s", soundio_strerror(err));
+    groove_panic("stream error: %s", soundio_strerror(err));
 }
 
 static void underflow_callback(struct SoundIoOutStream *outstream) {
@@ -315,39 +301,71 @@ static void underflow_callback(struct SoundIoOutStream *outstream) {
     emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
 }
 
-static inline int min_int(int a, int b) {
-    return (a < b) ? a : b;
-}
-
-// TODO ability to get the number of bytes/frames in an audio queue
-// and whether or not the end of playlist sentinel is in the audio queue
-// in the audio_callback when frame_count_min > available bytes/frames in
-// audio queue just put silence in the buffer
 static void audio_callback(struct SoundIoOutStream *outstream,
         int frame_count_min, int frame_count_max)
 {
+    const struct SoundIoChannelLayout *layout = &outstream->layout;
     struct GroovePlayerPrivate *p = (GroovePlayerPrivate *)outstream->userdata;
     struct GrooveSink *sink = p->sink;
     struct GroovePlaylist *playlist = sink->playlist;
     struct SoundIoChannelArea *areas;
 
-    int frames_left = frame_count_max;
     int paused = !groove_playlist_playing(playlist);
     int err;
 
-    const struct SoundIoChannelLayout *layout = &outstream->layout;
+    int audio_buf_frames_left = p->audio_buf_size - p->audio_buf_index;
+    assert(audio_buf_frames_left >= 0);
+    int frames_in_queue = groove_sink_get_fill_level(sink) / outstream->bytes_per_frame;
+    assert(frames_in_queue >= 0);
+    int frames_available = frames_in_queue + audio_buf_frames_left;
+    bool queue_contains_end = groove_sink_contains_end_of_playlist(sink);
+
+    if (!queue_contains_end && frames_available < frame_count_min) {
+        // We don't have enough frames to meet the minimum requirements.
+        // Fill entire buffer with silence.
+        int frames_left = frame_count_min;
+        for (;;) {
+            int frame_count = frames_left;
+
+            if ((err = soundio_outstream_begin_write(outstream, &areas, &frame_count)))
+                groove_panic("%s", soundio_strerror(err));
+
+            if (!frame_count)
+                return;
+
+            for (int frame = 0; frame < frame_count; frame += 1) {
+                for (int channel = 0; channel < layout->channel_count; channel += 1) {
+                    memset(areas[channel].ptr, 0, outstream->bytes_per_sample);
+                    areas[channel].ptr += areas[channel].step;
+                }
+            }
+
+            if ((err = soundio_outstream_end_write(outstream)))
+                groove_panic("%s", soundio_strerror(err));
+
+            frames_left -= frame_count;
+
+            if (frames_left <= 0)
+                return;
+        }
+    }
+
+    int frames_to_write = min(frames_available, frame_count_max);
+    int frames_left = frames_to_write;
+    assert(frames_left >= 0);
 
     pthread_mutex_lock(&p->play_head_mutex);
 
-    for (;;) {
+    while (frames_left || queue_contains_end) {
         int write_frame_count = frames_left;
-        if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frame_count)))
-            panic("%s", soundio_strerror(err));
+        if (write_frame_count) {
+            if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frame_count)))
+                groove_panic("%s", soundio_strerror(err));
+        }
 
-        if (!write_frame_count)
-            break;
+        int write_frames_left = write_frame_count;
 
-        for (;;) {
+        while (write_frames_left || queue_contains_end) {
             bool waiting_for_silence = (p->silence_frames_left > 0);
             if (!p->request_device_reopen && !waiting_for_silence &&
                 !paused && p->audio_buf_index >= p->audio_buf_size)
@@ -356,7 +374,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                 p->audio_buf_index = 0;
                 p->audio_buf_size = 0;
 
-                int ret = groove_sink_buffer_get(p->sink, &p->audio_buf, 0);
+                int ret = groove_sink_buffer_get(sink, &p->audio_buf, 0);
                 if (ret == GROOVE_BUFFER_END) {
                     p->play_head = NULL;
                     p->play_pos = -1.0;
@@ -382,25 +400,9 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     }
                 } else {
                     // fill the rest with silence
-                    pthread_mutex_unlock(&p->play_head_mutex);
-                    emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
-                    while (frames_left) {
-                        for (int frame = 0; frame < write_frame_count; frame += 1) {
-                            for (int channel = 0; channel < layout->channel_count; channel += 1) {
-                                memset(areas[channel].ptr, 0, outstream->bytes_per_sample);
-                                areas[channel].ptr += areas[channel].step;
-                            }
-                        }
-                        if ((err = soundio_outstream_end_write(outstream)))
-                            panic("%s", soundio_strerror(err));
-                        frames_left -= write_frame_count;
-                        if (frames_left <= 0)
-                            break;
-                        write_frame_count = frames_left;
-                        if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frame_count)))
-                            panic("%s", soundio_strerror(err));
-                    }
-                    return;
+                    // TODO pthread_mutex_unlock(&p->play_head_mutex);
+                    //emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
+                    groove_panic("unexpected buffer underrun");
                 }
             }
             if (p->request_device_reopen || waiting_for_silence || paused || !p->audio_buf) {
@@ -409,21 +411,21 @@ static void audio_callback(struct SoundIoOutStream *outstream,
 
                 int silence_frames_written = 0;
                 while (frames_left) {
-                    for (int frame = 0; frame < write_frame_count; frame += 1) {
+                    for (int frame = 0; frame < write_frames_left; frame += 1) {
                         for (int channel = 0; channel < layout->channel_count; channel += 1) {
                             memset(areas[channel].ptr, 0, outstream->bytes_per_sample);
                             areas[channel].ptr += areas[channel].step;
                         }
                     }
-                    silence_frames_written += write_frame_count;
+                    silence_frames_written += write_frames_left;
                     if ((err = soundio_outstream_end_write(outstream)))
-                        panic("%s", soundio_strerror(err));
-                    frames_left -= write_frame_count;
+                        groove_panic("%s", soundio_strerror(err));
+                    frames_left -= write_frames_left;
                     if (frames_left <= 0)
                         break;
-                    write_frame_count = frames_left;
-                    if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frame_count)))
-                        panic("%s", soundio_strerror(err));
+                    write_frames_left = frames_left;
+                    if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frames_left)))
+                        groove_panic("%s", soundio_strerror(err));
                 }
 
                 if (waiting_for_silence) {
@@ -437,7 +439,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                 return;
             }
             size_t read_frame_count = p->audio_buf_size - p->audio_buf_index;
-            int frame_count = min_int(read_frame_count, write_frame_count);
+            int frame_count = min((int)read_frame_count, write_frames_left);
 
             if (is_planar(p->audio_buf->format.sample_fmt)) {
                 size_t end_frame = p->audio_buf_index + frame_count;
@@ -460,13 +462,13 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                 }
             }
             p->play_pos += frame_count / (double) outstream->sample_rate;
-            write_frame_count -= frame_count;
-            if (write_frame_count <= 0)
-                break;
+            write_frames_left -= frame_count;
         }
 
-        if ((err = soundio_outstream_end_write(outstream)))
-            panic("%s", soundio_strerror(err));
+        if (write_frame_count) {
+            if ((err = soundio_outstream_end_write(outstream)))
+                groove_panic("%s", soundio_strerror(err));
+        }
 
         frames_left -= write_frame_count;
         write_frame_count = frames_left;
@@ -494,17 +496,19 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_pause(struct GrooveSink *sink) {
-    struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
-    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    //struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
+    //struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    soundio_outstream_pause(p->outstream, true);
+    // TODO only call from audio_callback
+    //soundio_outstream_pause(p->outstream, true);
 }
 
 static void sink_play(struct GrooveSink *sink) {
-    struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
-    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    //struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
+    //struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    soundio_outstream_pause(p->outstream, false);
+    // TODO only call from audio_callback
+    //soundio_outstream_pause(p->outstream, false);
 }
 
 static void sink_flush(struct GrooveSink *sink) {
@@ -660,7 +664,8 @@ static int open_audio_device(struct GroovePlayer *player,
         av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", soundio_strerror(err));
         return -1;
     }
-    p->sink->buffer_size = p->outstream->buffer_duration * 2 * p->outstream->sample_rate;
+    double sink_buffer_seconds = max(4.0, p->outstream->buffer_duration);
+    p->sink->buffer_size = sink_buffer_seconds * p->outstream->sample_rate;
 
 
     return 0;

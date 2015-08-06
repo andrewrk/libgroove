@@ -14,6 +14,14 @@
 
 static int should_deinit_network = 0;
 
+const char *groove_strerror(int error) {
+    switch ((enum GrooveError)error) {
+        case GrooveErrorNone: return "(no error)";
+        case GrooveErrorNoMem: return "out of memory";
+    }
+    return "(invalid error)";
+}
+
 static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
     if (mutex == NULL)
         return -1;

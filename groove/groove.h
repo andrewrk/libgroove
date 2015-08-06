@@ -26,6 +26,13 @@ int groove_init(void);
  */
 void groove_finish(void);
 
+enum GrooveError {
+    GrooveErrorNone,
+    GrooveErrorNoMem
+};
+
+const char *groove_strerror(int error);
+
 /* enable/disable logging of errors
  */
 #define GROOVE_LOG_QUIET    -8

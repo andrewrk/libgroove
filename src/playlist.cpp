@@ -10,14 +10,16 @@
 #include "buffer.hpp"
 #include "ffmpeg.hpp"
 #include "util.hpp"
+#include "atomics.hpp"
 
 #include <pthread.h>
 
 struct GrooveSinkPrivate {
     struct GrooveSink externals;
     struct GrooveQueue *audioq;
-    int audioq_size; // in bytes
+    atomic_int audioq_size; // in bytes
     int min_audioq_size; // in bytes
+    atomic_bool audioq_contains_end;
 };
 
 struct SinkStack {
@@ -599,17 +601,21 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
 
 static void audioq_put(struct GrooveQueue *queue, void *obj) {
     struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
-    if (buffer == end_of_q_sentinel)
-        return;
     struct GrooveSinkPrivate *s = (GrooveSinkPrivate *)queue->context;
-    s->audioq_size += buffer->size;
+    if (buffer == end_of_q_sentinel) {
+        s->audioq_contains_end = true;
+    } else {
+        s->audioq_size += buffer->size;
+    }
 }
 
 static void audioq_get(struct GrooveQueue *queue, void *obj) {
     struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
-    if (buffer == end_of_q_sentinel)
-        return;
     struct GrooveSinkPrivate *s = (GrooveSinkPrivate *)queue->context;
+    if (buffer == end_of_q_sentinel) {
+        s->audioq_contains_end = false;
+        return;
+    }
     GrooveSink *sink = &s->externals;
     s->audioq_size -= buffer->size;
 
@@ -624,10 +630,12 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
 
 static void audioq_cleanup(struct GrooveQueue *queue, void *obj) {
     struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
-    if (buffer == end_of_q_sentinel)
-        return;
     struct GrooveSink *sink = (GrooveSink *)queue->context;
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+    if (buffer == end_of_q_sentinel) {
+        s->audioq_contains_end = false;
+        return;
+    }
     s->audioq_size -= buffer->size;
     groove_buffer_unref(buffer);
 }
@@ -1287,6 +1295,9 @@ struct GrooveSink * groove_sink_create(void) {
         return NULL;
     }
 
+    s->audioq_size.store(0);
+    s->audioq_contains_end.store(false);
+
     struct GrooveSink *sink = &s->externals;
 
     sink->buffer_size = 8192;
@@ -1347,11 +1358,13 @@ int groove_sink_set_gain(struct GrooveSink *sink, double gain) {
 }
 
 int groove_sink_get_fill_level(struct GrooveSink *sink) {
-    groove_panic("TODO sink get fill level");
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+    return s->audioq_size.load();
 }
 
 int groove_sink_contains_end_of_playlist(struct GrooveSink *sink) {
-    groove_panic("TODO sink contains end of playlist");
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+    return s->audioq_contains_end.load();
 }
 
 void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, int mode) {
