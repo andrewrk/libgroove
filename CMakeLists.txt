@@ -127,7 +127,7 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-variable")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Werror -pedantic")
 
 set(LIB_CFLAGS "-std=c99 -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT -D_POSIX_C_SOURCE=200809L")
-set(EXAMPLE_CFLAGS "-std=c99 -pedantic -Werror -Wall")
+set(EXAMPLE_CFLAGS "-std=c99 -Wall")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}")
 
 add_library(groove SHARED ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
