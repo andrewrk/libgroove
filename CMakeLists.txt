@@ -123,8 +123,11 @@ configure_file (
   "${PROJECT_BINARY_DIR}/config.h"
   )
 
-set(LIB_CFLAGS "-std=c99 -pedantic -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT -D_POSIX_C_SOURCE=200809L")
-set(EXAMPLE_CFLAGS "-std=c99 -pedantic -Werror -Wall -g")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-variable")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Werror -pedantic")
+
+set(LIB_CFLAGS "-std=c99 -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT -D_POSIX_C_SOURCE=200809L")
+set(EXAMPLE_CFLAGS "-std=c99 -pedantic -Werror -Wall")
 set(EXAMPLE_INCLUDES "${PROJECT_SOURCE_DIR}")
 
 add_library(groove SHARED ${LIBGROOVE_SOURCES} ${LIBGROOVE_HEADERS})
@@ -300,6 +303,7 @@ message("\n"
 "Installation Summary\n"
 "--------------------\n"
 "* Install Directory            : ${CMAKE_INSTALL_PREFIX}\n"
+"* Build Type                   : ${CMAKE_BUILD_TYPE}\n"
 "* Build libgroove              : ${LIBGROOVE_STATUS}\n"
 "* Build libgrooveplayer        : ${LIBGROOVE_PLAYER_STATUS}\n"
 "* Build libgrooveloudness      : ${LIBGROOVE_LOUDNESS_STATUS}\n"
