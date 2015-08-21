@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 2.8.5)
 
 if(CMAKE_VERSION VERSION_LESS 3.0.0)
-	set(CMAKE_INSTALL_LIBDIR "lib" CACHE PATH "library install dir")
-	set(CMAKE_INSTALL_INCLUDEDIR "include" CACHE PATH "header base install dir")
+    set(CMAKE_INSTALL_LIBDIR "lib" CACHE PATH "library install dir")
+    set(CMAKE_INSTALL_INCLUDEDIR "include" CACHE PATH "header base install dir")
 else(CMAKE_VERSION VERSION_LESS 3.0.0)
-	include(GNUInstallDirs)
+    include(GNUInstallDirs)
 endif(CMAKE_VERSION VERSION_LESS 3.0.0)
 
 if(NOT CMAKE_BUILD_TYPE)
