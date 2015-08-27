@@ -9,6 +9,7 @@
 #define GROOVE_UTIL_HPP
 
 #include "ffmpeg.hpp"
+#include "groove_private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -66,4 +67,14 @@ template<typename T>
 static inline T clamp(T min_value, T value, T max_value) {
     return max(min(value, max_value), min_value);
 }
+
+enum SoundIoChannelId from_ffmpeg_channel_id(uint64_t ffmpeg_channel_id);
+void from_ffmpeg_layout(uint64_t in_layout, SoundIoChannelLayout *out_layout);
+enum SoundIoFormat from_ffmpeg_format(AVSampleFormat fmt);
+bool from_ffmpeg_format_planar(AVSampleFormat fmt);
+
+uint64_t to_ffmpeg_channel_id(SoundIoChannelId channel_id);
+uint64_t to_ffmpeg_channel_layout(const SoundIoChannelLayout *channel_layout);
+AVSampleFormat to_ffmpeg_fmt(const GrooveAudioFormat *fmt);
+
 #endif

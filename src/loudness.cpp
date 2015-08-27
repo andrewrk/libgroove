@@ -5,6 +5,7 @@
  * See http://opensource.org/licenses/MIT
  */
 
+#include "groove_private.h"
 #include "groove/loudness.h"
 #include "ffmpeg.hpp"
 #include "queue.hpp"
@@ -299,8 +300,8 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
         return NULL;
     }
     d->sink->audio_format.sample_rate = 44100;
-    d->sink->audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
-    d->sink->audio_format.sample_fmt = GROOVE_SAMPLE_FMT_DBL;
+    d->sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
+    d->sink->audio_format.format = SoundIoFormatFloat64NE;
     d->sink->userdata = detector;
     d->sink->purge = sink_purge;
     d->sink->flush = sink_flush;

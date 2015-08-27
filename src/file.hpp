@@ -8,7 +8,7 @@
 #ifndef GROOVE_FILE_HPP
 #define GROOVE_FILE_HPP
 
-#include "groove/groove.h"
+#include "groove_private.h"
 #include "ffmpeg.hpp"
 
 #include <pthread.h>

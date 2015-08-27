@@ -5,7 +5,7 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove/groove.h"
+#include "groove_private.h"
 #include "config.h"
 #include "ffmpeg.hpp"
 #include "util.hpp"
@@ -18,6 +18,7 @@ const char *groove_strerror(int error) {
     switch ((enum GrooveError)error) {
         case GrooveErrorNone: return "(no error)";
         case GrooveErrorNoMem: return "out of memory";
+        case GrooveErrorInvalidSampleFormat: return "invalid sample format";
     }
     return "(invalid error)";
 }
@@ -75,22 +76,11 @@ void groove_set_logging(int level) {
     av_log_set_level(level);
 }
 
-int groove_channel_layout_count(uint64_t channel_layout) {
-    return av_get_channel_layout_nb_channels(channel_layout);
-}
-
-uint64_t groove_channel_layout_default(int count) {
-    return av_get_default_channel_layout(count);
-}
-
-int groove_sample_format_bytes_per_sample(enum GrooveSampleFormat format) {
-    return av_get_bytes_per_sample((enum AVSampleFormat)format);
-}
-
 int groove_audio_formats_equal(const struct GrooveAudioFormat *a, const struct GrooveAudioFormat *b) {
-    return (a->sample_rate    == b->sample_rate &&
-            a->channel_layout == b->channel_layout &&
-            a->sample_fmt     == b->sample_fmt);
+    return (a->sample_rate == b->sample_rate &&
+            soundio_channel_layout_equal(&a->layout, &b->layout) &&
+            a->format == b->format &&
+            a->is_planar == b->is_planar);
 }
 
 const char *groove_version(void) {

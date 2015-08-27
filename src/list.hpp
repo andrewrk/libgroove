@@ -9,7 +9,7 @@
 #define GROOVE_LIST_HPP
 
 #include "util.hpp"
-#include "groove/groove.h"
+#include "groove_private.h"
 
 #include <assert.h>
 

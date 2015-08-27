@@ -134,8 +134,9 @@ static struct GrooveBuffer * frame_to_groove_buffer(struct GroovePlaylist *playl
 
     buffer->data = frame->extended_data;
     buffer->frame_count = frame->nb_samples;
-    buffer->format.channel_layout = frame->channel_layout;
-    buffer->format.sample_fmt = (GrooveSampleFormat)frame->format;
+    from_ffmpeg_layout(frame->channel_layout, &buffer->format.layout);
+    buffer->format.format = from_ffmpeg_format((AVSampleFormat)frame->format);
+    buffer->format.is_planar = from_ffmpeg_format_planar((AVSampleFormat)frame->format);
     buffer->format.sample_rate = frame->sample_rate;
     buffer->size = frame_size(frame);
     buffer->pts = frame->pts;
@@ -413,8 +414,8 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
             // create aformat filter
             snprintf(p->strbuf, sizeof(p->strbuf),
                     "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%" PRIx64,
-                    av_get_sample_fmt_name((enum AVSampleFormat)audio_format->sample_fmt),
-                    audio_format->sample_rate, audio_format->channel_layout);
+                    av_get_sample_fmt_name(to_ffmpeg_fmt(audio_format)),
+                    audio_format->sample_rate, to_ffmpeg_channel_layout(&audio_format->layout));
             av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
             err = avfilter_graph_create_filter(&aformat_ctx, p->aformat_filter,
                     NULL, p->strbuf, NULL, p->filter_graph);
@@ -733,9 +734,7 @@ static int sink_formats_compatible(const struct GrooveSink *example_sink,
     if (example_sink->gain != test_sink->gain)
         return 0;
     if (!test_sink->disable_resample &&
-        (example_sink->audio_format.sample_rate != test_sink->audio_format.sample_rate ||
-        example_sink->audio_format.channel_layout != test_sink->audio_format.channel_layout ||
-        example_sink->audio_format.sample_fmt != test_sink->audio_format.sample_fmt))
+        !groove_audio_formats_equal(&example_sink->audio_format, &test_sink->audio_format))
     {
         return 0;
     }
@@ -874,9 +873,8 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     // cache computed audio format stuff
-    int channel_count = av_get_channel_layout_nb_channels(sink->audio_format.channel_layout);
-    int bytes_per_frame = channel_count *
-        av_get_bytes_per_sample((enum AVSampleFormat)sink->audio_format.sample_fmt);
+    int channel_count = sink->audio_format.layout.channel_count;
+    int bytes_per_frame = channel_count * soundio_get_bytes_per_sample(sink->audio_format.format);
     sink->bytes_per_sec = bytes_per_frame * sink->audio_format.sample_rate;
 
     s->min_audioq_size = sink->buffer_size * bytes_per_frame;

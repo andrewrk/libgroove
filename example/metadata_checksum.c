@@ -130,8 +130,9 @@ int main(int argc, char * argv[]) {
 
     struct GrooveSink *sink = groove_sink_create();
     sink->audio_format.sample_rate = 44100;
-    sink->audio_format.channel_layout = GROOVE_CH_LAYOUT_MONO;
-    sink->audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
+    sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdMono);
+    sink->audio_format.format = SoundIoFormatS16NE;
+    sink->audio_format.is_planar = false;
 
     if (groove_sink_attach(sink, playlist) < 0)
         panic("error attaching sink");
@@ -203,8 +204,9 @@ int main(int argc, char * argv[]) {
 
     sink = groove_sink_create();
     sink->audio_format.sample_rate = 44100;
-    sink->audio_format.channel_layout = GROOVE_CH_LAYOUT_MONO;
-    sink->audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
+    sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdMono);
+    sink->audio_format.format = SoundIoFormatS16NE;
+    sink->audio_format.is_planar = false;
 
     if (groove_sink_attach(sink, playlist) < 0)
         panic("error attaching sink");

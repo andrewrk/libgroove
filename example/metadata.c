@@ -62,7 +62,7 @@ int main(int argc, char * argv[]) {
     }
     struct GrooveAudioFormat audio_format;
     groove_file_audio_format(file, &audio_format);
-    printf("channels=%d\n", groove_channel_layout_count(audio_format.channel_layout));
+    printf("channels=%d\n", audio_format.layout.channel_count);
 
     tag = NULL;
     printf("duration=%f\n", groove_file_duration(file));

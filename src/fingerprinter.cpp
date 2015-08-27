@@ -5,6 +5,7 @@
  * See http://opensource.org/licenses/MIT
  */
 
+#include "groove_private.h"
 #include "groove/fingerprinter.h"
 #include "queue.hpp"
 #include "ffmpeg.hpp"
@@ -250,8 +251,9 @@ struct GrooveFingerprinter *groove_fingerprinter_create(void) {
         return NULL;
     }
     p->sink->audio_format.sample_rate = 44100;
-    p->sink->audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
-    p->sink->audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
+    p->sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
+    p->sink->audio_format.format = SoundIoFormatS16NE;
+    p->sink->audio_format.is_planar = false;
     p->sink->userdata = printer;
     p->sink->purge = sink_purge;
     p->sink->flush = sink_flush;

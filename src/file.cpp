@@ -152,8 +152,9 @@ void groove_file_audio_format(struct GrooveFile *file, struct GrooveAudioFormat 
 
     AVCodecContext *codec_ctx = f->audio_st->codec;
     audio_format->sample_rate = codec_ctx->sample_rate;
-    audio_format->channel_layout = codec_ctx->channel_layout;
-    audio_format->sample_fmt = (enum GrooveSampleFormat)codec_ctx->sample_fmt;
+    from_ffmpeg_layout(codec_ctx->channel_layout, &audio_format->layout);
+    audio_format->format = from_ffmpeg_format(codec_ctx->sample_fmt);
+    audio_format->is_planar = from_ffmpeg_format_planar(codec_ctx->sample_fmt);
 }
 
 struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
@@ -301,7 +302,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
                 out_stream->sample_aspect_ratio =
                     in_stream->sample_aspect_ratio.num ? in_stream->sample_aspect_ratio :
                     icodec->sample_aspect_ratio.num ?
-                    icodec->sample_aspect_ratio : (AVRational){0, 1};
+                    icodec->sample_aspect_ratio : AVRational{0, 1};
             }
             break;
         case AVMEDIA_TYPE_SUBTITLE:

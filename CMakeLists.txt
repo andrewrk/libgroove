@@ -1,10 +1,18 @@
-cmake_minimum_required(VERSION 2.8)
-cmake_policy(SET CMP0042 NEW)
-cmake_policy(SET CMP0046 NEW)
+cmake_minimum_required(VERSION 2.8.5)
+
+if(CMAKE_VERSION VERSION_LESS 3.0.0)
+    set(CMAKE_INSTALL_LIBDIR "lib" CACHE PATH "library install dir (lib)")
+    set(CMAKE_INSTALL_INCLUDEDIR "include" CACHE PATH "header base install dir (include)")
+    set(CMAKE_INSTALL_BINDIR "bin" CACHE PATH "user executables (bin)")
+else()
+    cmake_policy(SET CMP0042 NEW)
+    cmake_policy(SET CMP0046 NEW)
+    include(GNUInstallDirs)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING
-        "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
+      "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
 endif()
 
 project(libgroove C CXX)
@@ -105,11 +113,11 @@ set(LIBGROOVE_HEADERS
 set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "")
 set(CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "")
 
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-variable -Wno-unused-but-set-variable")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-variable -Wno-unused-but-set-variable")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Werror -pedantic")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Werror -pedantic")
 
-set(LIB_CFLAGS "-std=c++11 -fno-exceptions -fno-rtti -Werror -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes")
-set(EXAMPLE_CFLAGS "-std=c99 -pedantic -Werror -Wall")
+set(LIB_CFLAGS "-std=c++11 -fno-exceptions -fno-rtti -fvisibility=hidden -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes")
+set(EXAMPLE_CFLAGS "-std=c99 -Wall")
 
 configure_file (
     "${CMAKE_SOURCE_DIR}/src/config.h.in"
@@ -197,6 +205,7 @@ message("\n"
     "Installation Summary\n"
     "--------------------\n"
     "* Install Directory            : ${CMAKE_INSTALL_PREFIX}\n"
+    "* Build Type                   : ${CMAKE_BUILD_TYPE}\n"
 )
 
 message(
