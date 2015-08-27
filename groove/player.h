@@ -32,12 +32,10 @@ union GroovePlayerEvent {
     enum GroovePlayerEventType type;
 };
 
-struct GrooveDevice;
-
 struct GroovePlayer {
     /// Set this to the device you want to open. You may use NULL for default.
     /// If you set `use_dummy_device` to 1, this field is ignored.
-    struct GrooveDevice *device;
+    struct SoundIoDevice *device;
 
     /// The desired audio format settings with which to open the device.
     /// groove_player_create defaults these to 48000 Hz,
@@ -68,64 +66,9 @@ struct GroovePlayer {
     /// conversion will occur. The audio device will be reopened with exact
     /// parameters whenever necessary.
     int use_exact_audio_format;
-
-    /// If you set this to 1, `device` is ignored and a dummy device is opened
-    /// instead.
-    int use_dummy_device;
 };
 
-struct GroovePlayerContext {
-    /// Defaults to NULL. Put whatever you want here.
-    void *userdata;
-    /// Optional callback. Called when the list of devices change. Only called
-    /// during a call to groove_player_context_flush_events or
-    /// groove_player_context_flush_events
-    void (*on_devices_change)(struct GroovePlayerContext *);
-    /// Optional callback. Called from an unknown thread that you should not use
-    /// to call any groove functions. You may use this to signal a condition
-    /// variable to wake up. Called when groove_wait_events would be woken up.
-    void (*on_events_signal)(struct GroovePlayerContext *);
-};
-
-GROOVE_EXPORT struct GroovePlayerContext *groove_player_context_create(void);
-GROOVE_EXPORT void groove_player_context_destroy(struct GroovePlayerContext *player_context);
-
-GROOVE_EXPORT int groove_player_context_connect(struct GroovePlayerContext *player_context);
-GROOVE_EXPORT void groove_player_context_disconnect(struct GroovePlayerContext *player_context);
-
-/// when you call this, the on_devices_change and on_events_signal callbacks
-/// might be called. This is the only time those callbacks will be called.
-/// When devices are updated on the system, you won't see the updates until you
-/// call this function.
-GROOVE_EXPORT void groove_player_context_flush_events(struct GroovePlayerContext *player_context);
-
-/// Flushes events as they occur, blocks until you call groove_player_context_wakeup.
-/// Be ready for spurious wakeups.
-GROOVE_EXPORT void groove_player_context_wait(struct GroovePlayerContext *player_context);
-
-/// wake up groove_player_context_wait
-GROOVE_EXPORT void groove_player_context_wakeup(struct GroovePlayerContext *player_context);
-
-/// Returns the number of available devices.
-GROOVE_EXPORT int groove_player_context_device_count(struct GroovePlayerContext *player_context);
-
-/// Returns the index of the default device
-GROOVE_EXPORT int groove_player_context_device_default(struct GroovePlayerContext *player_context);
-
-/// Call groove_device_unref when done
-GROOVE_EXPORT struct GrooveDevice *groove_player_context_get_device(
-        struct GroovePlayerContext *player_context, int index);
-
-
-
-GROOVE_EXPORT const char *groove_device_id(struct GrooveDevice *device);
-GROOVE_EXPORT const char *groove_device_name(struct GrooveDevice *device);
-GROOVE_EXPORT int groove_device_is_raw(struct GrooveDevice *device);
-GROOVE_EXPORT void groove_device_ref(struct GrooveDevice *device);
-GROOVE_EXPORT void groove_device_unref(struct GrooveDevice *device);
-
-
-GROOVE_EXPORT struct GroovePlayer *groove_player_create(struct GroovePlayerContext *);
+GROOVE_EXPORT struct GroovePlayer *groove_player_create(void);
 GROOVE_EXPORT void groove_player_destroy(struct GroovePlayer *player);
 
 /// Attaches the player to the playlist instance and opens the device to

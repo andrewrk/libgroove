@@ -20,7 +20,6 @@
 
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
-    struct GroovePlayerContextPrivate *pc;
 
     struct GrooveBuffer *audio_buf;
     size_t audio_buf_size; // in frames
@@ -34,9 +33,6 @@ struct GroovePlayerPrivate {
     // number of seconds into the play_head song where the buffered audio
     // is reaching the device
     double play_pos;
-
-    struct SoundIo *dummy_soundio;
-    struct SoundIoDevice *dummy_device;
 
     struct SoundIoOutStream *outstream;
     struct GrooveSink *sink;
@@ -52,11 +48,6 @@ struct GroovePlayerPrivate {
     int silence_frames_left;
     bool request_device_reopen;
     struct GrooveAudioFormat device_format;
-};
-
-struct GroovePlayerContextPrivate {
-    struct GroovePlayerContext externals;
-    struct SoundIo *soundio;
 };
 
 // TODO get rid of panics
@@ -458,8 +449,7 @@ static void sink_flush(struct GrooveSink *sink) {
     pthread_mutex_unlock(&p->play_head_mutex);
 }
 
-struct GroovePlayer *groove_player_create(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
+struct GroovePlayer *groove_player_create(void) {
     struct GroovePlayerPrivate *p = allocate<GroovePlayerPrivate>(1);
 
     if (!p) {
@@ -467,7 +457,6 @@ struct GroovePlayer *groove_player_create(struct GroovePlayerContext *player_con
         return NULL;
     }
     struct GroovePlayer *player = &p->externals;
-    p->pc = pc;
 
     p->sink = groove_sink_create();
     if (!p->sink) {
@@ -538,19 +527,9 @@ static int open_audio_device(struct GroovePlayer *player,
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
     int err;
 
-    struct SoundIoDevice *device;
-    if (player->use_dummy_device) {
-        device = p->dummy_device;
-        soundio_device_ref(device);
-    } else {
-        if (player->device) {
-            device = (struct SoundIoDevice *) player->device;
-            soundio_device_ref(device);
-        } else {
-            int default_index = soundio_default_output_device_index(p->pc->soundio);
-            device = soundio_get_output_device(p->pc->soundio, default_index);
-        }
-    }
+    assert(player->device);
+    struct SoundIoDevice *device = player->device;
+    soundio_device_ref(device);
 
     assert(!p->outstream);
     p->outstream = soundio_outstream_create(device);
@@ -608,32 +587,11 @@ static int open_audio_device(struct GroovePlayer *player,
 
 int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *playlist) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
+    int err;
 
     p->sink->gain = player->gain;
     p->sink->pause = sink_pause;
     p->sink->play = sink_play;
-
-    int err;
-
-    // for dummy devices we create a new soundio instance for each one and
-    // connect to the dummy backend.
-    // for normal devices we use the one soundio instance that is connected
-    // to the best backend.
-    if (player->use_dummy_device) {
-        p->dummy_soundio = soundio_create();
-        if (!p->dummy_soundio) {
-            groove_player_detach(player);
-            return -1;
-        }
-        if ((err = soundio_connect_backend(p->dummy_soundio, SoundIoBackendDummy))) {
-            groove_player_detach(player);
-            return -1;
-        }
-        soundio_flush_events(p->dummy_soundio);
-
-        int dummy_device_index = soundio_default_output_device_index(p->dummy_soundio);
-        p->dummy_device = soundio_get_output_device(p->dummy_soundio, dummy_device_index);
-    }
 
     if (open_audio_device(player, &player->target_audio_format, &player->actual_audio_format,
                 player->use_exact_audio_format))
@@ -685,6 +643,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
 int groove_player_detach(struct GroovePlayer *player) {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
     p->abort_request = true;
+    close_audio_device(p);
     if (p->device_thread_inited) {
         pthread_mutex_lock(&p->play_head_mutex);
         pthread_cond_signal(&p->device_thread_cond);
@@ -699,13 +658,6 @@ int groove_player_detach(struct GroovePlayer *player) {
     if (p->sink->playlist) {
         groove_sink_detach(p->sink);
     }
-    close_audio_device(p);
-
-    soundio_device_unref(p->dummy_device);
-    p->dummy_device = NULL;
-
-    soundio_destroy(p->dummy_soundio);
-    p->dummy_soundio = NULL;
 
     player->playlist = NULL;
 
@@ -766,117 +718,4 @@ struct GrooveAudioFormat groove_player_get_device_audio_format(struct GroovePlay
     result = p->device_format;
     pthread_mutex_unlock(&p->play_head_mutex);
     return result;
-}
-
-static void on_devices_change(struct SoundIo *soundio) {
-    struct GroovePlayerContextPrivate *pc = (GroovePlayerContextPrivate *)soundio->userdata;
-    struct GroovePlayerContext *player_context = &pc->externals;
-    if (player_context->on_devices_change)
-        player_context->on_devices_change(player_context);
-}
-
-static void on_events_signal(struct SoundIo *soundio) {
-    struct GroovePlayerContextPrivate *pc = (GroovePlayerContextPrivate *)soundio->userdata;
-    struct GroovePlayerContext *player_context = &pc->externals;
-    if (player_context->on_events_signal)
-        player_context->on_events_signal(player_context);
-}
-
-struct GroovePlayerContext *groove_player_context_create(void) {
-    struct GroovePlayerContextPrivate *pc = allocate<GroovePlayerContextPrivate>(1);
-    if (!pc)
-        return NULL;
-
-    struct GroovePlayerContext *player_context = &pc->externals;
-
-    pc->soundio = soundio_create();
-    if (!pc->soundio) {
-        groove_player_context_destroy(player_context);
-        return NULL;
-    }
-
-    pc->soundio->on_devices_change = on_devices_change;
-    pc->soundio->on_events_signal = on_events_signal;
-    pc->soundio->userdata = pc;
-
-    return player_context;
-}
-
-void groove_player_context_destroy(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    if (!pc)
-        return;
-
-    soundio_destroy(pc->soundio);
-
-    deallocate(pc);
-}
-
-int groove_player_context_connect(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    int err;
-    if ((err = soundio_connect(pc->soundio)))
-        return -1;
-    soundio_flush_events(pc->soundio);
-    return 0;
-}
-
-void groove_player_context_disconnect(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    soundio_disconnect(pc->soundio);
-}
-
-void groove_player_context_flush_events(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    soundio_flush_events(pc->soundio);
-}
-
-void groove_player_context_wait(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    soundio_wait_events(pc->soundio);
-}
-
-void groove_player_context_wakeup(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    soundio_wakeup(pc->soundio);
-}
-
-int groove_player_context_device_count(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    return soundio_output_device_count(pc->soundio);
-}
-
-int groove_player_context_device_default(struct GroovePlayerContext *player_context) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    return soundio_default_output_device_index(pc->soundio);
-}
-
-struct GrooveDevice *groove_player_context_get_device(struct GroovePlayerContext *player_context, int index) {
-    struct GroovePlayerContextPrivate *pc = (struct GroovePlayerContextPrivate *)player_context;
-    return (struct GrooveDevice *)soundio_get_output_device(pc->soundio, index);
-}
-
-const char *groove_device_id(struct GrooveDevice *device) {
-    struct SoundIoDevice *sio_device = (struct SoundIoDevice *)device;
-    return sio_device->id;
-}
-
-const char *groove_device_name(struct GrooveDevice *device) {
-    struct SoundIoDevice *sio_device = (struct SoundIoDevice *)device;
-    return sio_device->name;
-}
-
-int groove_device_is_raw(struct GrooveDevice *device) {
-    struct SoundIoDevice *sio_device = (struct SoundIoDevice *)device;
-    return sio_device->is_raw;
-}
-
-void groove_device_ref(struct GrooveDevice *device) {
-    struct SoundIoDevice *sio_device = (struct SoundIoDevice *)device;
-    soundio_device_ref(sio_device);
-}
-
-void groove_device_unref(struct GrooveDevice *device) {
-    struct SoundIoDevice *sio_device = (struct SoundIoDevice *)device;
-    soundio_device_unref(sio_device);
 }
