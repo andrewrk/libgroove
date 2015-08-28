@@ -122,6 +122,11 @@ configure_file (
     "${CMAKE_SOURCE_DIR}/src/config.h.in"
     ${CONFIGURE_OUT_FILE}
 )
+set(DOXYGEN_CONF_FILE "${CMAKE_BINARY_DIR}/doxygen.conf")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/doc/doxygen.conf.in"
+    ${DOXYGEN_CONF_FILE}
+)
 
 add_library(libgroove_shared SHARED ${LIBGROOVE_SOURCES})
 set_target_properties(libgroove_shared PROPERTIES
@@ -199,6 +204,13 @@ set_target_properties(fingerprint PROPERTIES
     COMPILE_FLAGS ${EXAMPLE_CFLAGS})
 target_link_libraries(fingerprint libgroove_shared)
 add_dependencies(fingerprint libgroove_shared)
+
+
+add_custom_target(doc
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMAND doxygen ${DOXYGEN_CONF_FILE}
+)
+
 
 message("\n"
     "Installation Summary\n"

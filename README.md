@@ -140,24 +140,7 @@ sudo make install
 
 ## Documentation
 
-Check out the example programs in the example folder.
-
-Read header files for the relevant APIs:
-
-* groove/groove.h
-  * globals
-  * GrooveFile
-  * GroovePlaylist
-  * GrooveBuffer
-  * GrooveSink
-* groove/encoder.h
-  * GrooveEncoder
-* groove/player.h
-  * GroovePlayer
-* groove/loudness.h
-  * GrooveLoudnessDetector
-* groove/fingerprinter.h
-  * GrooveFingerprinter
+[API Reference](TODO link to generated docs)
 
 Join #libgroove on irc.freenode.org and ask questions.
 
@@ -176,6 +159,12 @@ libsoundio is programmed in a tiny subset of C++11:
 Do not be fooled - this is a *C library*, not a C++ library. We just take
 advantage of a select few C++11 compiler features such as templates, and then
 link against libc.
+
+### Building the Documentation
+
+```
+make doc
+```
 
 ## Projects Using libgroove
 

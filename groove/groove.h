@@ -88,7 +88,7 @@ struct GroovePlaylistItem {
     /// Read-only. A volume adjustment in float format to apply to the file when it plays.
     /// This is typically used for loudness compensation, for example ReplayGain.
     /// To convert from dB to float, use exp(log(10) * 0.05 * dB_value)
-    /// Modify with ::groove_playlist_set_item_gain
+    /// Modify with ::groove_playlist_set_item_gain_peak
     double gain;
 
     /// Read-only. The sample peak of this playlist item is assumed to be 1.0 in float
@@ -96,7 +96,7 @@ struct GroovePlaylistItem {
     /// may set this value which may allow the volume adjustment to use
     /// a pure amplifier rather than a compressor. This results in slightly
     /// better audio quality.
-    /// Modify with ::groove_playlist_set_item_peak
+    /// Modify with ::groove_playlist_set_item_gain_peak
     double peak;
 
     /// A GroovePlaylist is a doubly linked list. Use these fields to
