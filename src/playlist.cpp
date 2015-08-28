@@ -943,7 +943,7 @@ struct GroovePlaylist * groove_playlist_create(void) {
     // queue sentinel early.
     p->sent_end_of_q = 1;
 
-    p->detect_full_sinks = every_sink_full;
+    p->detect_full_sinks = any_sink_full;
 
     if (pthread_mutex_init(&p->decode_head_mutex, NULL) != 0) {
         groove_playlist_destroy(playlist);
@@ -1353,12 +1353,12 @@ int groove_sink_contains_end_of_playlist(struct GrooveSink *sink) {
     return s->audioq_contains_end.load();
 }
 
-void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, int mode) {
+void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, enum GrooveFillMode mode) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     pthread_mutex_lock(&p->decode_head_mutex);
 
-    if (mode == GROOVE_EVERY_SINK_FULL) {
+    if (mode == GrooveFillModeEverySinkFull) {
         p->detect_full_sinks = every_sink_full;
     } else {
         p->detect_full_sinks = any_sink_full;

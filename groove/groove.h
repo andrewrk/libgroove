@@ -36,6 +36,18 @@ enum GrooveError {
     GrooveErrorInvalidSampleFormat,
 };
 
+/// Specifies when the sink will stop decoding.
+enum GrooveFillMode {
+    /// With this behavior, the playlist will stop decoding audio when any attached
+    /// sink is full, and then resume decoding audio when every sink is not full.
+    /// This is the default behavior.
+    GrooveFillModeAnySinkFull,
+    /// With this behavior, the playlist will decode audio if any sinks
+    /// are not full. If any sinks do not drain fast enough the data will buffer up
+    /// in the playlist.
+    GrooveFillModeEverySinkFull,
+};
+
 #define GROOVE_LOG_QUIET    -8
 #define GROOVE_LOG_ERROR    16
 #define GROOVE_LOG_WARNING  24
@@ -49,15 +61,6 @@ enum GrooveError {
 /// delimiter is added, the strings are simply concatenated.
 #define GROOVE_TAG_APPEND         32
 
-
-/// This is the default behavior. The playlist will decode audio if any sinks
-/// are not full. If any sinks do not drain fast enough the data will buffer up
-/// in the playlist.
-#define GROOVE_EVERY_SINK_FULL 0
-
-/// With this behavior, the playlist will stop decoding audio when any attached
-/// sink is full, and then resume decoding audio every sink is not full.
-#define GROOVE_ANY_SINK_FULL   1
 
 
 #define GROOVE_BUFFER_NO  0
@@ -329,7 +332,8 @@ GROOVE_EXPORT void groove_playlist_set_item_gain_peak(
         double gain, double peak);
 
 /// Use this to set the fill mode using the constants above
-GROOVE_EXPORT void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, int mode);
+GROOVE_EXPORT void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist,
+        enum GrooveFillMode mode);
 
 GROOVE_EXPORT void groove_buffer_ref(struct GrooveBuffer *buffer);
 GROOVE_EXPORT void groove_buffer_unref(struct GrooveBuffer *buffer);

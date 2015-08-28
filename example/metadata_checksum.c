@@ -126,8 +126,6 @@ int main(int argc, char * argv[]) {
     if (!file)
         panic("error opening %s", filename);
 
-    groove_playlist_set_fill_mode(playlist, GROOVE_ANY_SINK_FULL);
-
     struct GrooveSink *sink = groove_sink_create();
     sink->audio_format.sample_rate = 44100;
     sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdMono);
@@ -199,8 +197,6 @@ int main(int argc, char * argv[]) {
         panic("error opening %s", temp_filename);
 
     playlist = groove_playlist_create();
-
-    groove_playlist_set_fill_mode(playlist, GROOVE_ANY_SINK_FULL);
 
     sink = groove_sink_create();
     sink->audio_format.sample_rate = 44100;
