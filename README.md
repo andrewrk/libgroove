@@ -92,6 +92,10 @@ libgroove ships with Debian Jessie.
 sudo apt-get install libgroove-dev libgrooveplayer-dev \
     libgrooveloudness-dev libgroovefingerprinter-dev
 ```
+### [Gentoo Linux](https://packages.gentoo.org/package/media-libs/libgroove)
+```sh
+emerge libgroove
+```
 
 ### [Arch Linux](https://aur.archlinux.org/packages/libgroove/)
 

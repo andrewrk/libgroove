@@ -106,7 +106,6 @@ set(LIBGROOVE_HEADERS
     "${CMAKE_SOURCE_DIR}/groove/groove.h"
     "${CMAKE_SOURCE_DIR}/groove/loudness.h"
     "${CMAKE_SOURCE_DIR}/groove/player.h"
-    ${CONFIGURE_OUT_FILE}
 )
 
 # GTFO, -lstdc++ !!
