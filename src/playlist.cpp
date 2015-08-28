@@ -514,7 +514,11 @@ static int every_sink_full(struct GroovePlaylist *playlist) {
 }
 
 static int any_sink_full(struct GroovePlaylist *playlist) {
-    return every_sink(playlist, sink_is_full, 0);
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+    if (!p->sink_map)
+        return 1;
+    else
+        return every_sink(playlist, sink_is_full, 0);
 }
 
 static int sink_signal_end(struct GrooveSink *sink) {
