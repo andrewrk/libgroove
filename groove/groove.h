@@ -324,11 +324,9 @@ GROOVE_EXPORT int groove_playlist_count(struct GroovePlaylist *playlist);
 
 GROOVE_EXPORT void groove_playlist_set_gain(struct GroovePlaylist *playlist, double gain);
 
-GROOVE_EXPORT void groove_playlist_set_item_gain(struct GroovePlaylist *playlist,
-        struct GroovePlaylistItem *item, double gain);
-
-GROOVE_EXPORT void groove_playlist_set_item_peak(struct GroovePlaylist *playlist,
-        struct GroovePlaylistItem *item, double peak);
+GROOVE_EXPORT void groove_playlist_set_item_gain_peak(
+        struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
+        double gain, double peak);
 
 /// Use this to set the fill mode using the constants above
 GROOVE_EXPORT void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, int mode);

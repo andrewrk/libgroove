@@ -1223,25 +1223,13 @@ int groove_playlist_count(struct GroovePlaylist *playlist) {
     return count;
 }
 
-void groove_playlist_set_item_gain(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
-        double gain)
+void groove_playlist_set_item_gain_peak(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
+        double gain, double peak)
 {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     pthread_mutex_lock(&p->decode_head_mutex);
     item->gain = gain;
-    if (item == p->decode_head) {
-        update_playlist_volume(playlist);
-    }
-    pthread_mutex_unlock(&p->decode_head_mutex);
-}
-
-void groove_playlist_set_item_peak(struct GroovePlaylist *playlist, struct GroovePlaylistItem *item,
-        double peak)
-{
-    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
-
-    pthread_mutex_lock(&p->decode_head_mutex);
     item->peak = peak;
     if (item == p->decode_head) {
         update_playlist_volume(playlist);
