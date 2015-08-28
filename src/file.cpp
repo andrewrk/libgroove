@@ -10,7 +10,7 @@
 
 static int decode_interrupt_cb(void *ctx) {
     struct GrooveFilePrivate *f = (GrooveFilePrivate *)ctx;
-    return f ? f->abort_request : 0;
+    return f ? f->abort_request.load() : 0;
 }
 
 struct GrooveFile *groove_file_open(const char *filename) {
@@ -111,7 +111,7 @@ void groove_file_close(struct GrooveFile *file) {
 
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)file;
 
-    f->abort_request = 1;
+    f->abort_request.store(true);
 
     if (f->audio_stream_index >= 0) {
         AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
@@ -125,7 +125,7 @@ void groove_file_close(struct GrooveFile *file) {
     }
 
     // disable interrupting
-    f->abort_request = 0;
+    f->abort_request.store(false);
 
     if (f->ic)
         avformat_close_input(&f->ic);

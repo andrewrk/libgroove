@@ -11,6 +11,7 @@
 #include "buffer.hpp"
 #include "ffmpeg.hpp"
 #include "util.hpp"
+#include "atomics.hpp"
 
 #include <string.h>
 #include <pthread.h>
@@ -25,7 +26,7 @@ struct GrooveEncoderPrivate {
     AVStream *stream;
     AVPacket pkt;
     int audioq_size; // in bytes
-    int abort_request;
+    atomic_bool abort_request;
 
     // set temporarily
     struct GroovePlaylistItem *purge_item;
@@ -191,7 +192,7 @@ static void *encode_thread(void *arg) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     struct GrooveBuffer *buffer;
-    while (!e->abort_request) {
+    while (!e->abort_request.load()) {
         pthread_mutex_lock(&e->encode_head_mutex);
 
         if (e->audioq_size >= encoder->encoded_buffer_size) {
@@ -383,6 +384,8 @@ struct GrooveEncoder *groove_encoder_create(void) {
         return NULL;
     }
     struct GrooveEncoder *encoder = &e->externals;
+
+    e->abort_request.store(false);
 
     const int buffer_size = 4 * 1024;
     e->avio_buf = allocate_nonzero<unsigned char>(buffer_size);
@@ -704,13 +707,13 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
 int groove_encoder_detach(struct GrooveEncoder *encoder) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
-    e->abort_request = 1;
+    e->abort_request.store(true);
     groove_sink_detach(e->sink);
     groove_queue_flush(e->audioq);
     groove_queue_abort(e->audioq);
     pthread_cond_signal(&e->drain_cond);
     pthread_join(e->thread_id, NULL);
-    e->abort_request = 0;
+    e->abort_request.store(false);
 
     cleanup_avcontext(e);
     e->oformat = NULL;

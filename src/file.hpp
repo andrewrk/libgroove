@@ -10,13 +10,14 @@
 
 #include "groove_private.h"
 #include "ffmpeg.hpp"
+#include "atomics.hpp"
 
 #include <pthread.h>
 
 struct GrooveFilePrivate {
     struct GrooveFile externals;
     int audio_stream_index;
-    int abort_request; // true when we're closing the file
+    atomic_bool abort_request; // true when we're closing the file
     AVFormatContext *ic;
     AVCodec *decoder;
     AVStream *audio_st;

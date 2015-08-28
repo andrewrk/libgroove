@@ -10,6 +10,7 @@
 #include "queue.hpp"
 #include "ffmpeg.hpp"
 #include "util.hpp"
+#include "atomics.hpp"
 
 #include <soundio/soundio.h>
 #include <pthread.h>
@@ -40,13 +41,13 @@ struct GroovePlayerPrivate {
     struct GrooveQueue *eventq;
 
     // watchdog thread for opening and closing audio device
-    bool abort_request;
+    atomic_bool abort_request;
     pthread_t device_thread_id;
     int device_thread_inited;
     pthread_cond_t device_thread_cond;
     bool device_thread_cond_inited;
     int silence_frames_left;
-    bool request_device_reopen;
+    atomic_bool request_device_reopen;
     struct GrooveAudioFormat device_format;
 };
 
@@ -187,13 +188,13 @@ static void *device_thread_run(void *arg) {
             break;
 
         pthread_mutex_lock(&p->play_head_mutex);
-        if (!p->request_device_reopen) {
+        if (!p->request_device_reopen.load()) {
             pthread_cond_wait(&p->device_thread_cond, &p->play_head_mutex);
             pthread_mutex_unlock(&p->play_head_mutex);
             continue;
         }
 
-        p->request_device_reopen = false;
+        p->request_device_reopen.store(false);
 
         close_audio_device(p);
 
@@ -293,7 +294,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
 
         while (write_frames_left || read_anyway) {
             bool waiting_for_silence = (p->silence_frames_left > 0);
-            if (!p->request_device_reopen && !waiting_for_silence &&
+            if (!p->request_device_reopen.load() && !waiting_for_silence &&
                 !paused && p->audio_buf_index >= p->audio_buf_size)
             {
                 groove_buffer_unref(p->audio_buf);
@@ -327,7 +328,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     groove_panic("unexpected buffer error");
                 }
             }
-            if (p->request_device_reopen || waiting_for_silence || paused || !p->audio_buf) {
+            if (p->request_device_reopen.load() || waiting_for_silence || paused || !p->audio_buf) {
                 // fill the rest with silence
                 pthread_mutex_unlock(&p->play_head_mutex);
 
@@ -358,7 +359,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                 if (waiting_for_silence) {
                     p->silence_frames_left -= silence_frames_written;
                     if (p->silence_frames_left <= 0) {
-                        p->request_device_reopen = true;
+                        p->request_device_reopen.store(true);
                         pthread_cond_signal(&p->device_thread_cond);
                     }
                 }
@@ -457,6 +458,8 @@ struct GroovePlayer *groove_player_create(void) {
         return NULL;
     }
     struct GroovePlayer *player = &p->externals;
+
+    p->request_device_reopen.store(false);
 
     p->sink = groove_sink_create();
     if (!p->sink) {
@@ -664,7 +667,7 @@ int groove_player_detach(struct GroovePlayer *player) {
     groove_buffer_unref(p->audio_buf);
     p->audio_buf = NULL;
 
-    p->request_device_reopen = false;
+    p->request_device_reopen.store(false);
     p->silence_frames_left = 0;
     p->abort_request = false;
 

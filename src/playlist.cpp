@@ -36,7 +36,7 @@ struct SinkMap {
 struct GroovePlaylistPrivate {
     struct GroovePlaylist externals;
     pthread_t thread_id;
-    int abort_request;
+    atomic_bool abort_request;
 
     AVPacket audio_pkt_temp;
     AVFrame *in_frame;
@@ -546,7 +546,7 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
     AVPacket *pkt = &f->audio_pkt;
 
     // abort_request is set if we are destroying the file
-    if (f->abort_request)
+    if (f->abort_request.load())
         return -1;
 
     // might need to rebuild the filter graph if certain things changed
@@ -665,7 +665,7 @@ static void *decode_thread(void *arg) {
     struct GroovePlaylistPrivate *p = (GroovePlaylistPrivate *)arg;
     struct GroovePlaylist *playlist = &p->externals;
 
-    while (!p->abort_request) {
+    while (!p->abort_request.load()) {
         pthread_mutex_lock(&p->decode_head_mutex);
 
         // if we don't have anything to decode, wait until we do
@@ -1038,7 +1038,7 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     // wait for decode thread to finish
-    p->abort_request = 1;
+    p->abort_request.store(true);
     pthread_cond_signal(&p->decode_head_cond);
     pthread_cond_signal(&p->sink_drain_cond);
     pthread_join(p->thread_id, NULL);

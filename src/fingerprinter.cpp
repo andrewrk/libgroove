@@ -10,6 +10,7 @@
 #include "queue.hpp"
 #include "ffmpeg.hpp"
 #include "util.hpp"
+#include "atomics.hpp"
 
 #include <chromaprint.h>
 
@@ -47,7 +48,7 @@ struct GrooveFingerprinterPrivate {
     // set temporarily
     struct GroovePlaylistItem *purge_item;
 
-    int abort_request;
+    atomic_bool abort_request;
 };
 
 static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
@@ -80,7 +81,7 @@ static void *print_thread(void *arg) {
     struct GrooveFingerprinter *printer = &p->externals;
 
     struct GrooveBuffer *buffer;
-    while (!p->abort_request) {
+    while (!p->abort_request.load()) {
         pthread_mutex_lock(&p->info_head_mutex);
 
         if (p->info_queue_count >= printer->info_queue_size) {
@@ -215,6 +216,7 @@ struct GrooveFingerprinter *groove_fingerprinter_create(void) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate fingerprinter\n");
         return NULL;
     }
+    p->abort_request.store(false);
 
     struct GrooveFingerprinter *printer = &p->externals;
 
@@ -319,7 +321,7 @@ int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
 int groove_fingerprinter_detach(struct GrooveFingerprinter *printer) {
     struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *) printer;
 
-    p->abort_request = 1;
+    p->abort_request.store(true);
     groove_sink_detach(p->sink);
     groove_queue_flush(p->info_queue);
     groove_queue_abort(p->info_queue);
@@ -333,7 +335,7 @@ int groove_fingerprinter_detach(struct GrooveFingerprinter *printer) {
         p->chroma_ctx = NULL;
     }
 
-    p->abort_request = 0;
+    p->abort_request.store(false);
     p->info_head = NULL;
     p->info_pos = 0;
     p->track_duration = 0.0;
