@@ -29,6 +29,40 @@
 #endif
 /// \endcond
 
+/** \mainpage
+ *
+ * \section intro_sec Overview
+ *
+ * * groove.h - main header
+ * * player.h - attach a GroovePlayer to a GroovePlaylist to play audio over
+ *   a system audio device.
+ * * encoder.h - attach a GrooveEncoder to a GroovePlaylist to encode audio.
+ * * fingerprinter.h - attach a GrooveFingerPrinter to a GroovePlaylist to
+ *   calculate acoustid fingerprints.
+ * * loudness.h - attach a GrooveLoudnessDetector to a GroovePlaylist to
+ *   calculate EBU R128 loudness of tracks and albums.
+ */
+
+/** \example playlist.c
+ * play several files in a row and then exit
+ */
+
+/** \example transcode.c
+ * transcode one or more files into one output file
+ */
+
+/** \example fingerprint.c
+ * compute the acoustid of a list of songs
+ */
+
+/** \example metadata.c
+ * read or update metadata in a media file
+ */
+
+/** \example replaygain.c
+ * replaygain scanner
+ */
+
 /// See also ::groove_strerror
 enum GrooveError {
     GrooveErrorNone,
@@ -88,7 +122,7 @@ struct GroovePlaylistItem {
     /// Read-only. A volume adjustment in float format to apply to the file when it plays.
     /// This is typically used for loudness compensation, for example ReplayGain.
     /// To convert from dB to float, use exp(log(10) * 0.05 * dB_value)
-    /// Modify with ::groove_playlist_set_item_gain
+    /// Modify with ::groove_playlist_set_item_gain_peak
     double gain;
 
     /// Read-only. The sample peak of this playlist item is assumed to be 1.0 in float
@@ -96,7 +130,7 @@ struct GroovePlaylistItem {
     /// may set this value which may allow the volume adjustment to use
     /// a pure amplifier rather than a compressor. This results in slightly
     /// better audio quality.
-    /// Modify with ::groove_playlist_set_item_peak
+    /// Modify with ::groove_playlist_set_item_gain_peak
     double peak;
 
     /// A GroovePlaylist is a doubly linked list. Use these fields to
