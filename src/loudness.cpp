@@ -302,6 +302,7 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
     d->sink->audio_format.sample_rate = 44100;
     d->sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
     d->sink->audio_format.format = SoundIoFormatFloat64NE;
+    d->sink->audio_format.is_planar = false;
     d->sink->userdata = detector;
     d->sink->purge = sink_purge;
     d->sink->flush = sink_flush;

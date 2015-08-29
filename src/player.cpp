@@ -497,6 +497,7 @@ struct GroovePlayer *groove_player_create(void) {
     player->target_audio_format.sample_rate = 44100;
     player->target_audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
     player->target_audio_format.format = SoundIoFormatS16NE;
+    player->target_audio_format.is_planar = false;
     player->gain = p->sink->gain;
 
     return player;
