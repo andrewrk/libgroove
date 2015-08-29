@@ -560,7 +560,10 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
     // handle seek requests
     pthread_mutex_lock(&f->seek_mutex);
     if (f->seek_pos >= 0) {
-        if (av_seek_frame(f->ic, f->audio_stream_index, f->seek_pos, 0) < 0) {
+        int64_t seek_pos = f->seek_pos;
+        if (seek_pos == 0 && f->audio_st->start_time != AV_NOPTS_VALUE)
+            seek_pos = f->audio_st->start_time;
+        if (av_seek_frame(f->ic, f->audio_stream_index, seek_pos, 0) < 0) {
             av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->filename);
         } else if (f->seek_flush) {
             every_sink_flush(playlist);
