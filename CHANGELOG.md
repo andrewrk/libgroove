@@ -11,6 +11,44 @@
    extension. The purpose is to use this file to atomically rename it into
    place for metadata updates.
  * Depend on libsoundio instead of SDL2.
+ * Merge all libraries into one. libgrooveplayer, libgrooveloudness, and
+   libgroovefingerprinter no longer exist; they are part of libgroove itself
+   now.
+ * No longer depend on OS X timing code that breaks when the system time
+   changes.
+ * Add `groove_strerror` and `enum GrooveError`.
+ * build: `-Werror` and `-pedantic` in debug mode only.
+ * build: use `GNUInstallDirs` when cmake version is 3.0.0 or later. This
+   fixes support for distributions that have multi-arch setup.
+ * Ability to update playlist item gain and peak at the same time.
+ * Default fill mode now stops decoding when any sink is full.
+ * Fix theoretical race conditions from non-atomic booleans.
+ * Fix bug with any sink full fill mode.
+ * Provide doxygen documentation.
+ * Fix `disable_resample` flag causing `*_buffer_get` to hang.
+ * libgroove API is now tightly coupled with libsoundio API. You will need to
+   reference the libsoundio API when using libgroove.
+ * Instead of `GROOVE_CH_*` constants, use `SoundIoChannelId` enum values.
+ * Instead of `GROOVE_CH_LAYOUT_*` constants, use `SoundIoChannelLayoutId`
+   enum values.
+ * Instead of `groove_channel_layout_count` use `layout.channel_count`
+ * Instead of `groove_channel_layout_default` use
+   `soundio_channel_layout_get_default`
+ * Instead of `GrooveSampleFormat` enum use `SoundIoFormat` enum.
+ * Instead of the `*P` suffix on sample formats to indicate planar, use
+   the new `GrooveAudioFormat::is_planar` property.
+ * Instead of `groove_sample_format_bytes_per_sample` use
+   `soundio_get_bytes_per_sample`.
+ * Instead of `GROOVE_FILL_MODE_*` constants, use `GrooveFillMode`
+   enum values.
+ * Instead of `groove_playlist_set_item_gain` and
+   `groove_playlist_set_item_peak`, use `groove_playlist_set_item_gain_peak`.
+ * Instead of these, use the libsoundio API:
+   - `groove_device_count`
+   - `groove_device_name`
+   - `GroovePlayer::device_index`
+   - `GROOVE_PLAYER_DEFAULT_DEVICE`
+   - `GROOVE_PLAYER_DUMMY_DEVICE`
 
 ### Version 4.3.0 (2015-05-25)
 

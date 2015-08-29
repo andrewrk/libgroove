@@ -301,7 +301,6 @@ GROOVE_EXPORT int groove_file_save_as(struct GrooveFile *file, const char *filen
 /// combination of format headers and heuristics. It can be inaccurate.
 /// The most accurate way to learn the duration of a file is to use
 /// GrooveLoudnessDetector
-/// 
 GROOVE_EXPORT double groove_file_duration(struct GrooveFile *file);
 
 /// get the audio format of the main audio stream of a file
