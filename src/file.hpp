@@ -26,6 +26,7 @@ struct GrooveFilePrivate {
     pthread_mutex_t seek_mutex;
     int64_t seek_pos; // -1 if no seek request
     int seek_flush; // whether the seek request wants us to flush the buffer
+    bool ever_seeked;
 
     int eof;
     double audio_clock; // position of the decode head

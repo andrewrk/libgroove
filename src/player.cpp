@@ -301,11 +301,9 @@ static void audio_callback(struct SoundIoOutStream *outstream,
 
                 int ret = groove_sink_buffer_get(sink, &p->audio_buf, 0);
                 if (ret == GROOVE_BUFFER_END) {
+                    emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
                     p->play_head = NULL;
                     p->play_pos = -1.0;
-                    // emit the event after setting play head so user can check
-                    // the play head
-                    emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
                 } else if (ret == GROOVE_BUFFER_YES) {
                     if (p->play_head != p->audio_buf->item)
                         emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
