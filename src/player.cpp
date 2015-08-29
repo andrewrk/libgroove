@@ -51,7 +51,6 @@ struct GroovePlayerPrivate {
     struct GrooveAudioFormat device_format;
 };
 
-// TODO get rid of panics
 static int open_audio_device(struct GroovePlayer *player,
         const struct GrooveAudioFormat *target_format, struct GrooveAudioFormat *actual_format,
         bool use_exact_audio_format);
@@ -218,7 +217,6 @@ static void *device_thread_run(void *arg) {
 }
 
 static void error_callback(struct SoundIoOutStream *outstream, int err) {
-    // TODO destroy stream and emit error
     groove_panic("stream error: %s", soundio_strerror(err));
 }
 
@@ -307,8 +305,6 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     p->play_pos = -1.0;
                     // emit the event after setting play head so user can check
                     // the play head
-                    // TODO emit this event when the sound is coming out of the speakers,
-                    // not when we've queued it up.
                     emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
                 } else if (ret == GROOVE_BUFFER_YES) {
                     if (p->play_head != p->audio_buf->item)
