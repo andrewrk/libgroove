@@ -308,7 +308,7 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
 
     // set some defaults
     detector->info_queue_size = INT_MAX;
-    detector->sink_buffer_size = d->sink->buffer_size;
+    detector->sink_buffer_size_bytes = d->sink->buffer_size_bytes;
 
     return detector;
 }

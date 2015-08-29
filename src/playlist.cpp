@@ -880,8 +880,7 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
     int channel_count = sink->audio_format.layout.channel_count;
     int bytes_per_frame = channel_count * soundio_get_bytes_per_sample(sink->audio_format.format);
     sink->bytes_per_sec = bytes_per_frame * sink->audio_format.sample_rate;
-
-    s->min_audioq_size = sink->buffer_size * bytes_per_frame;
+    s->min_audioq_size = sink->buffer_size_bytes;
     av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
 
     // add the sink to the entry that matches its audio format
@@ -1290,7 +1289,7 @@ struct GrooveSink * groove_sink_create(void) {
 
     struct GrooveSink *sink = &s->externals;
 
-    sink->buffer_size = 8192;
+    sink->buffer_size_bytes = 64 * 1024;
     sink->gain = 1.0;
 
     s->audioq = groove_queue_create();

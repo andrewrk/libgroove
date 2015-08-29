@@ -34,9 +34,9 @@ struct GrooveFingerprinter {
     /// at the same time as playback, you might set this value to 1.
     int info_queue_size;
 
-    /// how big the sink buffer should be, in sample frames.
-    /// ::groove_fingerprinter_create defaults this to 8192
-    int sink_buffer_size;
+    /// how big the sink buffer should be
+    /// ::groove_fingerprinter_create defaults this to 64KB
+    int sink_buffer_size_bytes;
 
     /// read-only. set when attached and cleared when detached
     struct GroovePlaylist *playlist;
@@ -52,7 +52,7 @@ GROOVE_EXPORT int groove_fingerprinter_detach(struct GrooveFingerprinter *printe
 
 /// returns < 0 on error, 0 on aborted (block=1) or no info ready (block=0),
 /// 1 on info returned.
-/// When you get info you must free it with groove_fingerprinter_free_info.
+/// When you get info you must free it with ::groove_fingerprinter_free_info.
 GROOVE_EXPORT int groove_fingerprinter_info_get(struct GrooveFingerprinter *printer,
         struct GrooveFingerprinterInfo *info, int block);
 
@@ -73,7 +73,7 @@ GROOVE_EXPORT void groove_fingerprinter_position(struct GrooveFingerprinter *pri
 /// Compress and base64-encode a raw fingerprint
 /// 
 /// The caller is responsible for freeing the returned pointer using
-/// groove_fingerprinter_dealloc().
+/// ::groove_fingerprinter_dealloc().
 /// 
 /// Parameters:
 ///  - fp: pointer to an array of signed 32-bit integers representing the raw
@@ -90,7 +90,7 @@ GROOVE_EXPORT int groove_fingerprinter_encode(int32_t *fp, int size, char **enco
 /// Uncompress and base64-decode an encoded fingerprint
 /// 
 /// The caller is responsible for freeing the returned pointer using
-/// groove_fingerprinter_dealloc().
+/// ::groove_fingerprinter_dealloc().
 /// 
 /// Parameters:
 ///  - encoded_fp: Pointer to an encoded fingerprint

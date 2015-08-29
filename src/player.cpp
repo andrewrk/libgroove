@@ -582,7 +582,7 @@ static int open_audio_device(struct GroovePlayer *player,
         return -1;
     }
     double sink_buffer_seconds = max(4.0, p->outstream->software_latency);
-    p->sink->buffer_size = sink_buffer_seconds * p->outstream->sample_rate;
+    p->sink->buffer_size_bytes = sink_buffer_seconds * p->outstream->sample_rate * p->outstream->bytes_per_frame;
 
 
     return 0;

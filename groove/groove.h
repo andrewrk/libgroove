@@ -37,7 +37,7 @@
  * * player.h - attach a GroovePlayer to a GroovePlaylist to play audio over
  *   a system audio device.
  * * encoder.h - attach a GrooveEncoder to a GroovePlaylist to encode audio.
- * * fingerprinter.h - attach a GrooveFingerPrinter to a GroovePlaylist to
+ * * fingerprinter.h - attach a GrooveFingerprinter to a GroovePlaylist to
  *   calculate acoustid fingerprints.
  * * loudness.h - attach a GrooveLoudnessDetector to a GroovePlaylist to
  *   calculate EBU R128 loudness of tracks and albums.
@@ -204,9 +204,8 @@ struct GrooveSink {
     /// will always have this number of samples.
     int buffer_sample_count;
 
-    /// how big the buffer queue should be, in sample frames.
-    /// ::groove_sink_create defaults this to 8192
-    int buffer_size;
+    /// ::groove_sink_create defaults this to 64KB
+    int buffer_size_bytes;
 
     /// This volume adjustment only applies to this sink.
     /// It is recommended that you leave this at 1.0 and instead adjust the
@@ -235,6 +234,7 @@ struct GrooveSink {
 
     /// read-only. automatically computed from audio_format when you call
     /// ::groove_sink_attach
+    /// if `disable_resample` is 1 then this is unknown and set to 0.
     int bytes_per_sec;
 };
 

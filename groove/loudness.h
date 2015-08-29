@@ -40,9 +40,9 @@ struct GrooveLoudnessDetector {
     /// at the same time as playback, you might set this value to 1.
     int info_queue_size;
 
-    /// how big the sink buffer should be, in sample frames.
-    /// ::groove_loudness_detector_create defaults this to 8192
-    int sink_buffer_size;
+    /// how big the sink buffer should be
+    /// ::groove_loudness_detector_create defaults this to 64KB
+    int sink_buffer_size_bytes;
 
     /// set to 1 to only compute track loudness. This is faster and requires
     /// less memory than computing both.

@@ -262,7 +262,7 @@ struct GrooveFingerprinter *groove_fingerprinter_create(void) {
 
     // set some defaults
     printer->info_queue_size = INT_MAX;
-    printer->sink_buffer_size = p->sink->buffer_size;
+    printer->sink_buffer_size_bytes = p->sink->buffer_size_bytes;
 
     return printer;
 }

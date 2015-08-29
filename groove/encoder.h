@@ -14,7 +14,7 @@
 /// for example you could use it to implement an http audio stream
 struct GrooveEncoder {
     /// The desired audio format to encode.
-    /// groove_encoder_create defaults these to 44100 Hz,
+    /// ::groove_encoder_create defaults these to 44100 Hz,
     /// signed 16-bit int, stereo.
     /// These are preferences; if a setting cannot be used, a substitute will be
     /// used instead. actual_audio_format is set to the actual values.
@@ -24,7 +24,7 @@ struct GrooveEncoder {
     /// second. Note that typically you see this expressed in "kbps", such
     /// as 320kbps or 128kbps. Surprisingly, in this circumstance 1 kbps is
     /// 1000 bps, *not* 1024 bps as you would expect.
-    /// groove_encoder_create defaults this to 256000
+    /// ::groove_encoder_create defaults this to 256000
     int bit_rate;
 
     /// optional - choose a short name for the format
@@ -42,12 +42,12 @@ struct GrooveEncoder {
     /// to help libgroove guess which format/codec to use
     const char *mime_type;
 
-    /// how big the sink buffer should be, in sample frames.
-    /// groove_encoder_create defaults this to 8192
-    int sink_buffer_size;
+    /// how big the sink buffer should be
+    /// ::groove_encoder_create defaults this to 64KB
+    int sink_buffer_size_bytes;
 
     /// how big the encoded audio buffer should be, in bytes
-    /// groove_encoder_create defaults this to 16384
+    /// ::groove_encoder_create defaults this to 16384
     int encoded_buffer_size;
 
     /// This volume adjustment to make to this player.
@@ -93,7 +93,7 @@ GROOVE_EXPORT int groove_encoder_buffer_peek(struct GrooveEncoder *encoder, int 
 GROOVE_EXPORT struct GrooveTag *groove_encoder_metadata_get(struct GrooveEncoder *encoder,
         const char *key, const struct GrooveTag *prev, int flags);
 
-/// see docs for groove_file_metadata_set
+/// see docs for ::groove_file_metadata_set
 GROOVE_EXPORT int groove_encoder_metadata_set(struct GrooveEncoder *encoder, const char *key,
         const char *value, int flags);
 
