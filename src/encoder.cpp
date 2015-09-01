@@ -586,10 +586,10 @@ static int closest_supported_sample_rate(AVCodec *codec, int target) {
 }
 
 static uint64_t closest_supported_channel_layout(AVCodec *codec, uint64_t target) {
-
-
     int target_count = av_get_channel_layout_nb_channels(target);
     const uint64_t *p = codec->channel_layouts;
+    if (!p)
+        return target;
     uint64_t best = *p;
     int best_count = av_get_channel_layout_nb_channels(best);
     while (*p) {
