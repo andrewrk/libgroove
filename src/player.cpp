@@ -319,7 +319,8 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                         waiting_for_silence = true;
                     }
                 } else {
-                    groove_panic("unexpected buffer error");
+                    // errors are treated the same as no buffer ready
+                    emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
                 }
             }
             if (p->request_device_reopen.load() || waiting_for_silence || paused || !p->audio_buf) {
