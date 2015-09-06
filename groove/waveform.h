@@ -15,6 +15,7 @@ enum GrooveWaveformFormat {
     GrooveWaveformFormatU8,
 };
 
+/// The size of this struct is not part of the public API or ABI.
 struct GrooveWaveformInfo {
     /// the playlist item that this info applies to. If item is NULL that means
     /// the end of playlist.
@@ -41,11 +42,15 @@ struct GrooveWaveform {
     /// read-only. set when attached and cleared when detached
     struct GroovePlaylist *playlist;
 
-    /// How many frames to represent in the waveform. Defaults to 1920.
+    /// How many frames wide the waveform data will be. Defaults to 1920.
+    ///
+    /// If you have a song with 100 frames and `width_in_frames` is 50, then
+    /// each waveform data frame will correspond to 2 frames of the original
+    /// song.
     int width_in_frames;
 
     /// Determines what GrooveWaveformInfo::data contains. Defaults to
-    /// GrooveWaveformFormatU8
+    /// #GrooveWaveformFormatU8
     enum GrooveWaveformFormat format;
 
     /// maximum number of bytes to store in the queue waiting to be retrieved

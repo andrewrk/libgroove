@@ -10,9 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
- // TODO  remove
-#include <assert.h>
-
 static int usage(char *exe) {
     fprintf(stderr, "Usage: %s [--override-duration seconds] file\n"
             "Generates waveformjs compatible output\n", exe);
@@ -44,6 +41,9 @@ int main(int argc, char * argv[]) {
             return usage(exe);
         }
     }
+
+    if (!input_filename)
+        return usage(exe);
 
     groove_init();
     atexit(groove_finish);
@@ -77,8 +77,6 @@ int main(int argc, char * argv[]) {
         fprintf(stderr, "error getting waveform data\n");
         return 1;
     }
-
-    assert(info->ref_count == 1);
 
     if (info->actual_frame_count != info->expected_frame_count) {
         fprintf(stderr, "Invalid duration: (%ld != %ld)\nRe-run with --override-duration %f\n",
