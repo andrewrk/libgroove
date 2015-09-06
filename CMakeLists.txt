@@ -24,6 +24,9 @@ set(LIBGROOVE_VERSION_PATCH 0)
 set(LIBGROOVE_VERSION "${LIBGROOVE_VERSION_MAJOR}.${LIBGROOVE_VERSION_MINOR}.${LIBGROOVE_VERSION_PATCH}")
 message("Configuring libgroove version ${LIBGROOVE_VERSION}")
 
+option(BUILD_STATIC_LIBS "Build static libraries" ON)
+option(BUILD_EXAMPLE_PROGRAMS "Build example programs" ON)
+
 include_directories(
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}
@@ -154,65 +157,69 @@ target_link_libraries(libgroove_shared LINK_PUBLIC
 install(TARGETS libgroove_shared DESTINATION lib)
 
 
-add_library(libgroove_static STATIC ${LIBGROOVE_SOURCES})
-set_target_properties(libgroove_static PROPERTIES
-    OUTPUT_NAME groove
-    COMPILE_FLAGS ${LIB_CFLAGS}
-    LINKER_LANGUAGE C
-)
-install(TARGETS libgroove_static DESTINATION lib)
+if(BUILD_STATIC_LIBS)
+    add_library(libgroove_static STATIC ${LIBGROOVE_SOURCES})
+    set_target_properties(libgroove_static PROPERTIES
+        OUTPUT_NAME groove
+        COMPILE_FLAGS ${LIB_CFLAGS}
+        LINKER_LANGUAGE C
+    )
+    install(TARGETS libgroove_static DESTINATION lib)
+endif()
 
 install(FILES ${LIBGROOVE_HEADERS} DESTINATION "include/groove")
 
 # Example Programs
-add_executable(metadata example/metadata.c)
-set_target_properties(metadata PROPERTIES
-    LINKER_LANGUAGE C
-    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_link_libraries(metadata libgroove_shared)
-add_dependencies(metadata libgroove_shared)
+if(BUILD_EXAMPLE_PROGRAMS)
+    add_executable(metadata example/metadata.c)
+    set_target_properties(metadata PROPERTIES
+        LINKER_LANGUAGE C
+        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+    target_link_libraries(metadata libgroove_shared)
+    add_dependencies(metadata libgroove_shared)
 
-add_executable(metadata_checksum example/metadata_checksum.c)
-set_target_properties(metadata_checksum PROPERTIES
-    LINKER_LANGUAGE C
-    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_link_libraries(metadata_checksum libgroove_shared)
-add_dependencies(metadata_checksum libgroove_shared)
+    add_executable(metadata_checksum example/metadata_checksum.c)
+    set_target_properties(metadata_checksum PROPERTIES
+        LINKER_LANGUAGE C
+        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+    target_link_libraries(metadata_checksum libgroove_shared)
+    add_dependencies(metadata_checksum libgroove_shared)
 
-add_executable(transcode example/transcode.c)
-set_target_properties(transcode PROPERTIES
-    LINKER_LANGUAGE C
-    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_link_libraries(transcode libgroove_shared)
-add_dependencies(transcode libgroove_shared)
+    add_executable(transcode example/transcode.c)
+    set_target_properties(transcode PROPERTIES
+        LINKER_LANGUAGE C
+        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+    target_link_libraries(transcode libgroove_shared)
+    add_dependencies(transcode libgroove_shared)
 
-add_executable(playlist example/playlist.c)
-set_target_properties(playlist PROPERTIES
-    LINKER_LANGUAGE C
-    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_link_libraries(playlist libgroove_shared)
-add_dependencies(playlist libgroove_shared)
+    add_executable(playlist example/playlist.c)
+    set_target_properties(playlist PROPERTIES
+        LINKER_LANGUAGE C
+        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+    target_link_libraries(playlist libgroove_shared)
+    add_dependencies(playlist libgroove_shared)
 
-add_executable(replaygain example/replaygain.c)
-set_target_properties(replaygain PROPERTIES
-    LINKER_LANGUAGE C
-    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_link_libraries(replaygain libgroove_shared)
-add_dependencies(replaygain libgroove_shared)
+    add_executable(replaygain example/replaygain.c)
+    set_target_properties(replaygain PROPERTIES
+        LINKER_LANGUAGE C
+        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+    target_link_libraries(replaygain libgroove_shared)
+    add_dependencies(replaygain libgroove_shared)
 
-add_executable(fingerprint example/fingerprint.c)
-set_target_properties(fingerprint PROPERTIES
-    LINKER_LANGUAGE C
-    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_link_libraries(fingerprint libgroove_shared)
-add_dependencies(fingerprint libgroove_shared)
+    add_executable(fingerprint example/fingerprint.c)
+    set_target_properties(fingerprint PROPERTIES
+        LINKER_LANGUAGE C
+        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+    target_link_libraries(fingerprint libgroove_shared)
+    add_dependencies(fingerprint libgroove_shared)
 
-add_executable(waveform example/waveform.c)
-set_target_properties(waveform PROPERTIES
-    LINKER_LANGUAGE C
-    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-target_link_libraries(waveform libgroove_shared)
-add_dependencies(waveform libgroove_shared)
+    add_executable(waveform example/waveform.c)
+    set_target_properties(waveform PROPERTIES
+        LINKER_LANGUAGE C
+        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+    target_link_libraries(waveform libgroove_shared)
+    add_dependencies(waveform libgroove_shared)
+endif(BUILD_EXAMPLE_PROGRAMS)
 
 
 add_custom_target(doc
@@ -226,6 +233,8 @@ message("\n"
     "--------------------\n"
     "* Install Directory            : ${CMAKE_INSTALL_PREFIX}\n"
     "* Build Type                   : ${CMAKE_BUILD_TYPE}\n"
+    "* Build static libs            : ${BUILD_STATIC_LIBS}\n"
+    "* Build example programs       : ${BUILD_EXAMPLE_PROGRAMS}\n"
 )
 
 message(
