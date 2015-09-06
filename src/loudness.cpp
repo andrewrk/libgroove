@@ -31,13 +31,13 @@ struct GrooveLoudnessDetectorPrivate {
 
     // info_head_mutex applies to variables inside this block.
     pthread_mutex_t info_head_mutex;
-    char info_head_mutex_inited;
+    bool info_head_mutex_inited;
     // current playlist item pointer
     struct GroovePlaylistItem *info_head;
     double info_pos;
     // analyze_thread waits on this when the info queue is full
     pthread_cond_t drain_cond;
-    char drain_cond_inited;
+    bool drain_cond_inited;
     // how many items are in the queue
     int info_queue_count;
     double album_peak;
@@ -96,14 +96,12 @@ static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
 static void *detect_thread(void *arg) {
     struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)arg;
     struct GrooveLoudnessDetector *detector = &d->externals;
-
     struct GrooveBuffer *buffer;
-    while (!d->abort_request) {
-        pthread_mutex_lock(&d->info_head_mutex);
 
+    pthread_mutex_lock(&d->info_head_mutex);
+    while (!d->abort_request) {
         if (d->info_queue_count >= detector->info_queue_size) {
             pthread_cond_wait(&d->drain_cond, &d->info_head_mutex);
-            pthread_mutex_unlock(&d->info_head_mutex);
             continue;
         }
 
@@ -148,12 +146,10 @@ static void *detect_thread(void *arg) {
             d->info_head = NULL;
             d->info_pos = -1.0;
 
-            pthread_mutex_unlock(&d->info_head_mutex);
             continue;
         }
 
         if (result != GROOVE_BUFFER_YES) {
-            pthread_mutex_unlock(&d->info_head_mutex);
             break;
         }
 
@@ -185,12 +181,12 @@ static void *detect_thread(void *arg) {
         double buffer_duration = buffer->frame_count / (double)buffer->format.sample_rate;
         d->track_duration += buffer_duration;
         d->album_duration += buffer_duration;
-        ebur128_add_frames_double(d->all_track_states[d->cur_track_index],
-                (double*)buffer->data[0], buffer->frame_count);
+        ebur128_add_frames_float(d->all_track_states[d->cur_track_index],
+                (float*)buffer->data[0], buffer->frame_count);
 
-        pthread_mutex_unlock(&d->info_head_mutex);
         groove_buffer_unref(buffer);
     }
+    pthread_mutex_unlock(&d->info_head_mutex);
 
     return NULL;
 }
@@ -272,14 +268,14 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return NULL;
     }
-    d->info_head_mutex_inited = 1;
+    d->info_head_mutex_inited = true;
 
     if (pthread_cond_init(&d->drain_cond, NULL) != 0) {
         groove_loudness_detector_destroy(detector);
         av_log(NULL, AV_LOG_ERROR, "unable to create mutex condition\n");
         return NULL;
     }
-    d->drain_cond_inited = 1;
+    d->drain_cond_inited = true;
 
     d->info_queue = groove_queue_create();
     if (!d->info_queue) {
@@ -301,7 +297,7 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
     }
     d->sink->audio_format.sample_rate = 44100;
     d->sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
-    d->sink->audio_format.format = SoundIoFormatFloat64NE;
+    d->sink->audio_format.format = SoundIoFormatFloat32NE;
     d->sink->audio_format.is_planar = false;
     d->sink->userdata = detector;
     d->sink->purge = sink_purge;

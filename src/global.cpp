@@ -19,6 +19,9 @@ const char *groove_strerror(int error) {
         case GrooveErrorNone: return "(no error)";
         case GrooveErrorNoMem: return "out of memory";
         case GrooveErrorInvalidSampleFormat: return "invalid sample format";
+        case GrooveErrorSystemResources: return "system resource not available";
+        case GrooveErrorInvalid: return "invalid value";
+        case GrooveErrorSinkNotFound: return "sink not found";
     }
     return "(invalid error)";
 }

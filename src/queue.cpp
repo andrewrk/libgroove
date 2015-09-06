@@ -96,7 +96,7 @@ int groove_queue_put(struct GrooveQueue *queue, void *obj) {
     struct ItemList * el1 = allocate<ItemList>(1);
 
     if (!el1)
-        return -1;
+        return GrooveErrorNoMem;
 
     el1->obj = obj;
 

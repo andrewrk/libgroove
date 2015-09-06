@@ -63,11 +63,18 @@
  * replaygain scanner
  */
 
+/** \example waveform.c
+ * replaygain scanner
+ */
+
 /// See also ::groove_strerror
 enum GrooveError {
-    GrooveErrorNone,
-    GrooveErrorNoMem,
-    GrooveErrorInvalidSampleFormat,
+    GrooveErrorNone                 =  0,
+    GrooveErrorNoMem                = -1,
+    GrooveErrorInvalidSampleFormat  = -2,
+    GrooveErrorSystemResources      = -3,
+    GrooveErrorInvalid              = -4,
+    GrooveErrorSinkNotFound         = -5,
 };
 
 /// Specifies when the sink will stop decoding.
@@ -109,8 +116,16 @@ struct GrooveAudioFormat {
 };
 
 struct GrooveFile {
-    int dirty;            ///< read-only
-    const char *filename; ///< read-only
+    /// read-only
+    int dirty;
+
+    /// read-only
+    const char *filename;
+
+    /// This must only be set when no GroovePlaylistItem refers to this file.
+    /// ::groove_file_open estimates the duration, but it can be inaccurate.
+    /// If you know the correct duration, you can supply it here.
+    double override_duration;
 };
 
 struct GrooveTag;

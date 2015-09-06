@@ -95,6 +95,7 @@ set(LIBGROOVE_SOURCES
     "${CMAKE_SOURCE_DIR}/src/encoder.cpp"
     "${CMAKE_SOURCE_DIR}/src/fingerprinter.cpp"
     "${CMAKE_SOURCE_DIR}/src/loudness.cpp"
+    "${CMAKE_SOURCE_DIR}/src/waveform.cpp"
     "${CMAKE_SOURCE_DIR}/src/playlist.cpp"
     "${CMAKE_SOURCE_DIR}/src/util.cpp"
 )
@@ -106,6 +107,7 @@ set(LIBGROOVE_HEADERS
     "${CMAKE_SOURCE_DIR}/groove/groove.h"
     "${CMAKE_SOURCE_DIR}/groove/loudness.h"
     "${CMAKE_SOURCE_DIR}/groove/player.h"
+    "${CMAKE_SOURCE_DIR}/groove/waveform.h"
 )
 
 # GTFO, -lstdc++ !!
@@ -204,6 +206,13 @@ set_target_properties(fingerprint PROPERTIES
     COMPILE_FLAGS ${EXAMPLE_CFLAGS})
 target_link_libraries(fingerprint libgroove_shared)
 add_dependencies(fingerprint libgroove_shared)
+
+add_executable(waveform example/waveform.c)
+set_target_properties(waveform PROPERTIES
+    LINKER_LANGUAGE C
+    COMPILE_FLAGS ${EXAMPLE_CFLAGS})
+target_link_libraries(waveform libgroove_shared)
+add_dependencies(waveform libgroove_shared)
 
 
 add_custom_target(doc

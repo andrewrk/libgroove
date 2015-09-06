@@ -790,7 +790,7 @@ static int remove_sink_from_map(struct GrooveSink *sink) {
         map_item = next_map_item;
     }
 
-    return -1;
+    return GrooveErrorSinkNotFound;
 }
 
 static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *sink) {
@@ -799,7 +799,7 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
     struct SinkStack *stack_entry = allocate<SinkStack>(1);
 
     if (!stack_entry)
-        return -1;
+        return GrooveErrorNoMem;
 
     stack_entry->sink = sink;
 
@@ -828,7 +828,7 @@ static int add_sink_to_map(struct GroovePlaylist *playlist, struct GrooveSink *s
     map_entry->stack_head = stack_entry;
     if (!map_entry) {
         deallocate(stack_entry);
-        return -1;
+        return GrooveErrorNoMem;
     }
     if (p->sink_map) {
         map_entry->next = p->sink_map;
@@ -858,8 +858,9 @@ static int groove_sink_pause(struct GrooveSink *sink) {
 int groove_sink_detach(struct GrooveSink *sink) {
     struct GroovePlaylist *playlist = sink->playlist;
 
+    assert(playlist);
     if (!playlist)
-        return -1;
+        return GrooveErrorInvalid;
 
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 

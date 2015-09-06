@@ -36,8 +36,8 @@ struct GrooveLoudnessDetector {
     /// maximum number of GrooveLoudnessDetectorInfo items to store in this
     /// loudness detector's queue. this defaults to MAX_INT, meaning that
     /// the loudness detector will cause the decoder to decode the entire
-    /// playlist. if you want to instead, for example, obtain loudness info
-    /// at the same time as playback, you might set this value to 1.
+    /// playlist. if you want to instead, for example, cause the detector
+    /// to stop decoding until you read each result, set this value to 1.
     int info_queue_size;
 
     /// how big the sink buffer should be
