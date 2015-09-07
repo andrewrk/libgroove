@@ -69,12 +69,18 @@
 
 /// See also ::groove_strerror
 enum GrooveError {
-    GrooveErrorNone                 =  0,
-    GrooveErrorNoMem                = -1,
-    GrooveErrorInvalidSampleFormat  = -2,
-    GrooveErrorSystemResources      = -3,
-    GrooveErrorInvalid              = -4,
-    GrooveErrorSinkNotFound         = -5,
+    GrooveErrorNone                 =   0,
+    GrooveErrorNoMem                =  -1,
+    GrooveErrorInvalidSampleFormat  =  -2,
+    GrooveErrorSystemResources      =  -3,
+    GrooveErrorInvalid              =  -4,
+    GrooveErrorSinkNotFound         =  -5,
+    GrooveErrorNoChanges            =  -6,
+    GrooveErrorFileSystem           =  -7,
+    GrooveErrorUnknownFormat        =  -8,
+    GrooveErrorTooManyStreams       =  -9,
+    GrooveErrorEncoding             = -10,
+    GrooveErrorDecoding             = -11,
 };
 
 /// Specifies when the sink will stop decoding.

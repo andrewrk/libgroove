@@ -68,8 +68,9 @@ int main(int argc, char * argv[]) {
     printf("duration=%f\n", groove_file_duration(file));
     while ((tag = groove_file_metadata_get(file, "", tag, 0)))
         printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));
-    if (file->dirty && groove_file_save(file) < 0)
-        fprintf(stderr, "error saving file\n");
+    int err;
+    if (file->dirty && (err = groove_file_save(file)))
+        fprintf(stderr, "error saving file: %s\n", groove_strerror(err));
     groove_file_close(file);
     return 0;
 }

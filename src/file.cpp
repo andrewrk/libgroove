@@ -189,13 +189,12 @@ static void cleanup_save(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     av_free_packet(&f->audio_pkt);
-    avio_closep(&f->oc->pb);
     if (f->tempfile_exists) {
-        if (remove(f->oc->filename) != 0)
-            av_log(NULL, AV_LOG_WARNING, "Error deleting temp file during cleanup\n");
+        remove(f->oc->filename);
         f->tempfile_exists = 0;
     }
     if (f->oc) {
+        avio_closep(&f->oc->pb);
         avformat_free_context(f->oc);
         f->oc = NULL;
     }
@@ -207,16 +206,14 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
     // detect output format
     AVOutputFormat *ofmt = av_guess_format(f->ic->iformat->name, f->ic->filename, NULL);
     if (!ofmt) {
-        av_log(NULL, AV_LOG_ERROR, "Could not deduce output format to use.\n");
-        return -1;
+        return GrooveErrorUnknownFormat;
     }
 
     // allocate output media context
     f->oc = avformat_alloc_context();
     if (!f->oc) {
         cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "Could not create output context: out of memory\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
     f->oc->oformat = ofmt;
@@ -226,16 +223,14 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
     if (!(ofmt->flags & AVFMT_NOFILE)) {
         if (avio_open(&f->oc->pb, f->oc->filename, AVIO_FLAG_WRITE) < 0) {
             cleanup_save(file);
-            av_log(NULL, AV_LOG_ERROR, "could not open '%s'\n", f->oc->filename);
-            return -1;
+            return GrooveErrorFileSystem;
         }
         f->tempfile_exists = 1;
     }
 
     if (f->ic->nb_streams > INT_MAX) {
         cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "too many streams\n");
-        return -1;
+        return GrooveErrorTooManyStreams;
     }
     int stream_count = (int)f->ic->nb_streams;
 
@@ -245,8 +240,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
         AVStream *out_stream = avformat_new_stream(f->oc, NULL);
         if (!out_stream) {
             cleanup_save(file);
-            av_log(NULL, AV_LOG_ERROR, "error allocating output stream\n");
-            return -1;
+            return GrooveErrorNoMem;
         }
         out_stream->id = in_stream->id;
         out_stream->disposition = in_stream->disposition;
@@ -272,14 +266,12 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
         uint64_t extra_size = (uint64_t)icodec->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE;
         if (extra_size > INT_MAX) {
             cleanup_save(file);
-            av_log(NULL, AV_LOG_ERROR, "codec extra size too big\n");
-            return AVERROR(EINVAL);
+            return GrooveErrorEncoding;
         }
         ocodec->extradata      = allocate<uint8_t>(extra_size);
         if (!ocodec->extradata) {
             cleanup_save(file);
-            av_log(NULL, AV_LOG_ERROR, "could not allocate codec extradata: out of memory\n");
-            return AVERROR(ENOMEM);
+            return GrooveErrorNoMem;
         }
         memcpy(ocodec->extradata, icodec->extradata, icodec->extradata_size);
         ocodec->extradata_size = icodec->extradata_size;
@@ -314,8 +306,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
             break;
         default:
             cleanup_save(file);
-            av_log(NULL, AV_LOG_ERROR, "unrecognized stream type\n");
-            return -1;
+            return GrooveErrorEncoding;
         }
     }
 
@@ -324,8 +315,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
 
     if (avformat_write_header(f->oc, NULL) < 0) {
         cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "could not write header\n");
-        return -1;
+        return GrooveErrorEncoding;
     }
 
     AVPacket *pkt = &f->audio_pkt;
@@ -335,21 +325,18 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
             break;
         } else if (err < 0) {
             cleanup_save(file);
-            av_log(NULL, AV_LOG_ERROR, "error reading frame\n");
-            return -1;
+            return GrooveErrorDecoding;
         }
         if (av_write_frame(f->oc, pkt) < 0) {
             cleanup_save(file);
-            av_log(NULL, AV_LOG_ERROR, "error writing frame\n");
-            return -1;
+            return GrooveErrorEncoding;
         }
         av_free_packet(pkt);
     }
 
     if (av_write_trailer(f->oc) < 0) {
         cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "could not write trailer\n");
-        return -1;
+        return GrooveErrorEncoding;
     }
 
     f->tempfile_exists = 0;
@@ -360,7 +347,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
 
 int groove_file_save(struct GrooveFile *file) {
     if (!file->dirty)
-        return 0;
+        return GrooveErrorNoChanges;
 
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
@@ -369,20 +356,19 @@ int groove_file_save(struct GrooveFile *file) {
 
     if (!temp_filename) {
         cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "could not create temp file name - out of memory\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
-    if (groove_file_save_as(file, temp_filename) < 0) {
+    int err;
+    if ((err = groove_file_save_as(file, temp_filename))) {
         cleanup_save(file);
-        return -1;
+        return err;
     }
 
-    if (rename(f->oc->filename, f->ic->filename) != 0) {
+    if (rename(temp_filename, f->ic->filename)) {
         f->tempfile_exists = 1;
         cleanup_save(file);
-        av_log(NULL, AV_LOG_ERROR, "error renaming tmp file to original file\n");
-        return -1;
+        return GrooveErrorFileSystem;
     }
 
     file->dirty = 0;

@@ -22,6 +22,12 @@ const char *groove_strerror(int error) {
         case GrooveErrorSystemResources: return "system resource not available";
         case GrooveErrorInvalid: return "invalid value";
         case GrooveErrorSinkNotFound: return "sink not found";
+        case GrooveErrorNoChanges: return "no changes to save";
+        case GrooveErrorFileSystem: return "problem accessing file system";
+        case GrooveErrorUnknownFormat: return "unknown format";
+        case GrooveErrorTooManyStreams: return "too many streams";
+        case GrooveErrorEncoding: return "encoding failed";
+        case GrooveErrorDecoding: return "decoding failed";
     }
     return "(invalid error)";
 }
