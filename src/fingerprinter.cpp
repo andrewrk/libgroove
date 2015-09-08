@@ -55,21 +55,20 @@ struct GrooveFingerprinterPrivate {
 static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
     struct GrooveFingerprinterInfo *info = allocate<GrooveFingerprinterInfo>(1);
     if (!info) {
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate fingerprinter info\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     info->item = p->info_head;
     info->duration = p->track_duration;
 
     if (!chromaprint_finish(p->chroma_ctx)) {
         av_log(NULL, AV_LOG_ERROR, "unable to finish chromaprint\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     if (!chromaprint_get_raw_fingerprint(p->chroma_ctx,
                 (void**)&info->fingerprint, &info->fingerprint_size))
     {
         av_log(NULL, AV_LOG_ERROR, "unable to get fingerprint\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
     groove_queue_put(p->info_queue, info);
@@ -301,20 +300,18 @@ int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
     p->chroma_ctx = chromaprint_new(CHROMAPRINT_ALGORITHM_DEFAULT);
     if (!p->chroma_ctx) {
         groove_fingerprinter_detach(printer);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate chromaprint\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
-    if (groove_sink_attach(p->sink, playlist) < 0) {
+    int err;
+    if ((err = groove_sink_attach(p->sink, playlist))) {
         groove_fingerprinter_detach(printer);
-        av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
-        return -1;
+        return err;
     }
 
-    if (pthread_create(&p->thread_id, NULL, print_thread, printer) != 0) {
+    if (pthread_create(&p->thread_id, NULL, print_thread, printer)) {
         groove_fingerprinter_detach(printer);
-        av_log(NULL, AV_LOG_ERROR, "unable to create printer thread\n");
-        return -1;
+        return GrooveErrorSystemResources;
     }
 
     return 0;

@@ -40,6 +40,9 @@ const char *groove_strerror(int error) {
         case GrooveErrorInvalidChannelLayout: return "invalid channel layout";
         case GrooveErrorFileNotFound: return "file not found";
         case GrooveErrorPermissions: return "insufficient permissions";
+        case GrooveErrorEncoderNotFound: return "encoder not found";
+        case GrooveErrorOpeningDevice: return "unable to open device";
+        case GrooveErrorDeviceParams: return "device parameters not supported";
     }
     return "(invalid error)";
 }

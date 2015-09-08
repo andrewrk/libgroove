@@ -101,7 +101,7 @@ static int find_best_format(struct SoundIoDevice *device, bool exact,
     }
 
     if (exact)
-        return -1;
+        return GrooveErrorDeviceParams;
 
     for (int i = 0; i < array_length(prioritized_formats); i += 1) {
         enum SoundIoFormat try_fmt = prioritized_formats[i];
@@ -112,7 +112,7 @@ static int find_best_format(struct SoundIoDevice *device, bool exact,
         }
     }
 
-    return -1;
+    return GrooveErrorDeviceParams;
 }
 
 static int find_best_sample_rate(struct SoundIoDevice *device, bool exact,
@@ -128,7 +128,7 @@ static int find_best_sample_rate(struct SoundIoDevice *device, bool exact,
     }
 
     if (exact)
-        return -1;
+        return GrooveErrorDeviceParams;
 
     *actual_rate = soundio_device_nearest_sample_rate(device, target_rate);
 
@@ -147,7 +147,7 @@ static int find_best_channel_layout(struct SoundIoDevice *device, bool exact,
     }
 
     if (exact)
-        return -1;
+        return GrooveErrorDeviceParams;
 
     for (int i = 0; i < array_length(prioritized_layouts); i += 1) {
         enum SoundIoChannelLayoutId try_layout_id = prioritized_layouts[i];
@@ -158,7 +158,7 @@ static int find_best_channel_layout(struct SoundIoDevice *device, bool exact,
         }
     }
 
-    return -1;
+    return GrooveErrorDeviceParams;
 }
 
 static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType type) {
@@ -538,8 +538,7 @@ static int open_audio_device(struct GroovePlayer *player,
     p->outstream = soundio_outstream_create(device);
     if (!p->outstream) {
         soundio_device_unref(device);
-        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: out of memory\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
     if ((err = find_best_format(device, use_exact_audio_format, target_format->format,
@@ -577,9 +576,11 @@ static int open_audio_device(struct GroovePlayer *player,
     p->outstream->write_callback = audio_callback;
 
     if ((err = soundio_outstream_open(p->outstream))) {
+        soundio_outstream_destroy(p->outstream);
+        p->outstream = NULL;
         soundio_device_unref(device);
         av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", soundio_strerror(err));
-        return -1;
+        return GrooveErrorOpeningDevice;
     }
     double sink_buffer_seconds = max(4.0, p->outstream->software_latency);
     p->sink->buffer_size_bytes = sink_buffer_seconds * p->outstream->sample_rate * p->outstream->bytes_per_frame;
@@ -596,11 +597,11 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
     p->sink->pause = sink_pause;
     p->sink->play = sink_play;
 
-    if (open_audio_device(player, &player->target_audio_format, &player->actual_audio_format,
-                player->use_exact_audio_format))
+    if ((err = open_audio_device(player, &player->target_audio_format, &player->actual_audio_format,
+                player->use_exact_audio_format)))
     {
         groove_player_detach(player);
-        return -1;
+        return err;
     }
 
     // based on spec that we got, attach a sink with those properties
@@ -609,22 +610,21 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
     if (p->sink->audio_format.format == SoundIoFormatInvalid) {
         groove_player_detach(player);
         av_log(NULL, AV_LOG_ERROR, "unsupported audio device sample format\n");
-        return -1;
+        return GrooveErrorDeviceParams;
     }
 
     if (player->use_exact_audio_format) {
         p->sink->disable_resample = 1;
 
-        if (pthread_create(&p->device_thread_id, NULL, device_thread_run, player) != 0) {
+        if (pthread_create(&p->device_thread_id, NULL, device_thread_run, player)) {
             groove_player_detach(player);
             av_log(NULL, AV_LOG_ERROR, "unable to create device thread\n");
-            return -1;
+            return GrooveErrorSystemResources;
         }
         p->device_thread_inited = true;
     }
 
-    err = groove_sink_attach(p->sink, playlist);
-    if (err < 0) {
+    if ((err = groove_sink_attach(p->sink, playlist))) {
         groove_player_detach(player);
         av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
         return err;

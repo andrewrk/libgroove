@@ -86,6 +86,9 @@ enum GrooveError {
     GrooveErrorInvalidChannelLayout = -14,
     GrooveErrorFileNotFound         = -15,
     GrooveErrorPermissions          = -16,
+    GrooveErrorEncoderNotFound      = -17,
+    GrooveErrorOpeningDevice        = -18,
+    GrooveErrorDeviceParams         = -19,
 };
 
 /// Specifies when the sink will stop decoding.

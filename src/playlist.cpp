@@ -108,21 +108,18 @@ static int frame_size(const AVFrame *frame) {
         av_get_bytes_per_sample((AVSampleFormat)frame->format) * frame->nb_samples;
 }
 
-static struct GrooveBuffer * frame_to_groove_buffer(struct GroovePlaylist *playlist,
+static struct GrooveBuffer *frame_to_groove_buffer(struct GroovePlaylist *playlist,
         struct GrooveSink *sink, AVFrame *frame)
 {
     struct GrooveBufferPrivate *b = allocate<GrooveBufferPrivate>(1);
 
-    if (!b) {
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer\n");
+    if (!b)
         return NULL;
-    }
 
     struct GrooveBuffer *buffer = &b->externals;
 
     if (pthread_mutex_init(&b->mutex, NULL) != 0) {
         deallocate(b);
-        av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
         return NULL;
     }
 
@@ -196,7 +193,11 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
             av_strerror(err, p->strbuf, sizeof(p->strbuf));
             av_log(NULL, AV_LOG_ERROR, "error writing frame to buffersrc: %s\n",
                     p->strbuf);
-            return -1;
+            if (err == AVERROR(ENOMEM)) {
+                return GrooveErrorNoMem;
+            } else {
+                return GrooveErrorDecoding;
+            }
         }
 
         // for each data format in the sink map, pull filtered audio from its
@@ -219,12 +220,12 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
                 if (err < 0) {
                     av_frame_free(&oframe);
                     av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
-                    return -1;
+                    return GrooveErrorDecoding;
                 }
                 struct GrooveBuffer *buffer = frame_to_groove_buffer(playlist, example_sink, oframe);
                 if (!buffer) {
                     av_frame_free(&oframe);
-                    return -1;
+                    return GrooveErrorNoMem;
                 }
                 data_size += buffer->size;
                 struct SinkStack *stack_item = map_item->stack_head;

@@ -55,8 +55,7 @@ struct GrooveLoudnessDetectorPrivate {
 static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
     struct GrooveLoudnessDetectorInfo *info = allocate<GrooveLoudnessDetectorInfo>(1);
     if (!info) {
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate loudness detector info\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     info->item = d->info_head;
     info->duration = d->track_duration;
@@ -86,8 +85,7 @@ static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
     int new_size = d->state_history_count * 2;
     d->all_track_states = reallocate_nonzero(d->all_track_states, new_size * sizeof(ebur128_state *));
     if (!d->all_track_states) {
-        av_log(NULL, AV_LOG_ERROR, "unable to reallocate state pointer array\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     int zero_count = new_size - d->state_history_count;
     memset(d->all_track_states + d->state_history_count, 0, zero_count * sizeof(ebur128_state *));
@@ -349,21 +347,19 @@ int groove_loudness_detector_attach(struct GrooveLoudnessDetector *detector,
     d->cur_track_index = 0;
     if (!d->all_track_states) {
         groove_loudness_detector_detach(detector);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate ebur128 track state pointers\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     memset(d->all_track_states, 0, sizeof(ebur128_state *) * d->state_history_count);
 
-    if (groove_sink_attach(d->sink, playlist) < 0) {
+    int err;
+    if ((err = groove_sink_attach(d->sink, playlist))) {
         groove_loudness_detector_detach(detector);
-        av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
-        return -1;
+        return err;
     }
 
-    if (pthread_create(&d->thread_id, NULL, detect_thread, detector) != 0) {
+    if (pthread_create(&d->thread_id, NULL, detect_thread, detector)) {
         groove_loudness_detector_detach(detector);
-        av_log(NULL, AV_LOG_ERROR, "unable to create detector thread\n");
-        return -1;
+        return GrooveErrorSystemResources;
     }
 
     return 0;

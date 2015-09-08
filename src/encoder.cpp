@@ -123,10 +123,10 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
     if (errcode < 0) {
         av_strerror(errcode, e->strbuf, sizeof(e->strbuf));
         av_log(NULL, AV_LOG_ERROR, "error encoding audio frame: %s\n", e->strbuf);
-        return -1;
+        return GrooveErrorEncoding;
     }
     if (!got_packet)
-        return -1;
+        return GrooveErrorEncoding;
 
     av_write_frame(e->fmt_ctx, &e->pkt);
     av_free_packet(&e->pkt);
@@ -157,16 +157,14 @@ static int init_avcontext(struct GrooveEncoder *encoder) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
     e->fmt_ctx = avformat_alloc_context();
     if (!e->fmt_ctx) {
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate format context\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     e->fmt_ctx->pb = e->avio;
     e->fmt_ctx->oformat = e->oformat;
 
     e->stream = avformat_new_stream(e->fmt_ctx, e->codec);
     if (!e->stream) {
-        av_log(NULL, AV_LOG_ERROR, "unable to create output stream\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
     AVCodecContext *codec_ctx = e->stream->codec;
@@ -181,7 +179,7 @@ static int init_avcontext(struct GrooveEncoder *encoder) {
     if (err < 0) {
         av_strerror(err, e->strbuf, sizeof(e->strbuf));
         av_log(NULL, AV_LOG_ERROR, "unable to open codec: %s\n", e->strbuf);
-        return -1;
+        return GrooveErrorEncoding;
     }
     e->stream->codec = codec_ctx;
 
@@ -339,16 +337,14 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     struct GrooveBufferPrivate *b = allocate<GrooveBufferPrivate>(1);
 
     if (!b) {
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate buffer\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
     struct GrooveBuffer *buffer = &b->externals;
 
-    if (pthread_mutex_init(&b->mutex, NULL) != 0) {
+    if (pthread_mutex_init(&b->mutex, NULL)) {
         deallocate(b);
-        av_log(NULL, AV_LOG_ERROR, "unable to create mutex\n");
-        return -1;
+        return GrooveErrorSystemResources;
     }
 
     buffer->item = e->encode_head;
@@ -362,8 +358,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
         deallocate(buffer);
         deallocate(b);
         pthread_mutex_destroy(&b->mutex);
-        av_log(NULL, AV_LOG_ERROR, "unable to create data buffer\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     memcpy(b->data, buf, buf_size);
 
@@ -629,8 +624,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
             encoder->filename, encoder->mime_type);
     if (!e->oformat) {
         groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to determine format\n");
-        return -1;
+        return GrooveErrorUnknownFormat;
     }
 
     // av_guess_codec ignores mime_type, filename, and codec_short_name. see
@@ -655,8 +649,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
         codec = avcodec_find_encoder(codec_id);
         if (!codec) {
             groove_encoder_detach(encoder);
-            av_log(NULL, AV_LOG_ERROR, "unable to find encoder\n");
-            return -1;
+            return GrooveErrorEncoderNotFound;
         }
     }
     e->codec = codec;
@@ -691,16 +684,14 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
         0 : e->stream->codec->frame_size;
     e->sink->gain = encoder->gain;
 
-    if (groove_sink_attach(e->sink, playlist) < 0) {
+    if ((err = groove_sink_attach(e->sink, playlist))) {
         groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
-        return -1;
+        return err;
     }
 
-    if (pthread_create(&e->thread_id, NULL, encode_thread, encoder) != 0) {
+    if (pthread_create(&e->thread_id, NULL, encode_thread, encoder)) {
         groove_encoder_detach(encoder);
-        av_log(NULL, AV_LOG_ERROR, "unable to create encoder thread\n");
-        return -1;
+        return GrooveErrorSystemResources;
     }
 
     return 0;
