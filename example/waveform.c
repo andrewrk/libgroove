@@ -52,8 +52,12 @@ int main(int argc, char * argv[]) {
     }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    struct GrooveFile *file;
-    if ((err = groove_file_open(groove, &file, input_filename))) {
+    struct GrooveFile *file = groove_file_create(groove);
+    if (!file) {
+        fprintf(stderr, "out of memory\n");
+        return 1;
+    }
+    if ((err = groove_file_open(file, input_filename, input_filename))) {
         fprintf(stderr, "unable to open %s: %s\n", input_filename, groove_strerror(err));
         return 1;
     }
@@ -105,7 +109,7 @@ int main(int argc, char * argv[]) {
     groove_waveform_destroy(waveform);
     groove_playlist_destroy(playlist);
 
-    groove_file_close(file);
+    groove_file_destroy(file);
 
     groove_destroy(groove);
 

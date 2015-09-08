@@ -144,6 +144,17 @@ struct GrooveFile {
     double override_duration;
 };
 
+struct GrooveCustomIo {
+    /// set to whatever you want. Defaults to NULL.
+    void *userdata;
+    /// A function for refilling the buffer, may be NULL.
+    int (*read_packet)(struct GrooveCustomIo *, uint8_t *buf, int buf_size);
+    /// A function for writing the buffer contents, may be NULL.
+    int (*write_packet)(struct GrooveCustomIo *, uint8_t *buf, int buf_size);
+    /// A function for seeking to specified byte position, may be NULL.
+    int64_t (*seek)(struct GrooveCustomIo *, int64_t offset, int whence);
+};
+
 struct GrooveTag;
 
 struct GroovePlaylistItem {
@@ -305,9 +316,20 @@ GROOVE_EXPORT char *groove_create_rand_name(struct Groove *,
 GROOVE_EXPORT const char *groove_tag_key(struct GrooveTag *tag);
 GROOVE_EXPORT const char *groove_tag_value(struct GrooveTag *tag);
 
-/// you are responsible for calling ::groove_file_close on the
-/// returned GrooveFile.
-GROOVE_EXPORT int groove_file_open(struct Groove *, struct GrooveFile **out_file, const char *filename);
+/// See also ::groove_file_destroy
+GROOVE_EXPORT struct GrooveFile *groove_file_create(struct Groove *);
+GROOVE_EXPORT void groove_file_destroy(struct GrooveFile *file);
+/// Open a sound file on the file system.
+/// * `filename` - the file to actually open
+/// * `filename_hint` - this value is sometimes used to influence the algorithm
+///   which decides what format the file is (for example by looking at the extension).
+///   Typically you will pass the same value for `filename` and `filename_hint`.
+///
+/// When done with the file, call ::groove_file_close.
+GROOVE_EXPORT int groove_file_open(struct GrooveFile *file,
+        const char *filename, const char *filename_hint);
+GROOVE_EXPORT int groove_file_open_custom(struct GrooveFile *file,
+        struct GrooveCustomIo *custom_io, const char *filename_hint);
 GROOVE_EXPORT void groove_file_close(struct GrooveFile *file);
 
 GROOVE_EXPORT struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file,

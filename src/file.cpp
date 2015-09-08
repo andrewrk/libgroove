@@ -14,16 +14,60 @@ static int decode_interrupt_cb(void *ctx) {
     return f ? f->abort_request.load() : 0;
 }
 
-int groove_file_open(struct Groove *groove, struct GrooveFile **out_file, const char *filename) {
-    struct GrooveFilePrivate *f = allocate<GrooveFilePrivate>(1);
-    if (!f)
-        return GrooveErrorNoMem;
+static int avio_read_packet(void *opaque, uint8_t *buf, int buf_size) {
+    struct GrooveFilePrivate *f = (GrooveFilePrivate *)opaque;
+    return f->custom_io->read_packet(f->custom_io, buf, buf_size);
+}
 
-    struct GrooveFile *file = &f->externals;
+static int avio_write_packet(void *opaque, uint8_t *buf, int buf_size) {
+    struct GrooveFilePrivate *f = (GrooveFilePrivate *)opaque;
+    return f->custom_io->write_packet(f->custom_io, buf, buf_size);
+}
 
+static int64_t avio_seek(void *opaque, int64_t offset, int whence) {
+    struct GrooveFilePrivate *f = (GrooveFilePrivate *)opaque;
+    return f->custom_io->seek(f->custom_io, offset, whence);
+}
+
+static int file_read_packet(struct GrooveCustomIo *custom_io, uint8_t *buf, int buf_size) {
+    struct GrooveFilePrivate *f = (GrooveFilePrivate *)custom_io->userdata;
+    return fread(buf, 1, buf_size, f->stdfile);
+}
+
+static int file_write_packet(struct GrooveCustomIo *custom_io, uint8_t *buf, int buf_size) {
+    struct GrooveFilePrivate *f = (GrooveFilePrivate *)custom_io->userdata;
+    return fwrite(buf, 1, buf_size, f->stdfile);
+}
+
+static int64_t file_seek(struct GrooveCustomIo *custom_io, int64_t offset, int whence) {
+    struct GrooveFilePrivate *f = (GrooveFilePrivate *)custom_io->userdata;
+    return fseek(f->stdfile, offset, whence);
+}
+
+void init_file_state(struct GrooveFilePrivate *f) {
+    Groove *groove = f->groove;
+    memset(f, 0, sizeof(GrooveFilePrivate));
     f->groove = groove;
     f->audio_stream_index = -1;
     f->seek_pos = -1;
+}
+
+struct GrooveFile *groove_file_create(struct Groove *groove) {
+    struct GrooveFilePrivate *f = allocate_nonzero<GrooveFilePrivate>(1);
+    if (!f)
+        return NULL;
+
+    init_file_state(f);
+
+    return &f->externals;
+}
+
+int groove_file_open_custom(struct GrooveFile *file, struct GrooveCustomIo *custom_io,
+        const char *filename_hint)
+{
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
+
+    f->custom_io = custom_io;
 
     if (pthread_mutex_init(&f->seek_mutex, NULL)) {
         groove_file_close(file);
@@ -37,8 +81,24 @@ int groove_file_open(struct Groove *groove, struct GrooveFile **out_file, const 
     }
     file->filename = f->ic->filename;
     f->ic->interrupt_callback.callback = decode_interrupt_cb;
-    f->ic->interrupt_callback.opaque = file;
-    int err = avformat_open_input(&f->ic, filename, NULL, NULL);
+    f->ic->interrupt_callback.opaque = f;
+
+    const int buffer_size = 8 * 1024;
+    f->avio_buf = allocate_nonzero<unsigned char>(buffer_size);
+    if (!f->avio_buf) {
+        groove_file_close(file);
+        return GrooveErrorNoMem;
+    }
+
+    f->avio = avio_alloc_context(f->avio_buf, buffer_size, 0, f,
+            avio_read_packet, avio_write_packet, avio_seek);
+    if (!f->avio) {
+        groove_file_close(file);
+        return GrooveErrorNoMem;
+    }
+
+    f->ic->pb = f->avio;
+    int err = avformat_open_input(&f->ic, filename_hint, NULL, NULL);
     if (err < 0) {
         assert(err != AVERROR(EINVAL));
         groove_file_close(file);
@@ -102,9 +162,36 @@ int groove_file_open(struct Groove *groove, struct GrooveFile **out_file, const 
     // copy the audio stream metadata to the context metadata
     av_dict_copy(&f->ic->metadata, f->audio_st->metadata, 0);
 
-
-    *out_file = file;
     return 0;
+}
+
+int groove_file_open(struct GrooveFile *file,
+        const char *filename, const char *filename_hint)
+{
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
+
+    f->stdfile = fopen(filename, "rb");
+    if (!f->stdfile) {
+        int err = errno;
+        assert(err != EINVAL);
+        groove_file_close(file);
+        if (err == ENOMEM) {
+            return GrooveErrorNoMem;
+        } else if (err == ENOENT) {
+            return GrooveErrorFileNotFound;
+        } else if (err == EPERM) {
+            return GrooveErrorPermissions;
+        } else {
+            return GrooveErrorFileSystem;
+        }
+    }
+
+    f->prealloc_custom_io.userdata = f;
+    f->prealloc_custom_io.read_packet = file_read_packet;
+    f->prealloc_custom_io.write_packet = file_write_packet;
+    f->prealloc_custom_io.seek = file_seek;
+
+    return groove_file_open_custom(file, &f->prealloc_custom_io, filename_hint);
 }
 
 // should be safe to call no matter what state the file is in
@@ -134,6 +221,25 @@ void groove_file_close(struct GrooveFile *file) {
         avformat_close_input(&f->ic);
 
     pthread_mutex_destroy(&f->seek_mutex);
+
+    if (f->avio)
+        av_free(f->avio);
+
+    deallocate(f->avio_buf);
+
+    if (f->stdfile)
+        fclose(f->stdfile);
+
+    init_file_state(f);
+}
+
+void groove_file_destroy(struct GrooveFile *file) {
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)file;
+
+    if (!file)
+        return;
+
+    groove_file_close(file);
 
     deallocate(f);
 }

@@ -37,7 +37,11 @@ int main(int argc, char * argv[]) {
     }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    if ((err = groove_file_open(groove, &file, filename))) {
+    if (!(file = groove_file_create(groove))) {
+        fprintf(stderr, "out of memory\n");
+        return 1;
+    }
+    if ((err = groove_file_open(file, filename, filename))) {
         fprintf(stderr, "error opening %s: %s\n", filename, groove_strerror(err));
         return 1;
     }
@@ -45,7 +49,7 @@ int main(int argc, char * argv[]) {
         arg = argv[i];
         if (strcmp("--update", arg) == 0) {
             if (i + 2 >= argc) {
-                groove_file_close(file);
+                groove_file_destroy(file);
                 fprintf(stderr, "--update requires 2 arguments");
                 return usage(exe);
             }
@@ -54,14 +58,14 @@ int main(int argc, char * argv[]) {
             groove_file_metadata_set(file, key, value, 0);
         } else if (strcmp("--delete", arg) == 0) {
             if (i + 1 >= argc) {
-                groove_file_close(file);
+                groove_file_destroy(file);
                 fprintf(stderr, "--delete requires 1 argument");
                 return usage(exe);
             }
             key = argv[++i];
             groove_file_metadata_set(file, key, NULL, 0);
         } else {
-            groove_file_close(file);
+            groove_file_destroy(file);
             return usage(exe);
         }
     }

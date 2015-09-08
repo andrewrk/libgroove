@@ -32,8 +32,12 @@ int main(int argc, char * argv[]) {
 
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
-        struct GrooveFile *file;
-        if ((err = groove_file_open(groove, &file, filename))) {
+        struct GrooveFile *file = groove_file_create(groove);
+        if (!file) {
+            fprintf(stderr, "out of memory\n");
+            return 1;
+        }
+        if ((err = groove_file_open(file, filename, filename))) {
             fprintf(stderr, "Unable to open %s: %s\n", filename, groove_strerror(err));
             continue;
         }
@@ -66,7 +70,7 @@ int main(int argc, char * argv[]) {
         struct GrooveFile *file = item->file;
         struct GroovePlaylistItem *next = item->next;
         groove_playlist_remove(playlist, item);
-        groove_file_close(file);
+        groove_file_destroy(file);
         item = next;
     }
 

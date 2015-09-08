@@ -52,7 +52,9 @@
  * `groove_init` and `groove_finish` no longer exist. Instead, use
    `groove_create` and `groove_destroy`. Compilation errors will lead you
    toward correct usage.
- * `groove_file_open` now returns a meaningful error code.
+ * Instead of `groove_file_open` now use `groove_file_create` and then
+   `groove_file_open`. Then `groove_file_destroy` when done.
+ * Instead of `groove_file_close` use `groove_file_destroy`.
 
 
 ### Version 4.3.0 (2015-05-25)

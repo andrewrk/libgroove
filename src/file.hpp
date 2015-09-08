@@ -22,6 +22,9 @@ struct GrooveFilePrivate {
     AVFormatContext *ic;
     AVCodec *decoder;
     AVStream *audio_st;
+    unsigned char *avio_buf;
+    AVIOContext *avio;
+    struct GrooveCustomIo *custom_io;
 
     // this mutex protects the fields in this block
     pthread_mutex_t seek_mutex;
@@ -38,6 +41,8 @@ struct GrooveFilePrivate {
     int tempfile_exists;
 
     int paused;
+    struct GrooveCustomIo prealloc_custom_io;
+    FILE *stdfile;
 };
 
 #endif

@@ -466,7 +466,7 @@ void groove_encoder_destroy(struct GrooveEncoder *encoder) {
         pthread_cond_destroy(&e->drain_cond);
 
     if (e->avio)
-        deallocate(e->avio);
+        av_free(e->avio);
 
     if (e->avio_buf)
         deallocate(e->avio_buf);

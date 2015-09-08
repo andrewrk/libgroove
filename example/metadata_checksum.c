@@ -127,8 +127,11 @@ int main(int argc, char * argv[]) {
         panic("out of memory");
 
     fprintf(stderr, "Scanning file...\n");
-    struct GrooveFile *file;
-    if ((err = groove_file_open(groove, &file, filename))) {
+    struct GrooveFile *file = groove_file_create(groove);
+    if (!file)
+        panic("out of memory");
+
+    if ((err = groove_file_open(file, filename, filename))) {
         panic("error opening %s: %s", filename, groove_strerror(err));
     }
 
@@ -156,7 +159,7 @@ int main(int argc, char * argv[]) {
     groove_playlist_destroy(playlist);
     playlist = NULL;
     groove_file_close(file);
-    if ((err = groove_file_open(groove, &file, filename)))
+    if ((err = groove_file_open(file, filename, filename)))
         panic("error opening %s, %s", filename, groove_strerror(err));
     fprintf(stderr, "before checksum: %x\n", crc_begin);
     fprintf(stderr, "before byte count: %d\n", byte_count_begin);
@@ -197,7 +200,7 @@ int main(int argc, char * argv[]) {
 
     fprintf(stderr, "Scanning newly generated file...\n");
     groove_file_close(file);
-    if ((err = groove_file_open(groove, &file, temp_filename)))
+    if ((err = groove_file_open(file, temp_filename, filename)))
         panic("error opening %s: %s", temp_filename, groove_strerror(err));
 
     playlist = groove_playlist_create(groove);
@@ -227,7 +230,7 @@ int main(int argc, char * argv[]) {
     sink = NULL;
     groove_playlist_destroy(playlist);
     playlist = NULL;
-    groove_file_close(file);
+    groove_file_destroy(file);
 
     groove_destroy(groove);
 

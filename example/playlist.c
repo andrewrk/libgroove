@@ -92,8 +92,10 @@ int main(int argc, char * argv[]) {
                 return usage(exe);
             }
         } else {
-            struct GrooveFile *file;
-            if ((err = groove_file_open(groove, &file, arg))) {
+            struct GrooveFile *file = groove_file_create(groove);
+            if (!file)
+                panic("out of memory");
+            if ((err = groove_file_open(file, arg, arg))) {
                 panic("unable to queue %s: %s", arg, groove_strerror(err));
             }
             groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
@@ -167,7 +169,7 @@ int main(int argc, char * argv[]) {
                     struct GrooveFile *file = item->file;
                     struct GroovePlaylistItem *next = item->next;
                     groove_playlist_remove(playlist, item);
-                    groove_file_close(file);
+                    groove_file_destroy(file);
                     item = next;
                 }
                 groove_player_detach(player);
