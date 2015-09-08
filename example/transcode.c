@@ -49,9 +49,9 @@ int main(int argc, char * argv[]) {
                 return usage(argv[0]);
             }
         } else {
-            struct GrooveFile * file = groove_file_open(groove, arg);
-            if (!file) {
-                fprintf(stderr, "Error opening input file %s\n", arg);
+            struct GrooveFile *file;
+            if ((err = groove_file_open(groove, &file, arg))) {
+                fprintf(stderr, "Error opening input file %s: %s\n", arg, groove_strerror(err));
                 return 1;
             }
             groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);

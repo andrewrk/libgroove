@@ -21,6 +21,7 @@ int main(int argc, char * argv[]) {
     char *key;
     char *value;
     struct GrooveTag *tag;
+    int err;
 
     if (argc < 2)
         return usage(exe);
@@ -30,16 +31,14 @@ int main(int argc, char * argv[]) {
     filename = argv[1];
 
     struct Groove *groove;
-    int err;
     if ((err = groove_create(&groove))) {
         fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
         return 1;
     }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    file = groove_file_open(groove, filename);
-    if (!file) {
-        fprintf(stderr, "error opening file\n");
+    if ((err = groove_file_open(groove, &file, filename))) {
+        fprintf(stderr, "error opening %s: %s\n", filename, groove_strerror(err));
         return 1;
     }
     for (i = 2; i < argc; i += 1) {

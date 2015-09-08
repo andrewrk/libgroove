@@ -35,6 +35,11 @@ const char *groove_strerror(int error) {
         case GrooveErrorTooManyStreams: return "too many streams";
         case GrooveErrorEncoding: return "encoding failed";
         case GrooveErrorDecoding: return "decoding failed";
+        case GrooveErrorStreamNotFound: return "stream not found";
+        case GrooveErrorDecoderNotFound: return "decoder not found";
+        case GrooveErrorInvalidChannelLayout: return "invalid channel layout";
+        case GrooveErrorFileNotFound: return "file not found";
+        case GrooveErrorPermissions: return "insufficient permissions";
     }
     return "(invalid error)";
 }

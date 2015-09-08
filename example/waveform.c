@@ -52,9 +52,9 @@ int main(int argc, char * argv[]) {
     }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    struct GrooveFile *file = groove_file_open(groove, input_filename);
-    if (!file) {
-        fprintf(stderr, "unable to open %s\n", input_filename);
+    struct GrooveFile *file;
+    if ((err = groove_file_open(groove, &file, input_filename))) {
+        fprintf(stderr, "unable to open %s: %s\n", input_filename, groove_strerror(err));
         return 1;
     }
 

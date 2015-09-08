@@ -92,9 +92,10 @@ int main(int argc, char * argv[]) {
                 return usage(exe);
             }
         } else {
-            struct GrooveFile * file = groove_file_open(groove, arg);
-            if (!file)
-                panic("unable to queue %s", arg);
+            struct GrooveFile *file;
+            if ((err = groove_file_open(groove, &file, arg))) {
+                panic("unable to queue %s: %s", arg, groove_strerror(err));
+            }
             groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
         }
     }

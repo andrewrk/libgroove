@@ -14,53 +14,56 @@ static int decode_interrupt_cb(void *ctx) {
     return f ? f->abort_request.load() : 0;
 }
 
-struct GrooveFile *groove_file_open(struct Groove *groove, const char *filename) {
+int groove_file_open(struct Groove *groove, struct GrooveFile **out_file, const char *filename) {
     struct GrooveFilePrivate *f = allocate<GrooveFilePrivate>(1);
-    if (!f) {
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate file context\n");
-        return NULL;
-    }
+    if (!f)
+        return GrooveErrorNoMem;
+
     struct GrooveFile *file = &f->externals;
 
     f->groove = groove;
     f->audio_stream_index = -1;
     f->seek_pos = -1;
 
-    if (pthread_mutex_init(&f->seek_mutex, NULL) != 0) {
-        deallocate(f);
-        av_log(NULL, AV_LOG_ERROR, "unable to create seek mutex\n");
-        return NULL;
+    if (pthread_mutex_init(&f->seek_mutex, NULL)) {
+        groove_file_close(file);
+        return GrooveErrorSystemResources;
     }
 
     f->ic = avformat_alloc_context();
     if (!f->ic) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate format context\n");
-        return NULL;
+        return GrooveErrorNoMem;
     }
     file->filename = f->ic->filename;
     f->ic->interrupt_callback.callback = decode_interrupt_cb;
     f->ic->interrupt_callback.opaque = file;
     int err = avformat_open_input(&f->ic, filename, NULL, NULL);
     if (err < 0) {
+        assert(err != AVERROR(EINVAL));
         groove_file_close(file);
-        av_log(NULL, AV_LOG_INFO, "%s: unrecognized format\n", filename);
-        return NULL;
+        if (err == AVERROR(ENOMEM)) {
+            return GrooveErrorNoMem;
+        } else if (err == AVERROR(ENOENT)) {
+            return GrooveErrorFileNotFound;
+        } else if (err == AVERROR(EPERM)) {
+            return GrooveErrorPermissions;
+        } else {
+            return GrooveErrorUnknownFormat;
+        }
     }
 
     err = avformat_find_stream_info(f->ic, NULL);
     if (err < 0) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "%s: could not find codec parameters\n", filename);
-        return NULL;
+        return GrooveErrorStreamNotFound;
     }
 
     // set all streams to discard. in a few lines here we will find the audio
     // stream and cancel discarding it
     if (f->ic->nb_streams > INT_MAX) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "too many streams\n");
-        return NULL;
+        return GrooveErrorTooManyStreams;
     }
     int stream_count = (int)f->ic->nb_streams;
 
@@ -71,14 +74,12 @@ struct GrooveFile *groove_file_open(struct Groove *groove, const char *filename)
 
     if (f->audio_stream_index < 0) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_INFO, "%s: no audio stream found\n", filename);
-        return NULL;
+        return GrooveErrorStreamNotFound;
     }
 
     if (!f->decoder) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "%s: no decoder found\n", filename);
-        return NULL;
+        return GrooveErrorDecoderNotFound;
     }
 
     f->audio_st = f->ic->streams[f->audio_stream_index];
@@ -88,22 +89,22 @@ struct GrooveFile *groove_file_open(struct Groove *groove, const char *filename)
 
     if (avcodec_open2(avctx, f->decoder, NULL) < 0) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "unable to open decoder\n");
-        return NULL;
+        return GrooveErrorDecoding;
     }
 
     if (!avctx->channel_layout)
         avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
     if (!avctx->channel_layout) {
         groove_file_close(file);
-        av_log(NULL, AV_LOG_ERROR, "unable to guess channel layout\n");
-        return NULL;
+        return GrooveErrorInvalidChannelLayout;
     }
 
     // copy the audio stream metadata to the context metadata
     av_dict_copy(&f->ic->metadata, f->audio_st->metadata, 0);
 
-    return file;
+
+    *out_file = file;
+    return 0;
 }
 
 // should be safe to call no matter what state the file is in

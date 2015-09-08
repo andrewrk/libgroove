@@ -81,6 +81,11 @@ enum GrooveError {
     GrooveErrorTooManyStreams       =  -9,
     GrooveErrorEncoding             = -10,
     GrooveErrorDecoding             = -11,
+    GrooveErrorStreamNotFound       = -12,
+    GrooveErrorDecoderNotFound      = -13,
+    GrooveErrorInvalidChannelLayout = -14,
+    GrooveErrorFileNotFound         = -15,
+    GrooveErrorPermissions          = -16,
 };
 
 /// Specifies when the sink will stop decoding.
@@ -299,7 +304,7 @@ GROOVE_EXPORT const char *groove_tag_value(struct GrooveTag *tag);
 
 /// you are responsible for calling ::groove_file_close on the
 /// returned GrooveFile.
-GROOVE_EXPORT struct GrooveFile *groove_file_open(struct Groove *, const char *filename);
+GROOVE_EXPORT int groove_file_open(struct Groove *, struct GrooveFile **out_file, const char *filename);
 GROOVE_EXPORT void groove_file_close(struct GrooveFile *file);
 
 GROOVE_EXPORT struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file,

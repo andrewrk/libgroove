@@ -32,9 +32,9 @@ int main(int argc, char * argv[]) {
 
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
-        struct GrooveFile * file = groove_file_open(groove, filename);
-        if (!file) {
-            fprintf(stderr, "Unable to open %s\n", filename);
+        struct GrooveFile *file;
+        if ((err = groove_file_open(groove, &file, filename))) {
+            fprintf(stderr, "Unable to open %s: %s\n", filename, groove_strerror(err));
             continue;
         }
         groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
