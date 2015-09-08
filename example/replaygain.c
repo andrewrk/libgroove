@@ -20,15 +20,19 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    groove_init();
-    atexit(groove_finish);
+    struct Groove *groove;
+    int err;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    struct GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create(groove);
 
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
-        struct GrooveFile * file = groove_file_open(filename);
+        struct GrooveFile * file = groove_file_open(groove, filename);
         if (!file) {
             fprintf(stderr, "Unable to open %s\n", filename);
             continue;
@@ -36,7 +40,7 @@ int main(int argc, char * argv[]) {
         groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
     }
 
-    struct GrooveLoudnessDetector *detector = groove_loudness_detector_create();
+    struct GrooveLoudnessDetector *detector = groove_loudness_detector_create(groove);
     groove_loudness_detector_attach(detector, playlist);
 
     struct GrooveLoudnessDetectorInfo info;
@@ -69,6 +73,8 @@ int main(int argc, char * argv[]) {
     groove_loudness_detector_detach(detector);
     groove_loudness_detector_destroy(detector);
     groove_playlist_destroy(playlist);
+
+    groove_destroy(groove);
 
     return 0;
 }

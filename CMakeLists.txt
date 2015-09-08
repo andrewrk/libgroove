@@ -92,7 +92,7 @@ endif()
 set(LIBGROOVE_SOURCES
     "${CMAKE_SOURCE_DIR}/src/buffer.cpp"
     "${CMAKE_SOURCE_DIR}/src/file.cpp"
-    "${CMAKE_SOURCE_DIR}/src/global.cpp"
+    "${CMAKE_SOURCE_DIR}/src/groove.cpp"
     "${CMAKE_SOURCE_DIR}/src/player.cpp"
     "${CMAKE_SOURCE_DIR}/src/queue.cpp"
     "${CMAKE_SOURCE_DIR}/src/encoder.cpp"

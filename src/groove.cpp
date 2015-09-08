@@ -6,13 +6,20 @@
  */
 
 #include "groove_private.h"
+#include "groove.hpp"
 #include "config.h"
 #include "ffmpeg.hpp"
 #include "util.hpp"
+#include "atomics.hpp"
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/fcntl.h>
 #include <pthread.h>
 
-static int should_deinit_network = 0;
+static atomic_bool initialized = ATOMIC_VAR_INIT(false);
+static pthread_mutex_t init_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 const char *groove_strerror(int error) {
     switch ((enum GrooveError)error) {
@@ -33,7 +40,7 @@ const char *groove_strerror(int error) {
 }
 
 static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
-    if (mutex == NULL)
+    if (!mutex)
         return -1;
     pthread_mutex_t *pmutex;
     switch (op) {
@@ -57,28 +64,84 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
     return 0;
 }
 
-int groove_init(void) {
-    av_lockmgr_register(&my_lockmgr_cb);
+static int get_random_seed(uint32_t *seed) {
+    int fd = open("/dev/random", O_RDONLY|O_NONBLOCK);
+    if (fd == -1)
+        return GrooveErrorSystemResources;
 
-    srand(time(NULL));
+    int amt = read(fd, seed, 4);
+    if (amt != 4) {
+        close(fd);
+        return GrooveErrorSystemResources;
+    }
+
+    close(fd);
+    return 0;
+}
+
+// this function will only be called once
+static int internal_init(void) {
+    int err;
+    if ((err = av_lockmgr_register(&my_lockmgr_cb))) {
+        return GrooveErrorSystemResources;
+    }
+
+    uint32_t seed;
+    if ((err = get_random_seed(&seed))) {
+        return err;
+    }
+    srand(seed);
 
     // register all codecs, demux and protocols
     avcodec_register_all();
     av_register_all();
-    avformat_network_init();
     avfilter_register_all();
-
-    should_deinit_network = 1;
 
     av_log_set_level(AV_LOG_QUIET);
     return 0;
 }
 
-void groove_finish(void) {
-    if (should_deinit_network) {
-        avformat_network_deinit();
-        should_deinit_network = 0;
+static void assert_no_err(int err) {
+    assert(!err);
+}
+
+static int init_once(void) {
+    if (initialized.load())
+        return 0;
+
+    assert_no_err(pthread_mutex_lock(&init_mutex));
+    if (initialized.load()) {
+        assert_no_err(pthread_mutex_unlock(&init_mutex));
+        return 0;
     }
+    initialized.store(true);
+    int err;
+    if ((err = internal_init()))
+        return err;
+    assert_no_err(pthread_mutex_unlock(&init_mutex));
+
+    return 0;
+}
+
+int groove_create(struct Groove **out_groove) {
+    Groove *groove = allocate<Groove>(1);
+    if (!groove) {
+        groove_destroy(groove);
+        return GrooveErrorNoMem;
+    }
+
+    int err;
+    if ((err = init_once())) {
+        groove_destroy(groove);
+        return err;
+    }
+
+    *out_groove = groove;
+    return 0;
+}
+
+void groove_destroy(struct Groove *groove) {
+    deallocate(groove);
 }
 
 void groove_set_logging(int level) {
@@ -145,7 +208,7 @@ static const char *find_str_chr_rev(const char *str, int str_len, char c) {
     return NULL;
 }
 
-char *groove_create_rand_name(int *out_len, const char *file, int file_len) {
+char *groove_create_rand_name(struct Groove *, int *out_len, const char *file, int file_len) {
     static const int random_len = 16;
     static const int max_ext_len = 16;
     static const char *prefix = ".tmp";

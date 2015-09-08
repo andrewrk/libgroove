@@ -68,7 +68,7 @@ struct GroovePlayer {
     int use_exact_audio_format;
 };
 
-GROOVE_EXPORT struct GroovePlayer *groove_player_create(void);
+GROOVE_EXPORT struct GroovePlayer *groove_player_create(struct Groove *groove);
 GROOVE_EXPORT void groove_player_destroy(struct GroovePlayer *player);
 
 /// Attaches the player to the playlist instance and opens the device to

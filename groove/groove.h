@@ -121,6 +121,8 @@ struct GrooveAudioFormat {
     bool is_planar;
 };
 
+struct Groove;
+
 struct GrooveFile {
     /// read-only
     int dirty;
@@ -260,12 +262,13 @@ struct GrooveSink {
 };
 
 
-/// call once at the beginning of your program from the main thread
-/// returns 0 on success, < 0 on error
-GROOVE_EXPORT int groove_init(void);
-/// call at the end of your program to clean up. after calling this
-/// you may no longer use this API.
-GROOVE_EXPORT void groove_finish(void);
+/// You should only need one of these Groove contexts.
+///
+/// Possible errors:
+/// * GrooveErrorSystemResources
+/// * GrooveErrorNoMem
+GROOVE_EXPORT int groove_create(struct Groove **groove);
+GROOVE_EXPORT void groove_destroy(struct Groove *groove);
 
 GROOVE_EXPORT const char *groove_strerror(int error);
 
@@ -288,14 +291,15 @@ GROOVE_EXPORT const char *groove_version(void);
 /// which is in the same directory but a random filename with the same extension.
 /// the file name will start with a '.'. The caller owns the memory. The length
 /// of the returned path is returned in out_len. You can pass NULL for out_len.
-GROOVE_EXPORT char *groove_create_rand_name(int *out_len, const char *file, int file_len);
+GROOVE_EXPORT char *groove_create_rand_name(struct Groove *,
+        int *out_len, const char *file, int file_len);
 
 GROOVE_EXPORT const char *groove_tag_key(struct GrooveTag *tag);
 GROOVE_EXPORT const char *groove_tag_value(struct GrooveTag *tag);
 
 /// you are responsible for calling ::groove_file_close on the
 /// returned GrooveFile.
-GROOVE_EXPORT struct GrooveFile *groove_file_open(const char *filename);
+GROOVE_EXPORT struct GrooveFile *groove_file_open(struct Groove *, const char *filename);
 GROOVE_EXPORT void groove_file_close(struct GrooveFile *file);
 
 GROOVE_EXPORT struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file,
@@ -330,7 +334,7 @@ GROOVE_EXPORT void groove_file_audio_format(struct GrooveFile *file,
 
 
 /// A playlist keeps its sinks full.
-GROOVE_EXPORT struct GroovePlaylist *groove_playlist_create(void);
+GROOVE_EXPORT struct GroovePlaylist *groove_playlist_create(struct Groove *);
 /// This will not call ::groove_file_close on any files.
 /// It will remove all playlist items and sinks from the playlist
 GROOVE_EXPORT void groove_playlist_destroy(struct GroovePlaylist *playlist);
@@ -392,7 +396,7 @@ GROOVE_EXPORT void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist
 GROOVE_EXPORT void groove_buffer_ref(struct GrooveBuffer *buffer);
 GROOVE_EXPORT void groove_buffer_unref(struct GrooveBuffer *buffer);
 
-GROOVE_EXPORT struct GrooveSink *groove_sink_create(void);
+GROOVE_EXPORT struct GrooveSink *groove_sink_create(struct Groove *);
 GROOVE_EXPORT void groove_sink_destroy(struct GrooveSink *sink);
 
 /// before calling this, set audio_format

@@ -42,7 +42,7 @@ struct GrooveFingerprinter {
     struct GroovePlaylist *playlist;
 };
 
-GROOVE_EXPORT struct GrooveFingerprinter *groove_fingerprinter_create(void);
+GROOVE_EXPORT struct GrooveFingerprinter *groove_fingerprinter_create(struct Groove *);
 GROOVE_EXPORT void groove_fingerprinter_destroy(struct GrooveFingerprinter *printer);
 
 /// once you attach, you must detach before destroying the playlist

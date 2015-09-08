@@ -52,7 +52,7 @@ struct GrooveLoudnessDetector {
     struct GroovePlaylist *playlist;
 };
 
-GROOVE_EXPORT struct GrooveLoudnessDetector *groove_loudness_detector_create(void);
+GROOVE_EXPORT struct GrooveLoudnessDetector *groove_loudness_detector_create(struct Groove *);
 GROOVE_EXPORT void groove_loudness_detector_destroy(struct GrooveLoudnessDetector *detector);
 
 /// once you attach, you must detach before destroying the playlist

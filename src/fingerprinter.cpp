@@ -22,6 +22,7 @@
 struct GrooveFingerprinterPrivate {
     struct GrooveFingerprinter externals;
 
+    struct Groove *groove;
     int state_history_count;
 
     // index into all_track_states
@@ -210,13 +211,14 @@ static void sink_flush(struct GrooveSink *sink) {
     pthread_mutex_unlock(&p->info_head_mutex);
 }
 
-struct GrooveFingerprinter *groove_fingerprinter_create(void) {
+struct GrooveFingerprinter *groove_fingerprinter_create(struct Groove *groove) {
     struct GrooveFingerprinterPrivate *p = allocate<GrooveFingerprinterPrivate>(1);
     if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate fingerprinter\n");
         return NULL;
     }
     p->abort_request.store(false);
+    p->groove = groove;
 
     struct GrooveFingerprinter *printer = &p->externals;
 
@@ -246,7 +248,7 @@ struct GrooveFingerprinter *groove_fingerprinter_create(void) {
     p->info_queue->get = info_queue_get;
     p->info_queue->purge = info_queue_purge;
 
-    p->sink = groove_sink_create();
+    p->sink = groove_sink_create(groove);
     if (!p->sink) {
         groove_fingerprinter_destroy(printer);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate sink\n");

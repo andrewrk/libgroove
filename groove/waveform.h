@@ -64,7 +64,7 @@ struct GrooveWaveform {
     int sink_buffer_size_bytes;
 };
 
-GROOVE_EXPORT struct GrooveWaveform *groove_waveform_create(void);
+GROOVE_EXPORT struct GrooveWaveform *groove_waveform_create(struct Groove *);
 GROOVE_EXPORT void groove_waveform_destroy(struct GrooveWaveform *waveform);
 
 /// Once you attach, you must detach before destroying the playlist

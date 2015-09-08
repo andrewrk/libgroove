@@ -45,11 +45,14 @@ int main(int argc, char * argv[]) {
     if (!input_filename)
         return usage(exe);
 
-    groove_init();
-    atexit(groove_finish);
+    struct Groove *groove;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    struct GrooveFile *file = groove_file_open(input_filename);
+    struct GrooveFile *file = groove_file_open(groove, input_filename);
     if (!file) {
         fprintf(stderr, "unable to open %s\n", input_filename);
         return 1;
@@ -57,11 +60,11 @@ int main(int argc, char * argv[]) {
 
     file->override_duration = override_duration;
 
-    struct GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create(groove);
 
     groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
 
-    struct GrooveWaveform *waveform = groove_waveform_create();
+    struct GrooveWaveform *waveform = groove_waveform_create(groove);
     if (!waveform) {
         fprintf(stderr, "out of memory\n");
         return 1;
@@ -103,6 +106,8 @@ int main(int argc, char * argv[]) {
     groove_playlist_destroy(playlist);
 
     groove_file_close(file);
+
+    groove_destroy(groove);
 
     return 0;
 }

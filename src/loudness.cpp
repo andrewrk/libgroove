@@ -21,6 +21,8 @@
 struct GrooveLoudnessDetectorPrivate {
     struct GrooveLoudnessDetector externals;
 
+    struct Groove *groove;
+
     int state_history_count;
     // index into all_track_states
     int cur_track_index;
@@ -254,12 +256,14 @@ static void sink_flush(struct GrooveSink *sink) {
     pthread_mutex_unlock(&d->info_head_mutex);
 }
 
-struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
+struct GrooveLoudnessDetector *groove_loudness_detector_create(struct Groove *groove) {
     struct GrooveLoudnessDetectorPrivate *d = allocate<GrooveLoudnessDetectorPrivate>(1);
     if (!d) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate loudness detector\n");
         return NULL;
     }
+
+    d->groove = groove;
 
     struct GrooveLoudnessDetector *detector = &d->externals;
 
@@ -289,7 +293,7 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(void) {
     d->info_queue->get = info_queue_get;
     d->info_queue->purge = info_queue_purge;
 
-    d->sink = groove_sink_create();
+    d->sink = groove_sink_create(groove);
     if (!d->sink) {
         groove_loudness_detector_destroy(detector);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate sink\n");

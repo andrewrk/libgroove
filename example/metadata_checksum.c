@@ -111,22 +111,27 @@ int main(int argc, char * argv[]) {
 
     fprintf(stderr, "Using libgroove v%s\n", groove_version());
 
-    groove_init();
+    struct Groove *groove;
+    int err;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
-    struct GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create(groove);
 
     const char *filename = argv[1];
     int temp_filename_len;
-    char *temp_filename = groove_create_rand_name(&temp_filename_len, filename, strlen(filename));
+    char *temp_filename = groove_create_rand_name(groove, &temp_filename_len, filename, strlen(filename));
     if (!temp_filename)
         panic("out of memory");
 
     fprintf(stderr, "Scanning file...\n");
-    struct GrooveFile *file = groove_file_open(filename);
+    struct GrooveFile *file = groove_file_open(groove, filename);
     if (!file)
         panic("error opening %s", filename);
 
-    struct GrooveSink *sink = groove_sink_create();
+    struct GrooveSink *sink = groove_sink_create(groove);
     sink->audio_format.sample_rate = 44100;
     sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdMono);
     sink->audio_format.format = SoundIoFormatS16NE;
@@ -150,7 +155,7 @@ int main(int argc, char * argv[]) {
     groove_playlist_destroy(playlist);
     playlist = NULL;
     groove_file_close(file);
-    file = groove_file_open(filename);
+    file = groove_file_open(groove, filename);
     if (!file)
         panic("error opening %s", filename);
     fprintf(stderr, "before checksum: %x\n", crc_begin);
@@ -192,13 +197,13 @@ int main(int argc, char * argv[]) {
 
     fprintf(stderr, "Scanning newly generated file...\n");
     groove_file_close(file);
-    file = groove_file_open(temp_filename);
+    file = groove_file_open(groove, temp_filename);
     if (!file)
         panic("error opening %s", temp_filename);
 
-    playlist = groove_playlist_create();
+    playlist = groove_playlist_create(groove);
 
-    sink = groove_sink_create();
+    sink = groove_sink_create(groove);
     sink->audio_format.sample_rate = 44100;
     sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdMono);
     sink->audio_format.format = SoundIoFormatS16NE;
@@ -225,7 +230,7 @@ int main(int argc, char * argv[]) {
     playlist = NULL;
     groove_file_close(file);
 
-    groove_finish();
+    groove_destroy(groove);
 
     if (crc_begin != crc_end || byte_count_begin != byte_count_end) {
         fprintf(stderr, "checksum failed");

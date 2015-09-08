@@ -22,6 +22,7 @@
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
 
+    struct Groove *groove;
     struct GrooveBuffer *audio_buf;
     size_t audio_buf_size; // in frames
     size_t audio_buf_index; // in frames
@@ -447,7 +448,7 @@ static void sink_flush(struct GrooveSink *sink) {
     pthread_mutex_unlock(&p->play_head_mutex);
 }
 
-struct GroovePlayer *groove_player_create(void) {
+struct GroovePlayer *groove_player_create(struct Groove *groove) {
     struct GroovePlayerPrivate *p = allocate<GroovePlayerPrivate>(1);
 
     if (!p) {
@@ -456,9 +457,10 @@ struct GroovePlayer *groove_player_create(void) {
     }
     struct GroovePlayer *player = &p->externals;
 
+    p->groove = groove;
     p->request_device_reopen.store(false);
 
-    p->sink = groove_sink_create();
+    p->sink = groove_sink_create(groove);
     if (!p->sink) {
         groove_player_destroy(player);
         av_log(NULL, AV_LOG_ERROR,"unable to create sink: out of memory\n");

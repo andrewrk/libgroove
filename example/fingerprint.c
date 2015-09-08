@@ -15,11 +15,15 @@ int main(int argc, char * argv[]) {
     if (argc < 2)
         return usage(argv[0]);
 
-    groove_init();
-    atexit(groove_finish);
+    struct Groove *groove;
+    int err;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    struct GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create(groove);
 
     int raw = 0;
 
@@ -33,7 +37,7 @@ int main(int argc, char * argv[]) {
                 return usage(argv[0]);
             }
         } else {
-            struct GrooveFile * file = groove_file_open(arg);
+            struct GrooveFile * file = groove_file_open(groove, arg);
             if (!file) {
                 fprintf(stderr, "Unable to open %s\n", arg);
                 continue;
@@ -42,7 +46,7 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    struct GrooveFingerprinter *printer = groove_fingerprinter_create();
+    struct GrooveFingerprinter *printer = groove_fingerprinter_create(groove);
     groove_fingerprinter_attach(printer, playlist);
 
     struct GrooveFingerprinterInfo info;
@@ -84,6 +88,7 @@ int main(int argc, char * argv[]) {
     groove_fingerprinter_detach(printer);
     groove_fingerprinter_destroy(printer);
     groove_playlist_destroy(playlist);
+    groove_destroy(groove);
 
     return 0;
 }

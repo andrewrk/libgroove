@@ -34,15 +34,19 @@ int main(int argc, char * argv[]) {
     const char *exe = argv[0];
     if (argc < 2) return usage(exe);
 
-    groove_init();
-    atexit(groove_finish);
+    struct Groove *groove;
+    int err;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
-    struct GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create(groove);
 
     if (!playlist)
         panic("create playlist: out of memory");
 
-    struct GroovePlayer *player = groove_player_create();
+    struct GroovePlayer *player = groove_player_create(groove);
 
     if (!player)
         panic("out of memory");
@@ -88,7 +92,7 @@ int main(int argc, char * argv[]) {
                 return usage(exe);
             }
         } else {
-            struct GrooveFile * file = groove_file_open(arg);
+            struct GrooveFile * file = groove_file_open(groove, arg);
             if (!file)
                 panic("unable to queue %s", arg);
             groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
@@ -99,7 +103,7 @@ int main(int argc, char * argv[]) {
     if (!soundio)
         panic("out of memory");
 
-    int err = (backend == SoundIoBackendNone) ?
+    err = (backend == SoundIoBackendNone) ?
         soundio_connect(soundio) : soundio_connect_backend(soundio, backend);
     if (err)
         panic("error connecting %s", soundio_strerror(err));
@@ -182,5 +186,7 @@ int main(int argc, char * argv[]) {
             break;
         }
     }
+
+    groove_destroy(groove);
     return 1;
 }

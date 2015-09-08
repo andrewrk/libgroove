@@ -18,6 +18,7 @@
 
 struct GrooveEncoderPrivate {
     struct GrooveEncoder externals;
+    struct Groove *groove;
     struct GrooveQueue *audioq;
     struct GrooveSink *sink;
     AVFormatContext *fmt_ctx;
@@ -376,7 +377,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     return 0;
 }
 
-struct GrooveEncoder *groove_encoder_create(void) {
+struct GrooveEncoder *groove_encoder_create(struct Groove *groove) {
     struct GrooveEncoderPrivate *e = allocate<GrooveEncoderPrivate>(1);
 
     if (!e) {
@@ -385,6 +386,7 @@ struct GrooveEncoder *groove_encoder_create(void) {
     }
     struct GrooveEncoder *encoder = &e->externals;
 
+    e->groove = groove;
     e->abort_request.store(false);
 
     const int buffer_size = 4 * 1024;
@@ -429,7 +431,7 @@ struct GrooveEncoder *groove_encoder_create(void) {
     e->audioq->get = audioq_get;
     e->audioq->purge = audioq_purge;
 
-    e->sink = groove_sink_create();
+    e->sink = groove_sink_create(groove);
     if (!e->sink) {
         groove_encoder_destroy(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate sink\n");

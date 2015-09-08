@@ -67,7 +67,7 @@ struct GrooveEncoder {
     struct GrooveAudioFormat actual_audio_format;
 };
 
-GROOVE_EXPORT struct GrooveEncoder *groove_encoder_create(void);
+GROOVE_EXPORT struct GrooveEncoder *groove_encoder_create(struct Groove *);
 /// detach before destroying
 GROOVE_EXPORT void groove_encoder_destroy(struct GrooveEncoder *encoder);
 

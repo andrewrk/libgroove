@@ -49,6 +49,10 @@
    - `GroovePlayer::device_index`
    - `GROOVE_PLAYER_DEFAULT_DEVICE`
    - `GROOVE_PLAYER_DUMMY_DEVICE`
+ * `groove_init` and `groove_finish` no longer exist. Instead, use
+   `groove_create` and `groove_destroy`. Compilation errors will lead you
+   toward correct usage.
+
 
 ### Version 4.3.0 (2015-05-25)
 

@@ -16,6 +16,7 @@
 
 struct GrooveSinkPrivate {
     struct GrooveSink externals;
+    struct Groove *groove;
     struct GrooveQueue *audioq;
     atomic_int audioq_size; // in bytes
     int min_audioq_size; // in bytes
@@ -35,6 +36,7 @@ struct SinkMap {
 
 struct GroovePlaylistPrivate {
     struct GroovePlaylist externals;
+    struct Groove *groove;
     pthread_t thread_id;
     atomic_bool abort_request;
 
@@ -936,13 +938,15 @@ int groove_sink_buffer_peek(struct GrooveSink *sink, int block) {
     return groove_queue_peek(s->audioq, block);
 }
 
-struct GroovePlaylist * groove_playlist_create(void) {
+struct GroovePlaylist * groove_playlist_create(struct Groove *groove) {
     struct GroovePlaylistPrivate *p = allocate<GroovePlaylistPrivate>(1);
     if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate playlist\n");
         return NULL;
     }
     struct GroovePlaylist *playlist = &p->externals;
+
+    p->groove = groove;
 
     // the one that the playlist can read
     playlist->gain = 1.0;
@@ -1283,13 +1287,15 @@ int groove_playlist_playing(struct GroovePlaylist *playlist) {
     return !p->paused;
 }
 
-struct GrooveSink * groove_sink_create(void) {
+struct GrooveSink * groove_sink_create(struct Groove *groove) {
     struct GrooveSinkPrivate *s = allocate<GrooveSinkPrivate>(1);
 
     if (!s) {
         av_log(NULL, AV_LOG_ERROR, "could not create sink: out of memory\n");
         return NULL;
     }
+
+    s->groove = groove;
 
     s->audioq_size.store(0);
     s->audioq_contains_end.store(false);

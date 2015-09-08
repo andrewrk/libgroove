@@ -17,6 +17,7 @@ static const int sample_rate = 44100;
 struct GrooveWaveformPrivate {
     struct GrooveWaveform externals;
 
+    struct Groove *groove;
     struct GrooveSink *sink;
     struct GrooveQueue *info_queue;
     int info_queue_bytes;
@@ -253,10 +254,12 @@ static void sink_flush(struct GrooveSink *sink) {
     pthread_mutex_unlock(&w->info_head_mutex);
 }
 
-struct GrooveWaveform *groove_waveform_create(void) {
+struct GrooveWaveform *groove_waveform_create(struct Groove *groove) {
     struct GrooveWaveformPrivate *w = allocate<GrooveWaveformPrivate>(1);
     if (!w)
         return nullptr;
+
+    w->groove = groove;
 
     struct GrooveWaveform *waveform = &w->externals;
 
@@ -284,7 +287,7 @@ struct GrooveWaveform *groove_waveform_create(void) {
     w->info_queue->get = info_queue_get;
     w->info_queue->purge = info_queue_purge;
 
-    w->sink = groove_sink_create();
+    w->sink = groove_sink_create(groove);
     if (!w->sink) {
         groove_waveform_destroy(waveform);
         return NULL;

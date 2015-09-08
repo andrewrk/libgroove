@@ -7,13 +7,14 @@
 
 #include "file.hpp"
 #include "util.hpp"
+#include "groove.hpp"
 
 static int decode_interrupt_cb(void *ctx) {
     struct GrooveFilePrivate *f = (GrooveFilePrivate *)ctx;
     return f ? f->abort_request.load() : 0;
 }
 
-struct GrooveFile *groove_file_open(const char *filename) {
+struct GrooveFile *groove_file_open(struct Groove *groove, const char *filename) {
     struct GrooveFilePrivate *f = allocate<GrooveFilePrivate>(1);
     if (!f) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate file context\n");
@@ -21,6 +22,7 @@ struct GrooveFile *groove_file_open(const char *filename) {
     }
     struct GrooveFile *file = &f->externals;
 
+    f->groove = groove;
     f->audio_stream_index = -1;
     f->seek_pos = -1;
 
@@ -352,7 +354,8 @@ int groove_file_save(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     int temp_filename_len;
-    char *temp_filename = groove_create_rand_name(&temp_filename_len, f->ic->filename, strlen(f->ic->filename));
+    char *temp_filename = groove_create_rand_name(f->groove,
+            &temp_filename_len, f->ic->filename, strlen(f->ic->filename));
 
     if (!temp_filename) {
         cleanup_save(file);

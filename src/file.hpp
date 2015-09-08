@@ -16,6 +16,7 @@
 
 struct GrooveFilePrivate {
     struct GrooveFile externals;
+    struct Groove *groove;
     int audio_stream_index;
     atomic_bool abort_request; // true when we're closing the file
     AVFormatContext *ic;

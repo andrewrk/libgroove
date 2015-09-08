@@ -28,10 +28,16 @@ int main(int argc, char * argv[]) {
     printf("Using libgroove v%s\n", groove_version());
 
     filename = argv[1];
-    groove_init();
-    atexit(groove_finish);
+
+    struct Groove *groove;
+    int err;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
-    file = groove_file_open(filename);
+
+    file = groove_file_open(groove, filename);
     if (!file) {
         fprintf(stderr, "error opening file\n");
         return 1;
@@ -68,9 +74,10 @@ int main(int argc, char * argv[]) {
     printf("duration=%f\n", groove_file_duration(file));
     while ((tag = groove_file_metadata_get(file, "", tag, 0)))
         printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));
-    int err;
     if (file->dirty && (err = groove_file_save(file)))
         fprintf(stderr, "error saving file: %s\n", groove_strerror(err));
     groove_file_close(file);
+
+    groove_destroy(groove);
     return 0;
 }
