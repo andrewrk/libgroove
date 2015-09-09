@@ -232,10 +232,8 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     const struct SoundIoChannelLayout *layout = &outstream->layout;
     struct GroovePlayerPrivate *p = (GroovePlayerPrivate *)outstream->userdata;
     struct GrooveSink *sink = p->sink;
-    struct GroovePlaylist *playlist = sink->playlist;
     struct SoundIoChannelArea *areas;
 
-    int paused = !groove_playlist_playing(playlist);
     int err;
 
     int audio_buf_frames_left = p->audio_buf_size - p->audio_buf_index;
@@ -252,8 +250,10 @@ static void audio_callback(struct SoundIoOutStream *outstream,
         for (;;) {
             int frame_count = frames_left;
 
-            if ((err = soundio_outstream_begin_write(outstream, &areas, &frame_count)))
-                groove_panic("%s", soundio_strerror(err));
+            if ((err = soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
+                error_callback(outstream, err);
+                return;
+            }
 
             if (!frame_count)
                 return;
@@ -265,8 +265,10 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                 }
             }
 
-            if ((err = soundio_outstream_end_write(outstream)))
-                groove_panic("%s", soundio_strerror(err));
+            if ((err = soundio_outstream_end_write(outstream))) {
+                error_callback(outstream, err);
+                return;
+            }
 
             frames_left -= frame_count;
 
@@ -276,6 +278,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     }
 
     int frames_to_write = clamp(frame_count_min, frames_available, frame_count_max);
+
     int frames_left = frames_to_write;
     assert(frames_left >= 0);
     bool read_anyway = queue_contains_end && (frame_count_max > frames_available);
@@ -285,8 +288,10 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     while (frames_left || read_anyway) {
         int write_frame_count = frames_left;
         if (write_frame_count) {
-            if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frame_count)))
-                groove_panic("%s", soundio_strerror(err));
+            if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frame_count))) {
+                error_callback(outstream, err);
+                return;
+            }
         }
 
         int write_frames_left = write_frame_count;
@@ -294,7 +299,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
         while (write_frames_left || read_anyway) {
             bool waiting_for_silence = (p->silence_frames_left > 0);
             if (!p->request_device_reopen.load() && !waiting_for_silence &&
-                !paused && p->audio_buf_index >= p->audio_buf_size)
+                p->audio_buf_index >= p->audio_buf_size)
             {
                 groove_buffer_unref(p->audio_buf);
                 p->audio_buf_index = 0;
@@ -324,7 +329,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
                 }
             }
-            if (p->request_device_reopen.load() || waiting_for_silence || paused || !p->audio_buf) {
+            if (p->request_device_reopen.load() || waiting_for_silence || !p->audio_buf) {
                 // fill the rest with silence
                 pthread_mutex_unlock(&p->play_head_mutex);
 
@@ -338,8 +343,10 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     }
                     silence_frames_written += write_frames_left;
                     if (write_frame_count) {
-                        if ((err = soundio_outstream_end_write(outstream)))
-                            groove_panic("%s", soundio_strerror(err));
+                        if ((err = soundio_outstream_end_write(outstream))) {
+                            error_callback(outstream, err);
+                            return;
+                        }
                     }
                     frames_left -= write_frames_left;
                     if (frames_left <= 0)
@@ -347,8 +354,10 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     write_frames_left = frames_left;
                     if (write_frames_left <= 0)
                         break;
-                    if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frames_left)))
-                        groove_panic("%s", soundio_strerror(err));
+                    if ((err = soundio_outstream_begin_write(outstream, &areas, &write_frames_left))) {
+                        error_callback(outstream, err);
+                        return;
+                    }
                     assert(write_frames_left);
                 }
 
@@ -391,8 +400,10 @@ static void audio_callback(struct SoundIoOutStream *outstream,
         }
 
         if (write_frame_count) {
-            if ((err = soundio_outstream_end_write(outstream)))
-                groove_panic("%s", soundio_strerror(err));
+            if ((err = soundio_outstream_end_write(outstream))) {
+                error_callback(outstream, err);
+                return;
+            }
         }
     }
 
