@@ -38,11 +38,12 @@ struct GroovePlaylistPrivate {
     struct GroovePlaylist externals;
     struct Groove *groove;
     pthread_t thread_id;
-    atomic_bool abort_request;
+    bool thread_inited;
+    bool abort_request;
 
     AVPacket audio_pkt_temp;
     AVFrame *in_frame;
-    int paused;
+    atomic_bool paused;
 
     int in_sample_rate;
     uint64_t in_channel_layout;
@@ -678,9 +679,8 @@ static void *decode_thread(void *arg) {
     struct GroovePlaylistPrivate *p = (GroovePlaylistPrivate *)arg;
     struct GroovePlaylist *playlist = &p->externals;
 
-    while (!p->abort_request.load()) {
-        pthread_mutex_lock(&p->decode_head_mutex);
-
+    pthread_mutex_lock(&p->decode_head_mutex);
+    while (!p->abort_request) {
         // if we don't have anything to decode, wait until we do
         if (!p->decode_head) {
             if (!p->sent_end_of_q) {
@@ -688,7 +688,6 @@ static void *decode_thread(void *arg) {
                 p->sent_end_of_q = 1;
             }
             pthread_cond_wait(&p->decode_head_cond, &p->decode_head_mutex);
-            pthread_mutex_unlock(&p->decode_head_mutex);
             continue;
         }
         p->sent_end_of_q = 0;
@@ -729,8 +728,8 @@ static void *decode_thread(void *arg) {
             }
         }
 
-        pthread_mutex_unlock(&p->decode_head_mutex);
     }
+    pthread_mutex_unlock(&p->decode_head_mutex);
 
     return NULL;
 }
@@ -996,11 +995,12 @@ struct GroovePlaylist * groove_playlist_create(struct Groove *groove) {
         return NULL;
     }
 
-    if (pthread_create(&p->thread_id, NULL, decode_thread, playlist) != 0) {
+    if (pthread_create(&p->thread_id, NULL, decode_thread, playlist)) {
         groove_playlist_destroy(playlist);
         av_log(NULL, AV_LOG_ERROR, "unable to create playlist thread\n");
         return NULL;
     }
+    p->thread_inited = true;
 
     p->volume_filter = avfilter_get_by_name("volume");
     if (!p->volume_filter) {
@@ -1053,9 +1053,19 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
 
     // wait for decode thread to finish
-    p->abort_request.store(true);
-    pthread_cond_signal(&p->decode_head_cond);
-    pthread_cond_signal(&p->sink_drain_cond);
+    if (p->thread_inited) {
+        pthread_mutex_lock(&p->decode_head_mutex);
+        p->abort_request = true;
+        pthread_cond_signal(&p->decode_head_cond);
+        pthread_mutex_unlock(&p->decode_head_mutex);
+    }
+
+    if (p->drain_cond_mutex_inited) {
+        pthread_mutex_lock(&p->drain_cond_mutex);
+        pthread_cond_signal(&p->sink_drain_cond);
+        pthread_mutex_unlock(&p->drain_cond_mutex);
+    }
+
     pthread_join(p->thread_id, NULL);
 
     every_sink(playlist, groove_sink_detach, 0);
@@ -1080,19 +1090,15 @@ void groove_playlist_destroy(struct GroovePlaylist *playlist) {
 
 void groove_playlist_play(struct GroovePlaylist *playlist) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
-    // no mutex needed for this boolean flag
-    if (p->paused == 0)
+    if (!p->paused.exchange(false))
         return;
-    p->paused = 0;
     every_sink(playlist, groove_sink_play, 0);
 }
 
 void groove_playlist_pause(struct GroovePlaylist *playlist) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
-    // no mutex needed for this boolean flag
-    if (p->paused == 1)
+    if (p->paused.exchange(true))
         return;
-    p->paused = 1;
     every_sink(playlist, groove_sink_pause, 0);
 }
 
