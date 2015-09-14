@@ -18,11 +18,14 @@ enum GroovePlayerEventType {
     /// when something tries to read from an empty buffer
     GROOVE_EVENT_BUFFERUNDERRUN,
 
-    /// when the audio device is re-opened due to audio format changing
-    GROOVE_EVENT_DEVICEREOPENED,
+    /// when the audio device is closed
+    GROOVE_EVENT_DEVICE_CLOSED,
+
+    /// when the audio device is opened
+    GROOVE_EVENT_DEVICE_OPENED,
 
     /// when the audio device gets an error re-opening
-    GROOVE_EVENT_DEVICE_REOPEN_ERROR,
+    GROOVE_EVENT_DEVICE_OPEN_ERROR,
 
     /// user requested wakeup
     GROOVE_EVENT_WAKEUP
@@ -33,17 +36,8 @@ union GroovePlayerEvent {
 };
 
 struct GroovePlayer {
-    /// Set this to the device you want to open. You may use NULL for default.
-    /// If you set `use_dummy_device` to 1, this field is ignored.
+    /// Set this to the device you want to open.
     struct SoundIoDevice *device;
-
-    /// The desired audio format settings with which to open the device.
-    /// groove_player_create defaults these to 48000 Hz,
-    /// signed 32-bit native endian integer, stereo.
-    /// These are preferences; if a setting cannot be used, a substitute will be
-    /// used instead. actual_audio_format is set to the actual values.
-    /// If you set `use_exact_audio_format` to 1, this field is ignored.
-    struct GrooveAudioFormat target_audio_format;
 
     /// Volume adjustment to make to this player.
     /// It is recommended that you leave this at 1.0 and instead adjust the
@@ -53,19 +47,9 @@ struct GroovePlayer {
     /// float format. Defaults to 1.0
     double gain;
 
-    /// read-only. set when you call ::groove_player_attach and cleared when
+    /// Read-only. Set when you call ::groove_player_attach and cleared when
     /// you call ::groove_player_detach
     struct GroovePlaylist *playlist;
-
-    /// read-only. set to the actual format you get when you open the device.
-    /// ideally will be the same as target_audio_format but might not be.
-    struct GrooveAudioFormat actual_audio_format;
-
-    /// If you set this to 1, target_audio_format and actual_audio_format are
-    /// ignored and no resampling, channel layout remapping, or sample format
-    /// conversion will occur. The audio device will be reopened with exact
-    /// parameters whenever necessary.
-    int use_exact_audio_format;
 };
 
 GROOVE_EXPORT struct GroovePlayer *groove_player_create(struct Groove *groove);
@@ -109,6 +93,7 @@ GROOVE_EXPORT int groove_player_set_gain(struct GroovePlayer *player, double gai
 /// closed and re-opened as necessary. When this happens, a
 /// #GROOVE_EVENT_DEVICEREOPENED event is emitted, and you can use this function
 /// to discover the audio format of the device.
-GROOVE_EXPORT struct GrooveAudioFormat groove_player_get_device_audio_format(struct GroovePlayer *player);
+GROOVE_EXPORT void groove_player_get_device_audio_format(struct GroovePlayer *player,
+        struct GrooveAudioFormat *out_audio_format);
 
 #endif

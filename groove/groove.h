@@ -103,6 +103,11 @@ enum GrooveFillMode {
     GrooveFillModeEverySinkFull,
 };
 
+enum GrooveSinkFlags {
+    GrooveSinkFlagPlanarOk = 0x1,
+    GrooveSinkFlagInterleavedOk = 0x2,
+};
+
 #define GROOVE_LOG_QUIET    -8
 #define GROOVE_LOG_ERROR    16
 #define GROOVE_LOG_WARNING  24
@@ -122,14 +127,14 @@ enum GrooveFillMode {
 #define GROOVE_BUFFER_YES 1
 #define GROOVE_BUFFER_END 2
 
+struct Groove;
+
 struct GrooveAudioFormat {
     int sample_rate;
     struct SoundIoChannelLayout layout;
     enum SoundIoFormat format;
     bool is_planar;
 };
-
-struct Groove;
 
 struct GrooveFile {
     /// read-only
@@ -235,11 +240,57 @@ struct GrooveBuffer {
 /// for example you could use it to draw a waveform or other visualization
 /// GroovePlayer uses this internally to get the audio buffer for playback
 struct GrooveSink {
-    /// set this to the audio format you want the sink to output
-    struct GrooveAudioFormat audio_format;
-    /// Set this flag to ignore audio_format. If you set this flag, the
-    /// buffers you pull from this sink could have any audio format.
-    int disable_resample;
+    /// Set the allowed sample rates buffers in this sink will have. You may
+    /// leave this to the default `NULL` to allow any sample rate.
+    /// If the source audio format does not match any of these sample rates,
+    /// sample rate conversion will be performed to convert the sample rate to
+    /// GrooveSink::default_sample_rate.
+    /// See also ::groove_sink_set_only_format
+    struct SoundIoSampleRateRange *sample_rates;
+    /// See also ::groove_sink_set_only_format
+    int sample_rate_count;
+    /// If the source audio format does not match, sample rate conversion will
+    /// be performed to convert the sample rate to this value.
+    /// See also ::groove_sink_set_only_format
+    int sample_rate_default;
+
+    /// Set the allowed channel layouts buffers in this sink will have. You may
+    /// leave this to the default `NULL` to allow any channel layouts.
+    /// If the source channel layout does not match any of these channel
+    /// layouts, the audio will be remapped to fit
+    /// GrooveSink::channel_layout_default
+    /// See also ::groove_sink_set_only_format
+    struct SoundIoChannelLayout *channel_layouts;
+    /// See also ::groove_sink_set_only_format
+    int channel_layout_count;
+    /// If the source channel layout does not match, audio will be remapped to
+    /// fit this channel layout. This should point to one of
+    /// GrooveSink::channel_layouts.
+    /// See also ::groove_sink_set_only_format
+    struct SoundIoChannelLayout channel_layout_default;
+
+    /// Set the allowed sample formats buffers in this sink will have. You may
+    /// leave this to the default `NULL` to allow any sample format.
+    /// If the source sample format does not match any of these sample formats,
+    /// sample format conversion will be performed to convert the sample format
+    /// to GrooveSink::sample_format_default.
+    /// See also ::groove_sink_set_only_format
+    enum SoundIoFormat *sample_formats;
+    /// See also ::groove_sink_set_only_format
+    int sample_format_count;
+    /// If the source sample format does not match, sample format conversion
+    /// will be performed to convert the sample format to this.
+    /// See also ::groove_sink_set_only_format
+    enum SoundIoFormat sample_format_default;
+
+    /// See #GrooveSinkFlags
+    /// * If #GrooveSinkFlagPlanarOk is set, buffers in this sink may be planar.
+    /// * If #GrooveSinkFlagInterleavedOk is set, buffers in this sink may be
+    ///   interleaved.
+    /// Leaving both of these flags unset is the same as having them both set.
+    /// See also ::groove_sink_set_only_format
+    uint32_t flags;
+
     /// If you leave this to its default of 0, frames pulled from the sink
     /// will have sample count determined by efficiency.
     /// If you set this to a positive number, frames pulled from the sink
@@ -269,15 +320,13 @@ struct GrooveSink {
     void (*pause)(struct GrooveSink *);
     /// called when the playlist is played
     void (*play)(struct GrooveSink *);
+    /// Called when a buffer is put into the sink. This is called from a thread
+    /// context in which it is undefined behavior to call any libgroove functions.
+    void (*filled)(struct GrooveSink *);
 
     /// read-only. set when you call ::groove_sink_attach. cleared when you call
     /// ::groove_sink_detach
     struct GroovePlaylist *playlist;
-
-    /// read-only. automatically computed from audio_format when you call
-    /// ::groove_sink_attach
-    /// if `disable_resample` is 1 then this is unknown and set to 0.
-    int bytes_per_sec;
 };
 
 
@@ -428,6 +477,22 @@ GROOVE_EXPORT void groove_buffer_unref(struct GrooveBuffer *buffer);
 
 GROOVE_EXPORT struct GrooveSink *groove_sink_create(struct Groove *);
 GROOVE_EXPORT void groove_sink_destroy(struct GrooveSink *sink);
+
+/// If the sink should always convert to a single audio format, this function
+/// is convenient (and avoids allocating memory).
+/// This function sets the following fields based on `audio_format`:
+/// * GrooveSink::sample_rates
+/// * GrooveSink::sample_rate_count
+/// * GrooveSink::sample_rate_default
+/// * GrooveSink::channel_layouts
+/// * GrooveSink::channel_layout_count
+/// * GrooveSink::channel_layout_default
+/// * GrooveSink::sample_formats
+/// * GrooveSink::sample_format_count
+/// * GrooveSink::sample_format_default
+/// * GrooveSink::flags
+GROOVE_EXPORT void groove_sink_set_only_format(struct GrooveSink *sink,
+        const struct GrooveAudioFormat *audio_format);
 
 /// before calling this, set audio_format
 /// returns 0 on success, < 0 on error

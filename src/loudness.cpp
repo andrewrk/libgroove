@@ -297,10 +297,14 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(struct Groove *gr
         av_log(NULL, AV_LOG_ERROR, "unable to allocate sink\n");
         return NULL;
     }
-    d->sink->audio_format.sample_rate = 44100;
-    d->sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
-    d->sink->audio_format.format = SoundIoFormatFloat32NE;
-    d->sink->audio_format.is_planar = false;
+
+    GrooveAudioFormat audio_format;
+    audio_format.sample_rate = 44100;
+    audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
+    audio_format.format = SoundIoFormatFloat32NE;
+    audio_format.is_planar = false;
+
+    groove_sink_set_only_format(d->sink, &audio_format);
     d->sink->userdata = detector;
     d->sink->purge = sink_purge;
     d->sink->flush = sink_flush;

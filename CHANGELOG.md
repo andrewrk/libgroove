@@ -55,6 +55,20 @@
  * Instead of `groove_file_open` now use `groove_file_create` and then
    `groove_file_open`. Then `groove_file_destroy` when done.
  * Instead of `groove_file_close` use `groove_file_destroy`.
+ * `GroovePlayer::target_audio_format`, `GroovePlayer::actual_audio_format`, and
+   `GroovePlayer::use_exact_audio_format` no longer exist. Exact mode is always
+   on now. When the device does not support audio parameters, the highest
+   quality substitute is used.
+ * `GrooveSink::audio_format` no longer exists. See
+   `groove_sink_set_only_format` instead.
+ * `GrooveSink::disable_resample` no longer exists. Instead, this is now the
+   default and you must set the allowed formats in order to get conversions.
+ * `GrooveSink::bytes_per_sec` no longer exists. API users should compute this
+   value themselves if they want to use it.
+ * player: `GROOVE_EVENT_DEVICEREOPENED` is now
+   `GROOVE_EVENT_DEVICE_CLOSED` and `GROOVE_EVENT_DEVICE_OPENED`.
+ * player: `GROOVE_EVENT_DEVICE_REOPEN_ERROR` is now
+   `GROOVE_EVENT_DEVICE_OPEN_ERROR`
 
 
 ### Version 4.3.0 (2015-05-25)

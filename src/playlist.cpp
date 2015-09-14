@@ -21,6 +21,7 @@ struct GrooveSinkPrivate {
     atomic_int audioq_size; // in bytes
     int min_audioq_size; // in bytes
     atomic_bool audioq_contains_end;
+    struct SoundIoSampleRateRange prealloc_sample_rate_range;
 };
 
 struct SinkStack {
@@ -228,6 +229,12 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
                     av_frame_free(&oframe);
                     return GrooveErrorNoMem;
                 }
+                if (!clock_adjustment && pkt->pts == AV_NOPTS_VALUE) {
+                    double bytes_per_sec = soundio_get_bytes_per_second(
+                            buffer->format.format, buffer->format.layout.channel_count,
+                            buffer->format.sample_rate);
+                    clock_adjustment = buffer->size / bytes_per_sec;
+                }
                 data_size += buffer->size;
                 struct SinkStack *stack_item = map_item->stack_head;
                 // we hold this reference to avoid cleanups until at least this loop
@@ -243,14 +250,12 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
                         av_log(NULL, AV_LOG_ERROR, "unable to put buffer in queue\n");
                         groove_buffer_unref(buffer);
                     }
+                    if (sink->filled) sink->filled(sink);
                     stack_item = stack_item->next;
                 }
                 groove_buffer_unref(buffer);
             }
-            if (data_size > max_data_size) {
-                max_data_size = data_size;
-                clock_adjustment = data_size / (double)example_sink->bytes_per_sec;
-            }
+            max_data_size = max(max_data_size, data_size);
             map_item = map_item->next;
         }
 
@@ -404,7 +409,6 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
     int pad_index = 0;
     while (map_item) {
         struct GrooveSink *example_sink = map_item->stack_head->sink;
-        struct GrooveAudioFormat *audio_format = &example_sink->audio_format;
 
         AVFilterContext *inner_audio_src_ctx = audio_src_ctx;
 
@@ -413,13 +417,92 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
         if (err < 0)
             return err;
 
-        if (!example_sink->disable_resample) {
+        // Create aformat filter if and only if the sink is compatible with
+        // the input format.
+        bool need_aformat = false;
+
+        // Check for planar vs interleaved.
+        bool is_planar = from_ffmpeg_format_planar(avctx->sample_fmt);
+        bool aformat_planar = is_planar;
+        bool planar_ok = (example_sink->flags & GrooveSinkFlagPlanarOk);
+        bool interleaved_ok = (example_sink->flags & GrooveSinkFlagInterleavedOk);
+        if (!planar_ok && !interleaved_ok) {
+            planar_ok = true;
+            interleaved_ok = true;
+        }
+        if (is_planar && !planar_ok) {
+            aformat_planar = false;
+            need_aformat = true;
+        } else if (!is_planar && !interleaved_ok) {
+            aformat_planar = true;
+            need_aformat = true;
+        }
+
+        // Check for sample rate.
+        int aformat_sample_rate = avctx->sample_rate;
+        bool sample_rate_ok = false;
+        if (example_sink->sample_rates) {
+            for (int i = 0; i < example_sink->sample_rate_count; i += 1) {
+                struct SoundIoSampleRateRange *range = &example_sink->sample_rates[i];
+                if (range->min <= avctx->sample_rate && avctx->sample_rate <= range->max) {
+                    sample_rate_ok = true;
+                    break;
+                }
+            }
+        } else {
+            sample_rate_ok = true;
+        }
+        if (!sample_rate_ok) {
+            aformat_sample_rate = example_sink->sample_rate_default;
+            need_aformat = true;
+        }
+
+        // Check for channel layout.
+        struct SoundIoChannelLayout aformat_layout;
+        from_ffmpeg_layout(avctx->channel_layout, &aformat_layout);
+        bool channel_layout_ok = false;
+        if (example_sink->channel_layouts) {
+            for (int i = 0; i < example_sink->channel_layout_count; i += 1) {
+                struct SoundIoChannelLayout *layout = &example_sink->channel_layouts[i];
+                if (soundio_channel_layout_equal(layout, &aformat_layout)) {
+                    channel_layout_ok = true;
+                    break;
+                }
+            }
+        } else {
+            channel_layout_ok = true;
+        }
+        if (!channel_layout_ok) {
+            aformat_layout = example_sink->channel_layout_default;
+            need_aformat = true;
+        }
+
+        // Check for sample format.
+        SoundIoFormat aformat_format = from_ffmpeg_format(avctx->sample_fmt);
+        bool format_ok = false;
+        if (example_sink->sample_formats) {
+            for (int i = 0; i < example_sink->sample_format_count; i += 1) {
+                SoundIoFormat format = example_sink->sample_formats[i];
+                if (format == aformat_format) {
+                    format_ok = true;
+                    break;
+                }
+            }
+        } else {
+            format_ok = true;
+        }
+        if (!format_ok) {
+            aformat_format = example_sink->sample_format_default;
+            need_aformat = true;
+        }
+
+        if (need_aformat) {
             AVFilterContext *aformat_ctx;
             // create aformat filter
             snprintf(p->strbuf, sizeof(p->strbuf),
                     "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%" PRIx64,
-                    av_get_sample_fmt_name(to_ffmpeg_fmt(audio_format)),
-                    audio_format->sample_rate, to_ffmpeg_channel_layout(&audio_format->layout));
+                    av_get_sample_fmt_name(to_ffmpeg_fmt_params(aformat_format, aformat_planar)),
+                    aformat_sample_rate, to_ffmpeg_channel_layout(&aformat_layout));
             av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
             err = avfilter_graph_create_filter(&aformat_ctx, p->aformat_filter,
                     NULL, p->strbuf, NULL, p->filter_graph);
@@ -528,6 +611,7 @@ static int any_sink_full(struct GroovePlaylist *playlist) {
 static int sink_signal_end(struct GrooveSink *sink) {
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     groove_queue_put(s->audioq, end_of_q_sentinel);
+    if (sink->filled) sink->filled(sink);
     return 0;
 }
 
@@ -734,23 +818,105 @@ static void *decode_thread(void *arg) {
     return NULL;
 }
 
-static int sink_formats_compatible(const struct GrooveSink *example_sink,
+static bool sink_supports_sample_rate_range(const struct GrooveSink *test_sink,
+        const struct SoundIoSampleRateRange *test_range)
+{
+    if (!test_sink->sample_rates)
+        return true;
+
+    for (int i = 0; i < test_sink->sample_rate_count; i += 1) {
+        const struct SoundIoSampleRateRange *range = &test_sink->sample_rates[i];
+
+        if (test_range->min >= range->min && test_range->max <= range->max) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool sink_supports_sample_format(const struct GrooveSink *test_sink, SoundIoFormat test_format) {
+    if (!test_sink->sample_formats)
+        return true;
+
+    for (int i = 0; i < test_sink->sample_format_count; i += 1) {
+        SoundIoFormat format = test_sink->sample_formats[i];
+        if (format == test_format)
+            return true;
+    }
+    return false;
+}
+
+static bool sink_supports_channel_layout(const struct GrooveSink *test_sink,
+        const struct SoundIoChannelLayout *test_layout)
+{
+    if (!test_sink->channel_layouts)
+        return true;
+
+    for (int i = 0; i < test_sink->channel_layout_count; i += 1) {
+        const struct SoundIoChannelLayout *layout = &test_sink->channel_layouts[i];
+        if (soundio_channel_layout_equal(layout, test_layout))
+            return true;
+    }
+    return false;
+}
+
+static bool sink_formats_compatible(const struct GrooveSink *example_sink,
         const struct GrooveSink *test_sink)
 {
     // buffer_sample_count 0 means we don't care
     if (test_sink->buffer_sample_count != 0 &&
             example_sink->buffer_sample_count != test_sink->buffer_sample_count)
     {
-        return 0;
+        return false;
     }
     if (example_sink->gain != test_sink->gain)
-        return 0;
-    if (!test_sink->disable_resample &&
-        !groove_audio_formats_equal(&example_sink->audio_format, &test_sink->audio_format))
-    {
-        return 0;
+        return false;
+
+    // test_sink must support everything example_sink supports
+    // planar vs interleaved
+    bool test_sink_planar_ok = (test_sink->flags & GrooveSinkFlagPlanarOk);
+    bool test_sink_interleaved_ok = (test_sink->flags & GrooveSinkFlagPlanarOk);
+    if (!test_sink_planar_ok && !test_sink_interleaved_ok) {
+        test_sink_planar_ok = true;
+        test_sink_interleaved_ok = true;
     }
-    return 1;
+    bool example_sink_planar_ok = (example_sink->flags & GrooveSinkFlagPlanarOk);
+    bool example_sink_interleaved_ok = (example_sink->flags & GrooveSinkFlagPlanarOk);
+    if (!example_sink_planar_ok && !example_sink_interleaved_ok) {
+        example_sink_planar_ok = true;
+        example_sink_interleaved_ok = true;
+    }
+    if (example_sink_planar_ok && !test_sink_planar_ok)
+        return false;
+    if (example_sink_interleaved_ok && !test_sink_interleaved_ok)
+        return false;
+
+    // sample rate
+    if (!example_sink->sample_rates && test_sink->sample_rates)
+        return false;
+    for (int i = 0; i < example_sink->sample_rate_count; i += 1) {
+        if (!sink_supports_sample_rate_range(test_sink, &example_sink->sample_rates[i]))
+            return false;
+    }
+
+    // sample format
+    if (!example_sink->sample_formats && test_sink->sample_formats)
+        return false;
+    for (int i = 0; i < example_sink->sample_format_count; i += 1) {
+        if (!sink_supports_sample_format(test_sink, example_sink->sample_formats[i]))
+            return false;
+    }
+
+    // channel layout
+    if (!example_sink->channel_layouts && test_sink->channel_layouts)
+        return false;
+    for (int i = 0; i < example_sink->channel_layout_count; i += 1) {
+        const struct SoundIoChannelLayout *layout = &example_sink->channel_layouts[i];
+        if (!sink_supports_channel_layout(test_sink, layout))
+            return false;
+    }
+
+    return true;
 }
 
 static int remove_sink_from_map(struct GrooveSink *sink) {
@@ -886,9 +1052,6 @@ int groove_sink_attach(struct GrooveSink *sink, struct GroovePlaylist *playlist)
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
 
     // cache computed audio format stuff
-    int channel_count = sink->audio_format.layout.channel_count;
-    int bytes_per_frame = channel_count * soundio_get_bytes_per_sample(sink->audio_format.format);
-    sink->bytes_per_sec = bytes_per_frame * sink->audio_format.sample_rate;
     s->min_audioq_size = sink->buffer_size_bytes;
     av_log(NULL, AV_LOG_INFO, "audio queue size: %d\n", s->min_audioq_size);
 
@@ -1374,6 +1537,28 @@ int groove_sink_get_fill_level(struct GrooveSink *sink) {
 int groove_sink_contains_end_of_playlist(struct GrooveSink *sink) {
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     return s->audioq_contains_end.load();
+}
+
+void groove_sink_set_only_format(struct GrooveSink *sink,
+        const struct GrooveAudioFormat *audio_format)
+{
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+
+    s->prealloc_sample_rate_range.min = audio_format->sample_rate;
+    s->prealloc_sample_rate_range.max = audio_format->sample_rate;
+    sink->sample_rates = &s->prealloc_sample_rate_range;
+    sink->sample_rate_count = 1;
+    sink->sample_rate_default = audio_format->sample_rate;
+
+    sink->channel_layout_default = audio_format->layout;
+    sink->channel_layouts = &sink->channel_layout_default;
+    sink->channel_layout_count = 1;
+
+    sink->sample_format_default = audio_format->format;
+    sink->sample_formats = &sink->sample_format_default;
+    sink->sample_format_count = 1;
+
+    sink->flags = (audio_format->is_planar ? GrooveSinkFlagPlanarOk : GrooveSinkFlagInterleavedOk);
 }
 
 void groove_playlist_set_fill_mode(struct GroovePlaylist *playlist, enum GrooveFillMode mode) {

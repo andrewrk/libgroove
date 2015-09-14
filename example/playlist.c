@@ -22,7 +22,6 @@ static int usage(const char *exe) {
     fprintf(stderr, "Usage: %s [options] file1 file2 ...\n"
             "Options:\n"
             "  [--volume 1.0]\n"
-            "  [--exact]\n"
             "  [--backend dummy|alsa|pulseaudio|jack|coreaudio|wasapi]\n"
             "  [--device id]\n"
             "  [--raw]\n", exe);
@@ -59,9 +58,7 @@ int main(int argc, char * argv[]) {
         char *arg = argv[i];
         if (arg[0] == '-' && arg[1] == '-') {
             arg += 2;
-            if (strcmp(arg, "exact") == 0) {
-                player->use_exact_audio_format = 1;
-            } else if (strcmp(arg, "raw") == 0) {
+            if (strcmp(arg, "raw") == 0) {
                 is_raw = true;
             } else if (i + 1 >= argc) {
                 return usage(exe);
@@ -148,22 +145,27 @@ int main(int argc, char * argv[]) {
 
     union GroovePlayerEvent event;
     struct GroovePlaylistItem *item;
+    bool end_of_playlist = false;
     while (groove_player_event_get(player, &event, 1) >= 0) {
         switch (event.type) {
         case GROOVE_EVENT_BUFFERUNDERRUN:
             fprintf(stderr, "buffer underrun\n");
             break;
-        case GROOVE_EVENT_DEVICEREOPENED:
-            fprintf(stderr, "device re-opened\n");
+        case GROOVE_EVENT_DEVICE_OPENED:
+            {
+                struct GrooveAudioFormat audio_format;
+                groove_player_get_device_audio_format(player, &audio_format);
+
+                fprintf(stderr, "device opened: %d channels %dHz %s\n", audio_format.layout.channel_count,
+                        audio_format.sample_rate, soundio_format_string(audio_format.format));
+                break;
+            }
+        case GROOVE_EVENT_DEVICE_OPEN_ERROR:
+            panic("error opening device");
             break;
-        case GROOVE_EVENT_DEVICE_REOPEN_ERROR:
-            panic("error re-opening device");
-        case GROOVE_EVENT_WAKEUP:
-            break;
-        case GROOVE_EVENT_NOWPLAYING:
-            groove_player_position(player, &item, NULL);
-            if (!item) {
-                printf("done\n");
+        case GROOVE_EVENT_DEVICE_CLOSED:
+            if (end_of_playlist) {
+                fprintf(stderr, "done\n");
                 item = playlist->head;
                 while (item) {
                     struct GrooveFile *file = item->file;
@@ -178,13 +180,22 @@ int main(int argc, char * argv[]) {
                 soundio_destroy(soundio);
                 return 0;
             }
+            break;
+        case GROOVE_EVENT_WAKEUP:
+            break;
+        case GROOVE_EVENT_NOWPLAYING:
+            groove_player_position(player, &item, NULL);
+            if (!item) {
+                end_of_playlist = true;
+                break;
+            }
             struct GrooveTag *artist_tag = groove_file_metadata_get(item->file, "artist", NULL, 0);
             struct GrooveTag *title_tag = groove_file_metadata_get(item->file, "title", NULL, 0);
             if (artist_tag && title_tag) {
-                printf("Now playing: %s - %s\n", groove_tag_value(artist_tag),
+                fprintf(stderr, "Now playing: %s - %s\n", groove_tag_value(artist_tag),
                         groove_tag_value(title_tag));
             } else {
-                printf("Now playing: %s\n", item->file->filename);
+                fprintf(stderr, "Now playing: %s\n", item->file->filename);
             }
             break;
         }

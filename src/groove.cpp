@@ -10,16 +10,13 @@
 #include "config.h"
 #include "ffmpeg.hpp"
 #include "util.hpp"
-#include "atomics.hpp"
+#include "os.hpp"
 
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/fcntl.h>
 #include <pthread.h>
-
-static atomic_bool initialized = ATOMIC_VAR_INIT(false);
-static pthread_mutex_t init_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 const char *groove_strerror(int error) {
     switch ((enum GrooveError)error) {
@@ -72,33 +69,11 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
     return 0;
 }
 
-static int get_random_seed(uint32_t *seed) {
-    int fd = open("/dev/random", O_RDONLY|O_NONBLOCK);
-    if (fd == -1)
-        return GrooveErrorSystemResources;
-
-    int amt = read(fd, seed, 4);
-    if (amt != 4) {
-        close(fd);
-        return GrooveErrorSystemResources;
-    }
-
-    close(fd);
-    return 0;
-}
-
-// this function will only be called once
-static int internal_init(void) {
+static int init_once(void) {
     int err;
     if ((err = av_lockmgr_register(&my_lockmgr_cb))) {
         return GrooveErrorSystemResources;
     }
-
-    uint32_t seed;
-    if ((err = get_random_seed(&seed))) {
-        return err;
-    }
-    srand(seed);
 
     // register all codecs, demux and protocols
     avcodec_register_all();
@@ -106,28 +81,6 @@ static int internal_init(void) {
     avfilter_register_all();
 
     av_log_set_level(AV_LOG_QUIET);
-    return 0;
-}
-
-static void assert_no_err(int err) {
-    assert(!err);
-}
-
-static int init_once(void) {
-    if (initialized.load())
-        return 0;
-
-    assert_no_err(pthread_mutex_lock(&init_mutex));
-    if (initialized.load()) {
-        assert_no_err(pthread_mutex_unlock(&init_mutex));
-        return 0;
-    }
-    initialized.store(true);
-    int err;
-    if ((err = internal_init()))
-        return err;
-    assert_no_err(pthread_mutex_unlock(&init_mutex));
-
     return 0;
 }
 
@@ -139,7 +92,7 @@ int groove_create(struct Groove **out_groove) {
     }
 
     int err;
-    if ((err = init_once())) {
+    if ((err = groove_os_init(init_once))) {
         groove_destroy(groove);
         return err;
     }

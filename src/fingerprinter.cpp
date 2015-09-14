@@ -253,10 +253,14 @@ struct GrooveFingerprinter *groove_fingerprinter_create(struct Groove *groove) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate sink\n");
         return NULL;
     }
-    p->sink->audio_format.sample_rate = 44100;
-    p->sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
-    p->sink->audio_format.format = SoundIoFormatS16NE;
-    p->sink->audio_format.is_planar = false;
+
+    GrooveAudioFormat audio_format;
+    audio_format.sample_rate = 44100;
+    audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
+    audio_format.format = SoundIoFormatS16NE;
+    audio_format.is_planar = false;
+
+    groove_sink_set_only_format(p->sink, &audio_format);
     p->sink->userdata = printer;
     p->sink->purge = sink_purge;
     p->sink->flush = sink_flush;

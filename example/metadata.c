@@ -79,7 +79,7 @@ int main(int argc, char * argv[]) {
         printf("%s=%s\n", groove_tag_key(tag), groove_tag_value(tag));
     if (file->dirty && (err = groove_file_save(file)))
         fprintf(stderr, "error saving file: %s\n", groove_strerror(err));
-    groove_file_close(file);
+    groove_file_destroy(file);
 
     groove_destroy(groove);
     return 0;

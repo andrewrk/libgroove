@@ -128,19 +128,23 @@ uint64_t to_ffmpeg_channel_layout(const SoundIoChannelLayout *channel_layout) {
     return result;
 }
 
-AVSampleFormat to_ffmpeg_fmt(const GrooveAudioFormat *fmt) {
-    switch (fmt->format) {
+AVSampleFormat to_ffmpeg_fmt_params(SoundIoFormat format, bool is_planar) {
+    switch (format) {
         default:
             return AV_SAMPLE_FMT_NONE;
         case SoundIoFormatU8:
-            return fmt->is_planar ? AV_SAMPLE_FMT_U8P : AV_SAMPLE_FMT_U8;
+            return is_planar ? AV_SAMPLE_FMT_U8P : AV_SAMPLE_FMT_U8;
         case SoundIoFormatS16NE:
-            return fmt->is_planar ? AV_SAMPLE_FMT_S16P : AV_SAMPLE_FMT_S16;
+            return is_planar ? AV_SAMPLE_FMT_S16P : AV_SAMPLE_FMT_S16;
         case SoundIoFormatS32NE:
-            return fmt->is_planar ? AV_SAMPLE_FMT_S32P : AV_SAMPLE_FMT_S32;
+            return is_planar ? AV_SAMPLE_FMT_S32P : AV_SAMPLE_FMT_S32;
         case SoundIoFormatFloat32NE:
-            return fmt->is_planar ? AV_SAMPLE_FMT_FLTP : AV_SAMPLE_FMT_FLT;
+            return is_planar ? AV_SAMPLE_FMT_FLTP : AV_SAMPLE_FMT_FLT;
         case SoundIoFormatFloat64NE:
-            return fmt->is_planar ? AV_SAMPLE_FMT_DBLP : AV_SAMPLE_FMT_DBL;
+            return is_planar ? AV_SAMPLE_FMT_DBLP : AV_SAMPLE_FMT_DBL;
     }
+}
+
+AVSampleFormat to_ffmpeg_fmt(const GrooveAudioFormat *fmt) {
+    return to_ffmpeg_fmt_params(fmt->format, fmt->is_planar);
 }

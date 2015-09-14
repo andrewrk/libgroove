@@ -76,5 +76,6 @@ bool from_ffmpeg_format_planar(AVSampleFormat fmt);
 uint64_t to_ffmpeg_channel_id(SoundIoChannelId channel_id);
 uint64_t to_ffmpeg_channel_layout(const SoundIoChannelLayout *channel_layout);
 AVSampleFormat to_ffmpeg_fmt(const GrooveAudioFormat *fmt);
+AVSampleFormat to_ffmpeg_fmt_params(enum SoundIoFormat format, bool is_planar);
 
 #endif

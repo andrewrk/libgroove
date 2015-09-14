@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 2.8.5)
+project(libgroove C CXX)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
 if(CMAKE_VERSION VERSION_LESS 3.0.0)
     set(CMAKE_INSTALL_LIBDIR "lib" CACHE PATH "library install dir (lib)")
@@ -14,9 +16,6 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING
       "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
 endif()
-
-project(libgroove C CXX)
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
 set(LIBGROOVE_VERSION_MAJOR 5)
 set(LIBGROOVE_VERSION_MINOR 0)
@@ -101,6 +100,7 @@ set(LIBGROOVE_SOURCES
     "${CMAKE_SOURCE_DIR}/src/waveform.cpp"
     "${CMAKE_SOURCE_DIR}/src/playlist.cpp"
     "${CMAKE_SOURCE_DIR}/src/util.cpp"
+    "${CMAKE_SOURCE_DIR}/src/os.cpp"
 )
 
 set(CONFIGURE_OUT_FILE "${CMAKE_BINARY_DIR}/config.h")

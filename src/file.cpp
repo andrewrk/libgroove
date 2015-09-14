@@ -50,6 +50,7 @@ void init_file_state(struct GrooveFilePrivate *f) {
     f->groove = groove;
     f->audio_stream_index = -1;
     f->seek_pos = -1;
+    f->abort_request.store(false);
 }
 
 struct GrooveFile *groove_file_create(struct Groove *groove) {
@@ -224,8 +225,6 @@ void groove_file_close(struct GrooveFile *file) {
 
     if (f->avio)
         av_free(f->avio);
-
-    deallocate(f->avio_buf);
 
     if (f->stdfile)
         fclose(f->stdfile);

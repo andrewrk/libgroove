@@ -292,10 +292,14 @@ struct GrooveWaveform *groove_waveform_create(struct Groove *groove) {
         groove_waveform_destroy(waveform);
         return NULL;
     }
-    w->sink->audio_format.sample_rate = sample_rate;
-    w->sink->audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
-    w->sink->audio_format.format = SoundIoFormatFloat32NE;
-    w->sink->audio_format.is_planar = false;
+
+    GrooveAudioFormat audio_format;
+    audio_format.sample_rate = sample_rate;
+    audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
+    audio_format.format = SoundIoFormatFloat32NE;
+    audio_format.is_planar = false;
+
+    groove_sink_set_only_format(w->sink, &audio_format);
     w->sink->userdata = waveform;
     w->sink->purge = sink_purge;
     w->sink->flush = sink_flush;
