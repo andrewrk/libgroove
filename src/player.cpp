@@ -55,7 +55,8 @@ struct GroovePlayerPrivate {
 
     bool is_paused;
     bool prebuffering;
-    atomic_bool underrun_flag;
+    atomic_bool prebuf_flag;
+    bool is_underrun;
     bool is_started;
     struct SoundIoRingBuffer *playback_buffer;
     int playback_buffer_cap;
@@ -67,6 +68,7 @@ struct GroovePlayerPrivate {
     atomic_long device_close_frame_index;
     bool waiting_to_be_closed;
     double sink_buffer_seconds;
+    atomic_long skip_to_index;
 };
 
 static enum SoundIoFormat prioritized_formats[] = {
@@ -133,7 +135,8 @@ static void set_pause_state(GroovePlayerPrivate *p) {
 
 static void handle_buffer_underrun(struct GroovePlayerPrivate *p) {
     groove_os_mutex_lock(p->play_head_mutex);
-    p->underrun_flag.store(true);
+    p->is_underrun = true;
+    p->prebuf_flag.store(true);
     groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
     groove_os_mutex_unlock(p->play_head_mutex);
 }
@@ -156,15 +159,15 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     int frames_until_close = (device_close_frame_index >= 0) ?
         (device_close_frame_index - p->buffer_abs_index + needed_frames_past_close_index) : -1;
 
-    bool underrun = p->underrun_flag.load();
+    bool prebuf = p->prebuf_flag.load();
     int fill_bytes = soundio_ring_buffer_fill_count(p->playback_buffer);
     int fill_frames = fill_bytes / outstream->bytes_per_frame;
 
-    if (!underrun && frame_count_min > fill_frames && frame_count_min > frames_until_close)
+    if (!prebuf && frame_count_min > fill_frames && frame_count_min > frames_until_close)
         handle_buffer_underrun(p);
-    underrun = p->underrun_flag.load();
+    prebuf = p->prebuf_flag.load();
 
-    if (underrun || p->waiting_to_be_closed) {
+    if (prebuf || p->waiting_to_be_closed) {
         // Waiting for helper thread to recover from buffer underrun. In the
         // mean time, write silence.
         int frames_left = frame_count_min;
@@ -242,6 +245,16 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     soundio_ring_buffer_advance_read_ptr(p->playback_buffer, ring_buf_write_frames * outstream->bytes_per_frame);
     p->buffer_abs_index += write_frames;
 
+    long skip_to_index = p->skip_to_index.exchange(-1);
+    if (skip_to_index > 0) {
+        soundio_outstream_clear_buffer(p->outstream);
+        int frames_to_skip = max(0L, skip_to_index - p->buffer_abs_index);
+        int fill_bytes = soundio_ring_buffer_fill_count(p->playback_buffer);
+        int fill_frames = fill_bytes / outstream->bytes_per_frame;
+        int bytes_to_skip = outstream->bytes_per_frame * min(frames_to_skip, fill_frames);
+        soundio_ring_buffer_advance_read_ptr(p->playback_buffer, bytes_to_skip);
+    }
+
     if (device_close_frame_index >= 0) {
         int frames_past_close_index = p->buffer_abs_index - device_close_frame_index;
         if (frames_past_close_index >= needed_frames_past_close_index) {
@@ -257,7 +270,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     TimeStamp *time_stamp = p->time_stamp.write_begin();
 
     if ((err = soundio_outstream_get_latency(outstream, &time_stamp->delay))) {
-        error_callback(outstream, err);
+        time_stamp->delay = outstream->software_latency - (frame_count_max / (double)outstream->sample_rate);
         return;
     }
 
@@ -328,7 +341,7 @@ static bool audio_formats_equal_ignore_planar(
 static void done_prebuffering(GroovePlayerPrivate *p) {
     if (p->prebuffering) {
         p->prebuffering = false;
-        p->underrun_flag.store(false);
+        p->prebuf_flag.store(false);
         if (!p->is_started) {
             p->is_started = true;
             soundio_outstream_start(p->outstream);
@@ -402,11 +415,13 @@ static void helper_thread_run(void *arg) {
             p->device_close_frame_index.store(-1);
             p->prebuffering = true;
             p->is_started = false;
-            p->underrun_flag.store(false);
+            p->prebuf_flag.store(false);
+            p->is_underrun = false;
             p->decode_abs_index = 0;
             p->buffer_abs_index = 0;
             p->request_device_reopen = false;
             p->waiting_to_be_closed = false;
+            p->skip_to_index.store(-1);
 
             if (p->audio_buf) {
                 if ((err = open_audio_device(p))) {
@@ -422,10 +437,11 @@ static void helper_thread_run(void *arg) {
             groove_os_cond_wait(p->helper_thread_cond, p->play_head_mutex);
             continue;
         }
-        if (!p->prebuffering && p->underrun_flag.load()) {
+        if (!p->prebuffering && p->prebuf_flag.load()) {
             p->prebuffering = true;
             set_pause_state(p);
-            emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
+            if (p->is_underrun)
+                emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
             continue;
         }
         assert(p->outstream);
@@ -528,8 +544,10 @@ static void sink_flush(struct GrooveSink *sink) {
     p->play_pos = -1.0;
     p->play_head = NULL;
     p->play_pos_index = 0;
+    p->prebuffering = true;
+    p->prebuf_flag.store(true);
 
-    soundio_outstream_clear_buffer(p->outstream);
+    p->skip_to_index.store(p->decode_abs_index);
 
     groove_os_mutex_unlock(p->play_head_mutex);
 }
@@ -690,6 +708,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
     assert(!p->outstream);
     p->abort_request = false;
     p->waiting_to_be_closed = false;
+    p->is_underrun = false;
 
     if ((err = groove_os_thread_create(helper_thread_run, p, &p->helper_thread))) {
         groove_player_detach(player);
