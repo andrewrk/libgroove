@@ -146,6 +146,7 @@ int main(int argc, char * argv[]) {
     union GroovePlayerEvent event;
     struct GroovePlaylistItem *item;
     bool end_of_playlist = false;
+    bool device_open = false;
     while (groove_player_event_get(player, &event, 1) >= 0) {
         switch (event.type) {
         case GROOVE_EVENT_BUFFERUNDERRUN:
@@ -158,49 +159,56 @@ int main(int argc, char * argv[]) {
 
                 fprintf(stderr, "device opened: %d channels %dHz %s\n", audio_format.layout.channel_count,
                         audio_format.sample_rate, soundio_format_string(audio_format.format));
+
+                device_open = true;
                 break;
             }
         case GROOVE_EVENT_DEVICE_OPEN_ERROR:
             panic("error opening device");
             break;
         case GROOVE_EVENT_DEVICE_CLOSED:
-            if (end_of_playlist) {
-                fprintf(stderr, "done\n");
-                item = playlist->head;
-                while (item) {
-                    struct GrooveFile *file = item->file;
-                    struct GroovePlaylistItem *next = item->next;
-                    groove_playlist_remove(playlist, item);
-                    groove_file_destroy(file);
-                    item = next;
-                }
-                groove_player_detach(player);
-                groove_player_destroy(player);
-                groove_playlist_destroy(playlist);
-                soundio_destroy(soundio);
-                return 0;
-            }
+            device_open = false;
+            if (end_of_playlist)
+                goto cleanup;
             break;
         case GROOVE_EVENT_WAKEUP:
             break;
+        case GROOVE_EVENT_END_OF_PLAYLIST:
+            end_of_playlist = true;
+            if (!device_open)
+                goto cleanup;
+            break;
         case GROOVE_EVENT_NOWPLAYING:
             groove_player_position(player, &item, NULL);
-            if (!item) {
-                end_of_playlist = true;
-                break;
-            }
-            struct GrooveTag *artist_tag = groove_file_metadata_get(item->file, "artist", NULL, 0);
-            struct GrooveTag *title_tag = groove_file_metadata_get(item->file, "title", NULL, 0);
-            if (artist_tag && title_tag) {
-                fprintf(stderr, "Now playing: %s - %s\n", groove_tag_value(artist_tag),
-                        groove_tag_value(title_tag));
-            } else {
-                fprintf(stderr, "Now playing: %s\n", item->file->filename);
+            if (item) {
+                struct GrooveTag *artist_tag = groove_file_metadata_get(item->file, "artist", NULL, 0);
+                struct GrooveTag *title_tag = groove_file_metadata_get(item->file, "title", NULL, 0);
+                if (artist_tag && title_tag) {
+                    fprintf(stderr, "Now playing: %s - %s\n", groove_tag_value(artist_tag),
+                            groove_tag_value(title_tag));
+                } else {
+                    fprintf(stderr, "Now playing: %s\n", item->file->filename);
+                }
             }
             break;
         }
     }
-
     groove_destroy(groove);
     return 1;
+
+cleanup:
+    fprintf(stderr, "done\n");
+    item = playlist->head;
+    while (item) {
+        struct GrooveFile *file = item->file;
+        struct GroovePlaylistItem *next = item->next;
+        groove_playlist_remove(playlist, item);
+        groove_file_destroy(file);
+        item = next;
+    }
+    groove_player_detach(player);
+    groove_player_destroy(player);
+    groove_playlist_destroy(playlist);
+    soundio_destroy(soundio);
+    return 0;
 }

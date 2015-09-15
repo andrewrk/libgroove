@@ -361,14 +361,13 @@ static void helper_thread_run(void *arg) {
             int ret = groove_sink_buffer_get(sink, &p->audio_buf, 0);
 
             if (ret == GROOVE_BUFFER_END) {
+                emit_event(p->eventq, GROOVE_EVENT_END_OF_PLAYLIST);
                 emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
                 p->play_head = NULL;
                 p->play_pos = -1.0;
                 p->play_pos_index = 0;
-                done_prebuffering(p);
-                if (!p->outstream) {
-                    p->request_device_reopen = true;
-                } else {
+                if (p->outstream) {
+                    done_prebuffering(p);
                     p->waiting_for_device_reopen = true;
                     p->device_close_frame_index.store(p->decode_abs_index);
                 }
@@ -426,6 +425,7 @@ static void helper_thread_run(void *arg) {
         if (!p->prebuffering && p->underrun_flag.load()) {
             p->prebuffering = true;
             set_pause_state(p);
+            emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
             continue;
         }
         assert(p->outstream);

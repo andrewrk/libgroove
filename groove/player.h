@@ -27,6 +27,9 @@ enum GroovePlayerEventType {
     /// when the audio device gets an error re-opening
     GROOVE_EVENT_DEVICE_OPEN_ERROR,
 
+    /// when the end of playlist is hit
+    GROOVE_EVENT_END_OF_PLAYLIST,
+
     /// user requested wakeup
     GROOVE_EVENT_WAKEUP
 };

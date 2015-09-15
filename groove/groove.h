@@ -127,6 +127,9 @@ enum GrooveSinkFlags {
 #define GROOVE_BUFFER_YES 1
 #define GROOVE_BUFFER_END 2
 
+#define GROOVE_SEEK_SIZE 0x10000
+#define GROOVE_SEEK_FORCE 0x20000
+
 struct Groove;
 
 struct GrooveAudioFormat {
@@ -157,6 +160,15 @@ struct GrooveCustomIo {
     /// A function for writing the buffer contents, may be NULL.
     int (*write_packet)(struct GrooveCustomIo *, uint8_t *buf, int buf_size);
     /// A function for seeking to specified byte position, may be NULL.
+    /// `whence` can be:
+    /// * `SEEK_SET` - see fseek documentation.
+    /// * `SEEK_CUR` - see fseek documentation.
+    /// * `SEEK_END` - see fseek documentation.
+    /// * `GROOVE_SEEK_SIZE` - (optional) if it's OR'd to whence, seek function
+    ///   should return the stream size without seeking.
+    /// * `GROOVE_SEEK_FORCE` - (optional) if it's OR'd to whence,
+    ///   seek by any means even if it's really slow.
+    /// If you don't recognize the whence parameter, return -1.
     int64_t (*seek)(struct GrooveCustomIo *, int64_t offset, int whence);
 };
 

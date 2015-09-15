@@ -8,6 +8,9 @@
 #include "file.hpp"
 #include "util.hpp"
 #include "groove.hpp"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/unistd.h>
 
 static int decode_interrupt_cb(void *ctx) {
     struct GrooveFilePrivate *f = (GrooveFilePrivate *)ctx;
@@ -41,7 +44,28 @@ static int file_write_packet(struct GrooveCustomIo *custom_io, uint8_t *buf, int
 
 static int64_t file_seek(struct GrooveCustomIo *custom_io, int64_t offset, int whence) {
     struct GrooveFilePrivate *f = (GrooveFilePrivate *)custom_io->userdata;
-    return fseek(f->stdfile, offset, whence);
+
+    if (whence & GROOVE_SEEK_FORCE) {
+        // doesn't matter
+        whence -= GROOVE_SEEK_FORCE;
+    }
+
+    if (whence & GROOVE_SEEK_SIZE) {
+        int err;
+        struct stat st;
+        if ((err = fstat(fileno(f->stdfile), &st))) {
+            return err;
+        }
+        return st.st_size;
+    }
+
+    switch (whence) {
+        case SEEK_SET:
+        case SEEK_CUR:
+        case SEEK_END:
+            return fseek(f->stdfile, offset, whence);
+    }
+    return -1;
 }
 
 void init_file_state(struct GrooveFilePrivate *f) {
@@ -97,6 +121,8 @@ int groove_file_open_custom(struct GrooveFile *file, struct GrooveCustomIo *cust
         groove_file_close(file);
         return GrooveErrorNoMem;
     }
+    f->avio->seekable = AVIO_SEEKABLE_NORMAL;
+    f->avio->direct = AVIO_FLAG_DIRECT;
 
     f->ic->pb = f->avio;
     int err = avformat_open_input(&f->ic, filename_hint, NULL, NULL);
