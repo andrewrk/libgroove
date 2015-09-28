@@ -618,20 +618,6 @@ void groove_player_destroy(struct GroovePlayer *player) {
     deallocate(p);
 }
 
-static int best_supported_sample_rate(GrooveSink *sink) {
-    static const int target = 44100;
-    int closest = -1;
-    for (int i = 0; i < sink->sample_rate_count; i += 1) {
-        struct SoundIoSampleRateRange *range = &sink->sample_rates[i];
-        if (range->min <= target && target <= range->max)
-            return target;
-        if (closest == -1 || abs(range->max - target) < abs(closest - target)) {
-            closest = range->max;
-        }
-    }
-    return closest;
-}
-
 static int best_supported_layout(SoundIoDevice *device, SoundIoChannelLayout *out_layout) {
     for (int i = 0; i < array_length(prioritized_layouts); i += 1) {
         enum SoundIoChannelLayoutId layout_id = prioritized_layouts[i];
@@ -673,7 +659,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
 
     p->sink->sample_rates = player->device->sample_rates;
     p->sink->sample_rate_count = player->device->sample_rate_count;
-    p->sink->sample_rate_default = best_supported_sample_rate(p->sink);
+    p->sink->sample_rate_default = soundio_device_nearest_sample_rate(player->device, 44100);
 
     p->sink->channel_layouts = player->device->layouts;
     p->sink->channel_layout_count = player->device->layout_count;
