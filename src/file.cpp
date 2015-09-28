@@ -68,7 +68,7 @@ static int64_t file_seek(struct GrooveCustomIo *custom_io, int64_t offset, int w
     return -1;
 }
 
-void init_file_state(struct GrooveFilePrivate *f) {
+static void init_file_state(struct GrooveFilePrivate *f) {
     Groove *groove = f->groove;
     memset(f, 0, sizeof(GrooveFilePrivate));
     f->groove = groove;
