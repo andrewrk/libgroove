@@ -81,7 +81,7 @@ make doc
 
 ## Contributing
 
-libsoundio is programmed in a tiny subset of C++11:
+libgroove is programmed in a tiny subset of C++11:
 
  * No STL.
  * No `new` or `delete`.
