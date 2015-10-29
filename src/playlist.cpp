@@ -12,7 +12,9 @@
 #include "util.hpp"
 #include "atomics.hpp"
 
+#define __STDC_FORMAT_MACROS
 #include <pthread.h>
+#include <inttypes.h>
 
 struct GrooveSinkPrivate {
     struct GrooveSink externals;
