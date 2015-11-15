@@ -5,9 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "queue.hpp"
-#include "ffmpeg.hpp"
-#include "util.hpp"
+#include "queue.h"
+#include "util.h"
 
 #include <pthread.h>
 
@@ -26,16 +25,16 @@ struct GrooveQueuePrivate {
 };
 
 struct GrooveQueue *groove_queue_create(void) {
-    struct GrooveQueuePrivate *q = allocate<GrooveQueuePrivate>(1);
+    struct GrooveQueuePrivate *q = ALLOCATE(struct GrooveQueuePrivate, 1);
     if (!q)
         return NULL;
 
     if (pthread_mutex_init(&q->mutex, NULL) != 0) {
-        deallocate(q);
+        DEALLOCATE(q);
         return NULL;
     }
     if (pthread_cond_init(&q->cond, NULL) != 0) {
-        deallocate(q);
+        DEALLOCATE(q);
         pthread_mutex_destroy(&q->mutex);
         return NULL;
     }
@@ -55,7 +54,7 @@ void groove_queue_flush(struct GrooveQueue *queue) {
         el1 = el->next;
         if (queue->cleanup)
             queue->cleanup(queue, el->obj);
-        deallocate(el);
+        DEALLOCATE(el);
     }
     q->first = NULL;
     q->last = NULL;
@@ -68,7 +67,7 @@ void groove_queue_destroy(struct GrooveQueue *queue) {
     struct GrooveQueuePrivate *q = (struct GrooveQueuePrivate *) queue;
     pthread_mutex_destroy(&q->mutex);
     pthread_cond_destroy(&q->cond);
-    deallocate(q);
+    DEALLOCATE(q);
 }
 
 void groove_queue_abort(struct GrooveQueue *queue) {
@@ -93,7 +92,7 @@ void groove_queue_reset(struct GrooveQueue *queue) {
 }
 
 int groove_queue_put(struct GrooveQueue *queue, void *obj) {
-    struct ItemList * el1 = allocate<ItemList>(1);
+    struct ItemList * el1 = ALLOCATE(struct ItemList, 1);
 
     if (!el1)
         return GrooveErrorNoMem;
@@ -168,7 +167,7 @@ int groove_queue_get(struct GrooveQueue *queue, void **obj_ptr, int block) {
                 queue->get(queue, ev1->obj);
 
             *obj_ptr = ev1->obj;
-            deallocate(ev1);
+            DEALLOCATE(ev1);
             ret = 1;
             break;
         } else if(!block) {
@@ -195,7 +194,7 @@ void groove_queue_purge(struct GrooveQueue *queue) {
                 prev->next = node->next;
                 if (queue->cleanup)
                     queue->cleanup(queue, node->obj);
-                deallocate(node);
+                DEALLOCATE(node);
                 node = prev->next;
                 if (!node)
                     q->last = prev;
@@ -203,7 +202,7 @@ void groove_queue_purge(struct GrooveQueue *queue) {
                 struct ItemList *next = node->next;
                 if (queue->cleanup)
                     queue->cleanup(queue, node->obj);
-                deallocate(node);
+                DEALLOCATE(node);
                 q->first = next;
                 node = next;
                 if (!node)
@@ -218,6 +217,6 @@ void groove_queue_purge(struct GrooveQueue *queue) {
 }
 
 void groove_queue_cleanup_default(struct GrooveQueue *queue, void *obj) {
-    deallocate(obj);
+    DEALLOCATE(obj);
 }
 

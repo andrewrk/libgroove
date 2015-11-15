@@ -5,13 +5,14 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove_private.h"
+#include "groove_internal.h"
+#include "util.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "util.hpp"
+#include <libavutil/channel_layout.h>
 
 void groove_panic(const char *format, ...) {
     va_list ap;
@@ -46,9 +47,9 @@ enum SoundIoChannelId from_ffmpeg_channel_id(uint64_t ffmpeg_channel_id) {
     }
 }
 
-void from_ffmpeg_layout(uint64_t in_layout, SoundIoChannelLayout *out_layout) {
+void from_ffmpeg_layout(uint64_t in_layout, struct SoundIoChannelLayout *out_layout) {
     int channel_count = av_get_channel_layout_nb_channels(in_layout);
-    channel_count = min(channel_count, SOUNDIO_MAX_CHANNELS);
+    channel_count = groove_min_int(channel_count, SOUNDIO_MAX_CHANNELS);
 
     out_layout->channel_count = channel_count;
     for (int i = 0; i < channel_count; i += 1) {
@@ -59,7 +60,7 @@ void from_ffmpeg_layout(uint64_t in_layout, SoundIoChannelLayout *out_layout) {
     soundio_channel_layout_detect_builtin(out_layout);
 }
 
-enum SoundIoFormat from_ffmpeg_format(AVSampleFormat fmt) {
+enum SoundIoFormat from_ffmpeg_format(enum AVSampleFormat fmt) {
     switch (fmt) {
         default:
             return SoundIoFormatInvalid;
@@ -81,7 +82,7 @@ enum SoundIoFormat from_ffmpeg_format(AVSampleFormat fmt) {
     }
 }
 
-bool from_ffmpeg_format_planar(AVSampleFormat fmt) {
+bool from_ffmpeg_format_planar(enum AVSampleFormat fmt) {
     switch (fmt) {
         default:
             return false;
@@ -94,7 +95,7 @@ bool from_ffmpeg_format_planar(AVSampleFormat fmt) {
     }
 }
 
-uint64_t to_ffmpeg_channel_id(SoundIoChannelId channel_id) {
+uint64_t to_ffmpeg_channel_id(enum SoundIoChannelId channel_id) {
     switch (channel_id) {
         default: return 0;
         case SoundIoChannelIdInvalid: return 0;
@@ -119,7 +120,7 @@ uint64_t to_ffmpeg_channel_id(SoundIoChannelId channel_id) {
     }
 }
 
-uint64_t to_ffmpeg_channel_layout(const SoundIoChannelLayout *channel_layout) {
+uint64_t to_ffmpeg_channel_layout(const struct SoundIoChannelLayout *channel_layout) {
     uint64_t result = 0;
     for (int i = 0; i < channel_layout->channel_count; i += 1) {
         enum SoundIoChannelId channel_id = channel_layout->channels[i];
@@ -128,7 +129,7 @@ uint64_t to_ffmpeg_channel_layout(const SoundIoChannelLayout *channel_layout) {
     return result;
 }
 
-AVSampleFormat to_ffmpeg_fmt_params(SoundIoFormat format, bool is_planar) {
+enum AVSampleFormat to_ffmpeg_fmt_params(enum SoundIoFormat format, bool is_planar) {
     switch (format) {
         default:
             return AV_SAMPLE_FMT_NONE;
@@ -145,6 +146,6 @@ AVSampleFormat to_ffmpeg_fmt_params(SoundIoFormat format, bool is_planar) {
     }
 }
 
-AVSampleFormat to_ffmpeg_fmt(const GrooveAudioFormat *fmt) {
+enum AVSampleFormat to_ffmpeg_fmt(const struct GrooveAudioFormat *fmt) {
     return to_ffmpeg_fmt_params(fmt->format, fmt->is_planar);
 }

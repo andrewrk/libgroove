@@ -5,8 +5,8 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_OS_HPP
-#define GROOVE_OS_HPP
+#ifndef GROOVE_OS_H
+#define GROOVE_OS_H
 
 #include <stdbool.h>
 #include <stddef.h>

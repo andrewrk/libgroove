@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.5)
-project(libgroove C CXX)
+project(libgroove C)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
 if(CMAKE_VERSION VERSION_LESS 3.0.0)
@@ -89,18 +89,18 @@ else()
 endif()
 
 set(LIBGROOVE_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/buffer.cpp"
-    "${CMAKE_SOURCE_DIR}/src/file.cpp"
-    "${CMAKE_SOURCE_DIR}/src/groove.cpp"
-    "${CMAKE_SOURCE_DIR}/src/player.cpp"
-    "${CMAKE_SOURCE_DIR}/src/queue.cpp"
-    "${CMAKE_SOURCE_DIR}/src/encoder.cpp"
-    "${CMAKE_SOURCE_DIR}/src/fingerprinter.cpp"
-    "${CMAKE_SOURCE_DIR}/src/loudness.cpp"
-    "${CMAKE_SOURCE_DIR}/src/waveform.cpp"
-    "${CMAKE_SOURCE_DIR}/src/playlist.cpp"
-    "${CMAKE_SOURCE_DIR}/src/util.cpp"
-    "${CMAKE_SOURCE_DIR}/src/os.cpp"
+    "${CMAKE_SOURCE_DIR}/src/buffer.c"
+    "${CMAKE_SOURCE_DIR}/src/file.c"
+    "${CMAKE_SOURCE_DIR}/src/groove.c"
+    "${CMAKE_SOURCE_DIR}/src/player.c"
+    "${CMAKE_SOURCE_DIR}/src/queue.c"
+    "${CMAKE_SOURCE_DIR}/src/encoder.c"
+    "${CMAKE_SOURCE_DIR}/src/fingerprinter.c"
+    "${CMAKE_SOURCE_DIR}/src/loudness.c"
+    "${CMAKE_SOURCE_DIR}/src/waveform.c"
+    "${CMAKE_SOURCE_DIR}/src/playlist.c"
+    "${CMAKE_SOURCE_DIR}/src/util.c"
+    "${CMAKE_SOURCE_DIR}/src/os.c"
 )
 
 set(CONFIGURE_OUT_FILE "${CMAKE_BINARY_DIR}/config.h")
@@ -113,14 +113,9 @@ set(LIBGROOVE_HEADERS
     "${CMAKE_SOURCE_DIR}/groove/waveform.h"
 )
 
-# GTFO, -lstdc++ !!
-set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "")
-set(CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "")
-
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Werror -pedantic")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Werror -pedantic")
 
-set(LIB_CFLAGS "-std=c++11 -fno-exceptions -fno-rtti -fvisibility=hidden -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes")
+set(LIB_CFLAGS "-std=c11 -fvisibility=hidden -D_REENTRANT -D_POSIX_C_SOURCE=200809L -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes")
 set(EXAMPLE_CFLAGS "-std=c99 -Wall")
 
 configure_file (

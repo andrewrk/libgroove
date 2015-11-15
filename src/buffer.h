@@ -5,13 +5,14 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_BUFFER_HPP
-#define GROOVE_BUFFER_HPP
+#ifndef GROOVE_BUFFER_H
+#define GROOVE_BUFFER_H
 
-#include "groove_private.h"
-#include "ffmpeg.hpp"
+#include "groove_internal.h"
 
 #include <pthread.h>
+
+#include <libavutil/frame.h>
 
 struct GrooveBufferPrivate {
     struct GrooveBuffer externals;

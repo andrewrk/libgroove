@@ -6,17 +6,19 @@
  */
 
 #include "groove_private.h"
-#include "groove.hpp"
 #include "config.h"
-#include "ffmpeg.hpp"
-#include "util.hpp"
-#include "os.hpp"
+#include "util.h"
+#include "os.h"
 
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/fcntl.h>
 #include <pthread.h>
+
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavfilter/avfilter.h>
 
 const char *groove_strerror(int error) {
     switch ((enum GrooveError)error) {
@@ -50,7 +52,7 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
     pthread_mutex_t *pmutex;
     switch (op) {
         case AV_LOCK_CREATE:
-            pmutex = allocate<pthread_mutex_t>(1);
+            pmutex = ALLOCATE(pthread_mutex_t, 1);
             *mutex = pmutex;
             return pthread_mutex_init(pmutex, NULL);
         case AV_LOCK_OBTAIN:
@@ -62,7 +64,7 @@ static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
         case AV_LOCK_DESTROY:
             pmutex = (pthread_mutex_t *) *mutex;
             int err = pthread_mutex_destroy(pmutex);
-            deallocate(pmutex);
+            DEALLOCATE(pmutex);
             *mutex = NULL;
             return err;
     }
@@ -85,7 +87,7 @@ static int init_once(void) {
 }
 
 int groove_create(struct Groove **out_groove) {
-    Groove *groove = allocate<Groove>(1);
+    struct Groove *groove = ALLOCATE(struct Groove, 1);
     if (!groove) {
         groove_destroy(groove);
         return GrooveErrorNoMem;
@@ -102,7 +104,7 @@ int groove_create(struct Groove **out_groove) {
 }
 
 void groove_destroy(struct Groove *groove) {
-    deallocate(groove);
+    DEALLOCATE(groove);
 }
 
 void groove_set_logging(int level) {
@@ -169,7 +171,7 @@ static const char *find_str_chr_rev(const char *str, int str_len, char c) {
     return NULL;
 }
 
-char *groove_create_rand_name(struct Groove *, int *out_len, const char *file, int file_len) {
+char *groove_create_rand_name(struct Groove *groove, int *out_len, const char *file, int file_len) {
     static const int random_len = 16;
     static const int max_ext_len = 16;
     static const char *prefix = ".tmp";
@@ -185,14 +187,14 @@ char *groove_create_rand_name(struct Groove *, int *out_len, const char *file, i
     char *basename;
     if (!slash) {
         *out_len = prefix_len + random_len + ext_len;
-        result = allocate<char>(*out_len + 1);
+        result = ALLOCATE(char, *out_len + 1);
         if (!result)
             return NULL;
         basename = result;
     } else {
         int basename_start = slash - file + 1;
         *out_len = basename_start + prefix_len + random_len + ext_len;
-        result = allocate<char>(*out_len + 1);
+        result = ALLOCATE(char, *out_len + 1);
         if (!result)
             return NULL;
         basename = result + basename_start;

@@ -5,11 +5,11 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove_private.h"
+#include "groove_internal.h"
 #include "groove/loudness.h"
-#include "ffmpeg.hpp"
-#include "queue.hpp"
-#include "util.hpp"
+#include "queue.h"
+#include "util.h"
+#include "atomics.h"
 
 #include <ebur128.h>
 
@@ -49,11 +49,11 @@ struct GrooveLoudnessDetectorPrivate {
     // set temporarily
     struct GroovePlaylistItem *purge_item;
 
-    int abort_request;
+    struct GrooveAtomicBool abort_request;
 };
 
 static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
-    struct GrooveLoudnessDetectorInfo *info = allocate<GrooveLoudnessDetectorInfo>(1);
+    struct GrooveLoudnessDetectorInfo *info = ALLOCATE(struct GrooveLoudnessDetectorInfo, 1);
     if (!info) {
         return GrooveErrorNoMem;
     }
@@ -83,7 +83,7 @@ static int emit_track_info(struct GrooveLoudnessDetectorPrivate *d) {
 
 static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
     int new_size = d->state_history_count * 2;
-    d->all_track_states = reallocate_nonzero(d->all_track_states, new_size * sizeof(ebur128_state *));
+    d->all_track_states = REALLOCATE_NONZERO(ebur128_state *, d->all_track_states, new_size);
     if (!d->all_track_states) {
         return GrooveErrorNoMem;
     }
@@ -94,12 +94,12 @@ static int resize_state_history(struct GrooveLoudnessDetectorPrivate *d) {
 }
 
 static void *detect_thread(void *arg) {
-    struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)arg;
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *)arg;
     struct GrooveLoudnessDetector *detector = &d->externals;
     struct GrooveBuffer *buffer;
 
     pthread_mutex_lock(&d->info_head_mutex);
-    while (!d->abort_request) {
+    while (!GROOVE_ATOMIC_LOAD(d->abort_request)) {
         if (d->info_queue_count >= detector->info_queue_size) {
             pthread_cond_wait(&d->drain_cond, &d->info_head_mutex);
             continue;
@@ -119,7 +119,7 @@ static void *detect_thread(void *arg) {
             emit_track_info(d);
 
             // send album info
-            struct GrooveLoudnessDetectorInfo *info = allocate<GrooveLoudnessDetectorInfo>(1);
+            struct GrooveLoudnessDetectorInfo *info = ALLOCATE(struct GrooveLoudnessDetectorInfo, 1);
             if (info) {
                 info->duration = d->album_duration;
                 if (!detector->disable_album) {
@@ -192,19 +192,19 @@ static void *detect_thread(void *arg) {
 }
 
 static void info_queue_cleanup(struct GrooveQueue* queue, void *obj) {
-    struct GrooveLoudnessDetectorInfo *info = (GrooveLoudnessDetectorInfo *)obj;
-    struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)queue->context;
+    struct GrooveLoudnessDetectorInfo *info = (struct GrooveLoudnessDetectorInfo *)obj;
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *)queue->context;
     d->info_queue_count -= 1;
-    deallocate(info);
+    DEALLOCATE(info);
 }
 
 static void info_queue_put(struct GrooveQueue *queue, void *obj) {
-    struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)queue->context;
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *)queue->context;
     d->info_queue_count += 1;
 }
 
 static void info_queue_get(struct GrooveQueue *queue, void *obj) {
-    struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)queue->context;
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *)queue->context;
     struct GrooveLoudnessDetector *detector = &d->externals;
 
     d->info_queue_count -= 1;
@@ -214,14 +214,14 @@ static void info_queue_get(struct GrooveQueue *queue, void *obj) {
 }
 
 static int info_queue_purge(struct GrooveQueue* queue, void *obj) {
-    struct GrooveLoudnessDetectorInfo *info = (GrooveLoudnessDetectorInfo *)obj;
-    struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)queue->context;
+    struct GrooveLoudnessDetectorInfo *info = (struct GrooveLoudnessDetectorInfo *)obj;
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *)queue->context;
 
     return info->item == d->purge_item;
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
-    struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)sink->userdata;
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *)sink->userdata;
 
     pthread_mutex_lock(&d->info_head_mutex);
     d->purge_item = item;
@@ -237,7 +237,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GrooveLoudnessDetectorPrivate *d = (GrooveLoudnessDetectorPrivate *)sink->userdata;
+    struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *)sink->userdata;
 
     pthread_mutex_lock(&d->info_head_mutex);
     groove_queue_flush(d->info_queue);
@@ -255,7 +255,7 @@ static void sink_flush(struct GrooveSink *sink) {
 }
 
 struct GrooveLoudnessDetector *groove_loudness_detector_create(struct Groove *groove) {
-    struct GrooveLoudnessDetectorPrivate *d = allocate<GrooveLoudnessDetectorPrivate>(1);
+    struct GrooveLoudnessDetectorPrivate *d = ALLOCATE(struct GrooveLoudnessDetectorPrivate, 1);
     if (!d) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate loudness detector\n");
         return NULL;
@@ -298,7 +298,7 @@ struct GrooveLoudnessDetector *groove_loudness_detector_create(struct Groove *gr
         return NULL;
     }
 
-    GrooveAudioFormat audio_format;
+    struct GrooveAudioFormat audio_format;
     audio_format.sample_rate = 44100;
     audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
     audio_format.format = SoundIoFormatFloat32NE;
@@ -334,7 +334,7 @@ void groove_loudness_detector_destroy(struct GrooveLoudnessDetector *detector) {
     if (d->drain_cond_inited)
         pthread_cond_destroy(&d->drain_cond);
 
-    deallocate(d);
+    DEALLOCATE(d);
 }
 
 int groove_loudness_detector_attach(struct GrooveLoudnessDetector *detector,
@@ -342,12 +342,14 @@ int groove_loudness_detector_attach(struct GrooveLoudnessDetector *detector,
 {
     struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *) detector;
 
+    GROOVE_ATOMIC_STORE(d->abort_request, false);
+
     detector->playlist = playlist;
     groove_queue_reset(d->info_queue);
 
     // set the initial state history size. if we run out we will realloc later.
     d->state_history_count = detector->disable_album ? 1 : 128;
-    d->all_track_states = reallocate_nonzero<ebur128_state*>(nullptr, d->state_history_count);
+    d->all_track_states = REALLOCATE_NONZERO(ebur128_state*, NULL, d->state_history_count);
     d->cur_track_index = 0;
     if (!d->all_track_states) {
         groove_loudness_detector_detach(detector);
@@ -372,7 +374,7 @@ int groove_loudness_detector_attach(struct GrooveLoudnessDetector *detector,
 int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector) {
     struct GrooveLoudnessDetectorPrivate *d = (struct GrooveLoudnessDetectorPrivate *) detector;
 
-    d->abort_request = 1;
+    GROOVE_ATOMIC_STORE(d->abort_request, true);
     groove_sink_detach(d->sink);
     groove_queue_flush(d->info_queue);
     groove_queue_abort(d->info_queue);
@@ -386,12 +388,12 @@ int groove_loudness_detector_detach(struct GrooveLoudnessDetector *detector) {
             if (d->all_track_states[i])
                 ebur128_destroy(&d->all_track_states[i]);
         }
-        deallocate(d->all_track_states);
+        DEALLOCATE(d->all_track_states);
         d->all_track_states = NULL;
     }
     d->cur_track_index = 0;
 
-    d->abort_request = 0;
+    GROOVE_ATOMIC_STORE(d->abort_request, false);
     d->info_head = NULL;
     d->info_pos = 0;
     d->track_duration = 0.0;
@@ -407,7 +409,7 @@ int groove_loudness_detector_info_get(struct GrooveLoudnessDetector *detector,
     struct GrooveLoudnessDetectorInfo *info_ptr;
     if (groove_queue_get(d->info_queue, (void**)&info_ptr, block) == 1) {
         *info = *info_ptr;
-        deallocate(info_ptr);
+        DEALLOCATE(info_ptr);
         return 1;
     }
 

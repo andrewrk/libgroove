@@ -5,14 +5,12 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove_private.h"
+#include "groove_internal.h"
 #include "groove/player.h"
-#include "queue.hpp"
-#include "ffmpeg.hpp"
-#include "util.hpp"
-#include "atomics.hpp"
-#include "atomic_value.hpp"
-#include "os.hpp"
+#include "queue.h"
+#include "util.h"
+#include "atomics.h"
+#include "os.h"
 
 #include <soundio/soundio.h>
 #include <assert.h>
@@ -33,7 +31,7 @@ struct GroovePlayerPrivate {
     size_t audio_buf_index; // in frames
 
     // this mutex applies to the variables in this block
-    GrooveOsMutex *play_head_mutex;
+    struct GrooveOsMutex *play_head_mutex;
     // pointer to current item where the buffered audio is reaching the device
     struct GroovePlaylistItem *play_head;
     // number of seconds into the play_head song where the buffered audio
@@ -48,14 +46,14 @@ struct GroovePlayerPrivate {
 
     // watchdog thread for opening and closing audio device
     bool abort_request;
-    GrooveOsThread *helper_thread;
-    GrooveOsCond *helper_thread_cond;
+    struct GrooveOsThread *helper_thread;
+    struct GrooveOsCond *helper_thread_cond;
     bool request_device_reopen;
     struct GrooveAudioFormat device_format;
 
     bool is_paused;
     bool prebuffering;
-    atomic_bool prebuf_flag;
+    struct GrooveAtomicBool prebuf_flag;
     bool is_underrun;
     bool is_started;
     struct SoundIoRingBuffer *playback_buffer;
@@ -64,11 +62,11 @@ struct GroovePlayerPrivate {
     long decode_abs_index;
     long buffer_abs_index;
 
-    AtomicValue<TimeStamp> time_stamp;
-    atomic_long device_close_frame_index;
+    struct TimeStamp time_stamp;
+    struct GrooveAtomicLong device_close_frame_index;
     bool waiting_to_be_closed;
     double sink_buffer_seconds;
-    atomic_long skip_to_index;
+    struct GrooveAtomicLong skip_to_index;
 };
 
 static enum SoundIoFormat prioritized_formats[] = {
@@ -106,7 +104,7 @@ static enum SoundIoChannelLayoutId prioritized_layouts[] = {
 };
 
 static void emit_event(struct GrooveQueue *queue, enum GroovePlayerEventType type) {
-    union GroovePlayerEvent *evt = allocate_nonzero<GroovePlayerEvent>(1);
+    union GroovePlayerEvent *evt = ALLOCATE_NONZERO(union GroovePlayerEvent, 1);
     if (!evt) {
         av_log(NULL, AV_LOG_ERROR, "unable to create event: out of memory\n");
         return;
@@ -128,7 +126,7 @@ static void error_callback(struct SoundIoOutStream *outstream, int err) {
     groove_panic("stream error: %s", soundio_strerror(err));
 }
 
-static void set_pause_state(GroovePlayerPrivate *p) {
+static void set_pause_state(struct GroovePlayerPrivate *p) {
     if (p->is_started)
         soundio_outstream_pause(p->outstream, (p->prebuffering || p->is_paused));
 }
@@ -136,36 +134,36 @@ static void set_pause_state(GroovePlayerPrivate *p) {
 static void handle_buffer_underrun(struct GroovePlayerPrivate *p) {
     groove_os_mutex_lock(p->play_head_mutex);
     p->is_underrun = true;
-    p->prebuf_flag.store(true);
+    GROOVE_ATOMIC_STORE(p->prebuf_flag, true);
     groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
     groove_os_mutex_unlock(p->play_head_mutex);
 }
 
 static void underflow_callback(struct SoundIoOutStream *outstream) {
-    struct GroovePlayerPrivate *p = (GroovePlayerPrivate *)outstream->userdata;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *)outstream->userdata;
     handle_buffer_underrun(p);
 }
 
 static void audio_callback(struct SoundIoOutStream *outstream,
         int frame_count_min, int frame_count_max)
 {
-    struct GroovePlayerPrivate *p = (GroovePlayerPrivate *)outstream->userdata;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *)outstream->userdata;
     const struct SoundIoChannelLayout *layout = &outstream->layout;
     struct SoundIoChannelArea *areas;
     int err;
 
-    long device_close_frame_index = p->device_close_frame_index.load();
+    long device_close_frame_index = GROOVE_ATOMIC_LOAD(p->device_close_frame_index);
     int needed_frames_past_close_index = (outstream->software_latency * outstream->sample_rate);
     int frames_until_close = (device_close_frame_index >= 0) ?
         (device_close_frame_index - p->buffer_abs_index + needed_frames_past_close_index) : -1;
 
-    bool prebuf = p->prebuf_flag.load();
+    bool prebuf = GROOVE_ATOMIC_LOAD(p->prebuf_flag);
     int fill_bytes = soundio_ring_buffer_fill_count(p->playback_buffer);
     int fill_frames = fill_bytes / outstream->bytes_per_frame;
 
     if (!prebuf && frame_count_min > fill_frames && frame_count_min > frames_until_close)
         handle_buffer_underrun(p);
-    prebuf = p->prebuf_flag.load();
+    prebuf = GROOVE_ATOMIC_LOAD(p->prebuf_flag);
 
     if (prebuf || p->waiting_to_be_closed) {
         // Waiting for helper thread to recover from buffer underrun. In the
@@ -200,8 +198,8 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     }
 
     char *read_ptr = soundio_ring_buffer_read_ptr(p->playback_buffer);
-    int write_frames = min(max(fill_frames, frames_until_close), frame_count_max);
-    int ring_buf_write_frames = min(write_frames, fill_frames);
+    int write_frames = groove_min_int(groove_max_int(fill_frames, frames_until_close), frame_count_max);
+    int ring_buf_write_frames = groove_min_int(write_frames, fill_frames);
     int frames_until_zero = ring_buf_write_frames;
     int frames_left = write_frames;
     while (frames_left > 0) {
@@ -215,8 +213,8 @@ static void audio_callback(struct SoundIoOutStream *outstream,
         if (!frame_count)
             break;
 
-        int nonzero_write_count = min(frames_until_zero, frame_count);
-        int zero_write_count = max(0, frame_count - frames_until_zero);
+        int nonzero_write_count = groove_min_int(frames_until_zero, frame_count);
+        int zero_write_count = groove_max_int(0, frame_count - frames_until_zero);
 
         for (int frame = 0; frame < nonzero_write_count; frame += 1) {
             for (int channel = 0; channel < layout->channel_count; channel += 1) {
@@ -245,13 +243,13 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     soundio_ring_buffer_advance_read_ptr(p->playback_buffer, ring_buf_write_frames * outstream->bytes_per_frame);
     p->buffer_abs_index += write_frames;
 
-    long skip_to_index = p->skip_to_index.exchange(-1);
+    long skip_to_index = GROOVE_ATOMIC_EXCHANGE(p->skip_to_index, -1);
     if (skip_to_index > 0) {
         soundio_outstream_clear_buffer(p->outstream);
-        int frames_to_skip = max(0L, skip_to_index - p->buffer_abs_index);
+        int frames_to_skip = groove_max_long(0L, skip_to_index - p->buffer_abs_index);
         int fill_bytes = soundio_ring_buffer_fill_count(p->playback_buffer);
         int fill_frames = fill_bytes / outstream->bytes_per_frame;
-        int bytes_to_skip = outstream->bytes_per_frame * min(frames_to_skip, fill_frames);
+        int bytes_to_skip = outstream->bytes_per_frame * groove_min_int(frames_to_skip, fill_frames);
         soundio_ring_buffer_advance_read_ptr(p->playback_buffer, bytes_to_skip);
     }
 
@@ -267,7 +265,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
         }
     }
 
-    TimeStamp *time_stamp = p->time_stamp.write_begin();
+    struct TimeStamp *time_stamp = &p->time_stamp;
 
     if ((err = soundio_outstream_get_latency(outstream, &time_stamp->delay))) {
         time_stamp->delay = outstream->software_latency - (frame_count_max / (double)outstream->sample_rate);
@@ -276,7 +274,6 @@ static void audio_callback(struct SoundIoOutStream *outstream,
 
     time_stamp->frame_index = p->buffer_abs_index;
     time_stamp->timestamp = groove_os_get_time();
-    p->time_stamp.write_end();
 }
 
 static int open_audio_device(struct GroovePlayerPrivate *p) {
@@ -312,13 +309,12 @@ static int open_audio_device(struct GroovePlayerPrivate *p) {
         return GrooveErrorOpeningDevice;
     }
 
-    TimeStamp *time_stamp = p->time_stamp.write_begin();
+    struct TimeStamp *time_stamp = &p->time_stamp;
     time_stamp->frame_index = 0;
     time_stamp->delay = p->outstream->software_latency;
     time_stamp->timestamp = groove_os_get_time();
-    p->time_stamp.write_end();
 
-    p->sink_buffer_seconds = max(4.0, p->outstream->software_latency);
+    p->sink_buffer_seconds = groove_max_double(4.0, p->outstream->software_latency);
     p->playback_buffer_cap = p->sink_buffer_seconds * p->outstream->sample_rate * p->outstream->bytes_per_frame;
     p->sink->buffer_size_bytes = p->playback_buffer_cap / 4;
     p->playback_buffer = soundio_ring_buffer_create(device->soundio, p->playback_buffer_cap);
@@ -338,10 +334,10 @@ static bool audio_formats_equal_ignore_planar(
             a->format == b->format);
 }
 
-static void done_prebuffering(GroovePlayerPrivate *p) {
+static void done_prebuffering(struct GroovePlayerPrivate *p) {
     if (p->prebuffering) {
         p->prebuffering = false;
-        p->prebuf_flag.store(false);
+        GROOVE_ATOMIC_STORE(p->prebuf_flag, false);
         if (!p->is_started) {
             p->is_started = true;
             soundio_outstream_start(p->outstream);
@@ -382,7 +378,7 @@ static void helper_thread_run(void *arg) {
                 if (p->outstream) {
                     done_prebuffering(p);
                     p->waiting_for_device_reopen = true;
-                    p->device_close_frame_index.store(p->decode_abs_index);
+                    GROOVE_ATOMIC_STORE(p->device_close_frame_index, p->decode_abs_index);
                 }
                 groove_os_cond_wait(p->helper_thread_cond, p->play_head_mutex);
                 continue;
@@ -399,7 +395,7 @@ static void helper_thread_run(void *arg) {
                     p->request_device_reopen = true;
                 } else if (!audio_formats_equal_ignore_planar(&p->audio_buf->format, &p->device_format)) {
                     p->waiting_for_device_reopen = true;
-                    p->device_close_frame_index.store(p->decode_abs_index);
+                    GROOVE_ATOMIC_STORE(p->device_close_frame_index, p->decode_abs_index);
                 }
             } else if (!p->request_device_reopen) {
                 groove_os_cond_wait(p->helper_thread_cond, p->play_head_mutex);
@@ -412,16 +408,16 @@ static void helper_thread_run(void *arg) {
             emit_event(p->eventq, GROOVE_EVENT_DEVICE_CLOSED);
 
             p->waiting_for_device_reopen = false;
-            p->device_close_frame_index.store(-1);
+            GROOVE_ATOMIC_STORE(p->device_close_frame_index, -1);
             p->prebuffering = true;
             p->is_started = false;
-            p->prebuf_flag.store(false);
+            GROOVE_ATOMIC_STORE(p->prebuf_flag, false);
             p->is_underrun = false;
             p->decode_abs_index = 0;
             p->buffer_abs_index = 0;
             p->request_device_reopen = false;
             p->waiting_to_be_closed = false;
-            p->skip_to_index.store(-1);
+            GROOVE_ATOMIC_STORE(p->skip_to_index, -1);
 
             if (p->audio_buf) {
                 if ((err = open_audio_device(p))) {
@@ -437,7 +433,7 @@ static void helper_thread_run(void *arg) {
             groove_os_cond_wait(p->helper_thread_cond, p->play_head_mutex);
             continue;
         }
-        if (!p->prebuffering && p->prebuf_flag.load()) {
+        if (!p->prebuffering && GROOVE_ATOMIC_LOAD(p->prebuf_flag)) {
             p->prebuffering = true;
             set_pause_state(p);
             if (p->is_underrun)
@@ -452,7 +448,7 @@ static void helper_thread_run(void *arg) {
         int free_bytes = p->playback_buffer_cap - fill_bytes;
         int free_frames = free_bytes / p->outstream->bytes_per_frame;
 
-        int write_frames = min(free_frames, audio_buf_frames_left);
+        int write_frames = groove_min_int(free_frames, audio_buf_frames_left);
         if (write_frames == 0) {
             done_prebuffering(p);
             double sleep_time = p->sink_buffer_seconds / 2.0;
@@ -486,7 +482,7 @@ static void helper_thread_run(void *arg) {
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
-    struct GroovePlayerPrivate *p = (GroovePlayerPrivate *)sink->userdata;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *)sink->userdata;
 
     groove_os_mutex_lock(p->play_head_mutex);
 
@@ -505,7 +501,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_pause(struct GrooveSink *sink) {
-    struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
+    struct GroovePlayer *player = (struct GroovePlayer *)sink->userdata;
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
     groove_os_mutex_lock(p->play_head_mutex);
@@ -515,7 +511,7 @@ static void sink_pause(struct GrooveSink *sink) {
 }
 
 static void sink_play(struct GrooveSink *sink) {
-    struct GroovePlayer *player = (GroovePlayer *)sink->userdata;
+    struct GroovePlayer *player = (struct GroovePlayer *)sink->userdata;
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
     groove_os_mutex_lock(p->play_head_mutex);
@@ -533,7 +529,7 @@ static void sink_filled(struct GrooveSink *sink) {
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GroovePlayerPrivate *p = (GroovePlayerPrivate *)sink->userdata;
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *)sink->userdata;
 
     groove_os_mutex_lock(p->play_head_mutex);
 
@@ -545,23 +541,21 @@ static void sink_flush(struct GrooveSink *sink) {
     p->play_head = NULL;
     p->play_pos_index = 0;
     p->prebuffering = true;
-    p->prebuf_flag.store(true);
+    GROOVE_ATOMIC_STORE(p->prebuf_flag, true);
 
-    p->skip_to_index.store(p->decode_abs_index);
+    GROOVE_ATOMIC_STORE(p->skip_to_index, p->decode_abs_index);
 
     groove_os_mutex_unlock(p->play_head_mutex);
 }
 
 struct GroovePlayer *groove_player_create(struct Groove *groove) {
-    struct GroovePlayerPrivate *p = allocate<GroovePlayerPrivate>(1);
+    struct GroovePlayerPrivate *p = ALLOCATE(struct GroovePlayerPrivate, 1);
 
     if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to create player: out of memory\n");
         return NULL;
     }
     struct GroovePlayer *player = &p->externals;
-
-    p->time_stamp.init();
 
     p->groove = groove;
 
@@ -615,11 +609,11 @@ void groove_player_destroy(struct GroovePlayer *player) {
 
     groove_sink_destroy(p->sink);
 
-    deallocate(p);
+    DEALLOCATE(p);
 }
 
-static int best_supported_layout(SoundIoDevice *device, SoundIoChannelLayout *out_layout) {
-    for (int i = 0; i < array_length(prioritized_layouts); i += 1) {
+static int best_supported_layout(struct SoundIoDevice *device, struct SoundIoChannelLayout *out_layout) {
+    for (int i = 0; i < ARRAY_LENGTH(prioritized_layouts); i += 1) {
         enum SoundIoChannelLayoutId layout_id = prioritized_layouts[i];
         const struct SoundIoChannelLayout *layout = soundio_channel_layout_get_builtin(layout_id);
         if (soundio_device_supports_layout(device, layout)) {
@@ -631,9 +625,9 @@ static int best_supported_layout(SoundIoDevice *device, SoundIoChannelLayout *ou
     return GrooveErrorDeviceParams;
 }
 
-static SoundIoFormat best_supported_format(SoundIoDevice *device) {
-    for (int i = 0; i < array_length(prioritized_formats); i += 1) {
-        SoundIoFormat format = prioritized_formats[i];
+static enum SoundIoFormat best_supported_format(struct SoundIoDevice *device) {
+    for (int i = 0; i < ARRAY_LENGTH(prioritized_formats); i += 1) {
+        enum SoundIoFormat format = prioritized_formats[i];
         if (soundio_device_supports_format(device, format)) {
             return format;
         }
@@ -750,7 +744,7 @@ void groove_player_position(struct GroovePlayer *player,
         *item = p->play_head;
 
     if (seconds && p->outstream) {
-        TimeStamp *time_stamp = p->time_stamp.get_read_ptr();
+        struct TimeStamp *time_stamp = &p->time_stamp;
 
         double played_timestamp_at = time_stamp->timestamp + time_stamp->delay;
 
@@ -774,7 +768,7 @@ int groove_player_event_get(struct GroovePlayer *player,
     int err = groove_queue_get(p->eventq, (void **)&tmp, block);
     if (err > 0) {
         *event = *tmp;
-        deallocate(tmp);
+        DEALLOCATE(tmp);
     }
     return err;
 }

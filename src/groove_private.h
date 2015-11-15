@@ -8,10 +8,10 @@
 #ifndef GROOVE_GROOVE_PRIVATE_H
 #define GROOVE_GROOVE_PRIVATE_H
 
-// This exists for __declspec(dllexport) and __declspec(dllimport) to be
-// defined correctly without the library user having to do anything.
-#define GROOVE_BUILDING_LIBRARY
-#include "groove/groove.h"
+#include "groove_internal.h"
+
+struct Groove {
+    int trash; // exists to make the struct non-empty
+};
 
 #endif
-

@@ -5,20 +5,21 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_FILE_HPP
-#define GROOVE_FILE_HPP
+#ifndef GROOVE_FILE_H
+#define GROOVE_FILE_H
 
-#include "groove_private.h"
-#include "ffmpeg.hpp"
-#include "atomics.hpp"
+#include "groove_internal.h"
+#include "atomics.h"
 
 #include <pthread.h>
+
+#include <libavformat/avformat.h>
 
 struct GrooveFilePrivate {
     struct GrooveFile externals;
     struct Groove *groove;
     int audio_stream_index;
-    atomic_bool abort_request; // true when we're closing the file
+    struct GrooveAtomicBool abort_request; // true when we're closing the file
     AVFormatContext *ic;
     AVCodec *decoder;
     AVStream *audio_st;

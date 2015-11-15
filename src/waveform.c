@@ -5,10 +5,10 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove_private.h"
+#include "groove_internal.h"
 #include "groove/waveform.h"
-#include "util.hpp"
-#include "queue.hpp"
+#include "util.h"
+#include "queue.h"
 
 #include <pthread.h>
 
@@ -22,7 +22,7 @@ struct GrooveWaveformPrivate {
     struct GrooveQueue *info_queue;
     int info_queue_bytes;
     pthread_t thread_id;
-    GrooveWaveformInfo *cur_info;
+    struct GrooveWaveformInfo *cur_info;
     int cur_data_index;
 
     // calculated, but we don't have the correct answer until too late
@@ -51,7 +51,7 @@ struct GrooveWaveformPrivate {
     int abort_request;
 };
 
-static int bytes_per_format(GrooveWaveformFormat format) {
+static int bytes_per_format(enum GrooveWaveformFormat format) {
     switch (format) {
         case GrooveWaveformFormatU8:
             return 1;
@@ -59,10 +59,11 @@ static int bytes_per_format(GrooveWaveformFormat format) {
     groove_panic("invalid GrooveWaveformFormat");
 }
 
-static GrooveWaveformInfo *create_info(GrooveWaveformPrivate *w, GroovePlaylistItem *item) {
-    GrooveWaveform *waveform = &w->externals;
+static struct GrooveWaveformInfo *create_info(struct GrooveWaveformPrivate *w, struct GroovePlaylistItem *item) {
+    struct GrooveWaveform *waveform = &w->externals;
     int payload_bytes = item ? (waveform->width_in_frames * bytes_per_format(waveform->format)) : 0;
-    GrooveWaveformInfo *info = (GrooveWaveformInfo *)allocate<char>(sizeof(GrooveWaveformInfo) + payload_bytes);
+    struct GrooveWaveformInfo *info = (struct GrooveWaveformInfo *)ALLOCATE(char,
+            sizeof(struct GrooveWaveformInfo) + payload_bytes);
     if (!info)
         groove_panic("memory allocation failure");
     info->ref_count = 1;
@@ -71,12 +72,12 @@ static GrooveWaveformInfo *create_info(GrooveWaveformPrivate *w, GroovePlaylistI
     return info;
 }
 
-static int info_size(GrooveWaveformInfo *info) {
-    return sizeof(GrooveWaveformInfo) + info->data_size;
+static int info_size(struct GrooveWaveformInfo *info) {
+    return sizeof(struct GrooveWaveformInfo) + info->data_size;
 }
 
 static void emit_track_info(struct GrooveWaveformPrivate *w) {
-    GrooveWaveform *waveform = &w->externals;
+    struct GrooveWaveform *waveform = &w->externals;
 
     if (!w->cur_info)
         return;
@@ -94,11 +95,11 @@ static void emit_track_info(struct GrooveWaveformPrivate *w) {
     if ((err = groove_queue_put(w->info_queue, w->cur_info)))
         groove_panic("unable to put in queue: %s", groove_strerror(err));
 
-    w->cur_info = nullptr;
+    w->cur_info = NULL;
 }
 
 static void *waveform_thread(void *arg) {
-    struct GrooveWaveformPrivate *w = (GrooveWaveformPrivate *)arg;
+    struct GrooveWaveformPrivate *w = (struct GrooveWaveformPrivate *)arg;
     struct GrooveWaveform *waveform = &w->externals;
 
     struct GrooveBuffer *buffer;
@@ -123,7 +124,7 @@ static void *waveform_thread(void *arg) {
             emit_track_info(w);
 
             int err;
-            if ((err = groove_queue_put(w->info_queue, create_info(w, nullptr))))
+            if ((err = groove_queue_put(w->info_queue, create_info(w, NULL))))
                 groove_panic("unable to put in queue: %s", groove_strerror(err));
 
             w->info_head = NULL;
@@ -140,7 +141,7 @@ static void *waveform_thread(void *arg) {
 
             if (buffer->item) {
                 // start a track
-                GrooveFile *file = buffer->item->file;
+                struct GrooveFile *file = buffer->item->file;
                 w->estimated_track_duration = (file->override_duration != 0.0) ?
                     file->override_duration : groove_file_duration(file);
                 if (w->estimated_track_duration <= 0.0) {
@@ -148,7 +149,7 @@ static void *waveform_thread(void *arg) {
                 }
                 w->estimated_track_frame_count = sample_rate * w->estimated_track_duration;
                 w->track_frames_per_pixel = w->estimated_track_frame_count / waveform->width_in_frames;
-                w->track_frames_per_pixel = max(w->track_frames_per_pixel, 1);
+                w->track_frames_per_pixel = groove_max_int(w->track_frames_per_pixel, 1);
                 w->frames_until_emit = w->track_frames_per_pixel;
                 w->emit_count = 0;
                 w->max_sample_value = 0.0f;
@@ -181,7 +182,7 @@ static void *waveform_thread(void *arg) {
             float *right = &data[i + 1];
             float abs_left = fabsf(*left);
             float abs_right = fabsf(*right);
-            w->max_sample_value = max(w->max_sample_value, max(abs_left, abs_right));
+            w->max_sample_value = groove_max_float(w->max_sample_value, groove_max_float(abs_left, abs_right));
         }
 
         groove_buffer_unref(buffer);
@@ -192,22 +193,22 @@ static void *waveform_thread(void *arg) {
 }
 
 static void info_queue_cleanup(struct GrooveQueue* queue, void *obj) {
-    struct GrooveWaveformInfo *info = (GrooveWaveformInfo *)obj;
-    struct GrooveWaveformPrivate *w = (GrooveWaveformPrivate *)queue->context;
+    struct GrooveWaveformInfo *info = (struct GrooveWaveformInfo *)obj;
+    struct GrooveWaveformPrivate *w = (struct GrooveWaveformPrivate *)queue->context;
     w->info_queue_bytes -= info_size(info);
     groove_waveform_info_unref(info);
 }
 
 static void info_queue_put(struct GrooveQueue *queue, void *obj) {
-    struct GrooveWaveformPrivate *w = (GrooveWaveformPrivate *)queue->context;
-    GrooveWaveformInfo *info = (GrooveWaveformInfo *)obj;
+    struct GrooveWaveformPrivate *w = (struct GrooveWaveformPrivate *)queue->context;
+    struct GrooveWaveformInfo *info = (struct GrooveWaveformInfo *)obj;
     w->info_queue_bytes += info_size(info);
 }
 
 static void info_queue_get(struct GrooveQueue *queue, void *obj) {
-    struct GrooveWaveformPrivate *w = (GrooveWaveformPrivate *)queue->context;
+    struct GrooveWaveformPrivate *w = (struct GrooveWaveformPrivate *)queue->context;
     struct GrooveWaveform *waveform = &w->externals;
-    GrooveWaveformInfo *info = (GrooveWaveformInfo *)obj;
+    struct GrooveWaveformInfo *info = (struct GrooveWaveformInfo *)obj;
 
     w->info_queue_bytes -= info_size(info);
 
@@ -216,14 +217,14 @@ static void info_queue_get(struct GrooveQueue *queue, void *obj) {
 }
 
 static int info_queue_purge(struct GrooveQueue* queue, void *obj) {
-    struct GrooveWaveformInfo *info = (GrooveWaveformInfo *)obj;
-    struct GrooveWaveformPrivate *w = (GrooveWaveformPrivate *)queue->context;
+    struct GrooveWaveformInfo *info = (struct GrooveWaveformInfo *)obj;
+    struct GrooveWaveformPrivate *w = (struct GrooveWaveformPrivate *)queue->context;
 
     return info->item == w->purge_item;
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
-    struct GrooveWaveformPrivate *w = (GrooveWaveformPrivate *)sink->userdata;
+    struct GrooveWaveformPrivate *w = (struct GrooveWaveformPrivate *)sink->userdata;
 
     pthread_mutex_lock(&w->info_head_mutex);
     w->purge_item = item;
@@ -239,7 +240,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GrooveWaveformPrivate *w = (GrooveWaveformPrivate *)sink->userdata;
+    struct GrooveWaveformPrivate *w = (struct GrooveWaveformPrivate *)sink->userdata;
 
     pthread_mutex_lock(&w->info_head_mutex);
     groove_queue_flush(w->info_queue);
@@ -255,9 +256,9 @@ static void sink_flush(struct GrooveSink *sink) {
 }
 
 struct GrooveWaveform *groove_waveform_create(struct Groove *groove) {
-    struct GrooveWaveformPrivate *w = allocate<GrooveWaveformPrivate>(1);
+    struct GrooveWaveformPrivate *w = ALLOCATE(struct GrooveWaveformPrivate, 1);
     if (!w)
-        return nullptr;
+        return NULL;
 
     w->groove = groove;
 
@@ -265,7 +266,7 @@ struct GrooveWaveform *groove_waveform_create(struct Groove *groove) {
 
     if (pthread_mutex_init(&w->info_head_mutex, NULL) != 0) {
         groove_waveform_destroy(waveform);
-        return nullptr;
+        return NULL;
     }
 
     w->info_head_mutex_inited = true;
@@ -293,7 +294,7 @@ struct GrooveWaveform *groove_waveform_create(struct Groove *groove) {
         return NULL;
     }
 
-    GrooveAudioFormat audio_format;
+    struct GrooveAudioFormat audio_format;
     audio_format.sample_rate = sample_rate;
     audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
     audio_format.format = SoundIoFormatFloat32NE;
@@ -331,7 +332,7 @@ void groove_waveform_destroy(struct GrooveWaveform *waveform) {
     if (w->drain_cond_inited)
         pthread_cond_destroy(&w->drain_cond);
 
-    deallocate(w);
+    DEALLOCATE(w);
 }
 
 int groove_waveform_attach(struct GrooveWaveform *waveform,
@@ -424,6 +425,6 @@ void groove_waveform_info_unref(struct GrooveWaveformInfo *info) {
     info->ref_count -= 1;
     assert(info->ref_count >= 0);
     if (info->ref_count == 0) {
-        deallocate(info);
+        DEALLOCATE(info);
     }
 }

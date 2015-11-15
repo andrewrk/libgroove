@@ -79,22 +79,6 @@ To build the documentation:
 make doc
 ```
 
-## Contributing
-
-libgroove is programmed in a tiny subset of C++11:
-
- * No STL.
- * No `new` or `delete`.
- * No `class`. All fields in structs are `public`.
- * No constructors or destructors.
- * No exceptions or run-time type information.
- * No references.
- * No linking against libstdc++.
-
-Do not be fooled - this is a *C library*, not a C++ library. We just take
-advantage of a select few C++11 compiler features such as templates, and then
-link against libc.
-
 ## Projects Using libgroove
 
 Feel free to make a pull request adding yours to this list.

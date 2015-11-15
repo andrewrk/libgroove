@@ -5,45 +5,46 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "file.hpp"
-#include "util.hpp"
-#include "groove.hpp"
+#include "file.h"
+#include "util.h"
+#include "groove_private.h"
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/unistd.h>
 
 static int decode_interrupt_cb(void *ctx) {
-    struct GrooveFilePrivate *f = (GrooveFilePrivate *)ctx;
-    return f ? f->abort_request.load() : 0;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)ctx;
+    return f ? GROOVE_ATOMIC_LOAD(f->abort_request) : 0;
 }
 
-static int avio_read_packet(void *opaque, uint8_t *buf, int buf_size) {
-    struct GrooveFilePrivate *f = (GrooveFilePrivate *)opaque;
+static int avio_read_packet_callback(void *opaque, uint8_t *buf, int buf_size) {
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)opaque;
     return f->custom_io->read_packet(f->custom_io, buf, buf_size);
 }
 
-static int avio_write_packet(void *opaque, uint8_t *buf, int buf_size) {
-    struct GrooveFilePrivate *f = (GrooveFilePrivate *)opaque;
+static int avio_write_packet_callback(void *opaque, uint8_t *buf, int buf_size) {
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)opaque;
     return f->custom_io->write_packet(f->custom_io, buf, buf_size);
 }
 
-static int64_t avio_seek(void *opaque, int64_t offset, int whence) {
-    struct GrooveFilePrivate *f = (GrooveFilePrivate *)opaque;
+static int64_t avio_seek_callback(void *opaque, int64_t offset, int whence) {
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)opaque;
     return f->custom_io->seek(f->custom_io, offset, whence);
 }
 
 static int file_read_packet(struct GrooveCustomIo *custom_io, uint8_t *buf, int buf_size) {
-    struct GrooveFilePrivate *f = (GrooveFilePrivate *)custom_io->userdata;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)custom_io->userdata;
     return fread(buf, 1, buf_size, f->stdfile);
 }
 
 static int file_write_packet(struct GrooveCustomIo *custom_io, uint8_t *buf, int buf_size) {
-    struct GrooveFilePrivate *f = (GrooveFilePrivate *)custom_io->userdata;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)custom_io->userdata;
     return fwrite(buf, 1, buf_size, f->stdfile);
 }
 
 static int64_t file_seek(struct GrooveCustomIo *custom_io, int64_t offset, int whence) {
-    struct GrooveFilePrivate *f = (GrooveFilePrivate *)custom_io->userdata;
+    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)custom_io->userdata;
 
     if (whence & GROOVE_SEEK_FORCE) {
         // doesn't matter
@@ -69,16 +70,16 @@ static int64_t file_seek(struct GrooveCustomIo *custom_io, int64_t offset, int w
 }
 
 static void init_file_state(struct GrooveFilePrivate *f) {
-    Groove *groove = f->groove;
-    memset(f, 0, sizeof(GrooveFilePrivate));
+    struct Groove *groove = f->groove;
+    memset(f, 0, sizeof(struct GrooveFilePrivate));
     f->groove = groove;
     f->audio_stream_index = -1;
     f->seek_pos = -1;
-    f->abort_request.store(false);
+    GROOVE_ATOMIC_STORE(f->abort_request, false);
 }
 
 struct GrooveFile *groove_file_create(struct Groove *groove) {
-    struct GrooveFilePrivate *f = allocate_nonzero<GrooveFilePrivate>(1);
+    struct GrooveFilePrivate *f = ALLOCATE_NONZERO(struct GrooveFilePrivate, 1);
     if (!f)
         return NULL;
 
@@ -109,14 +110,14 @@ int groove_file_open_custom(struct GrooveFile *file, struct GrooveCustomIo *cust
     f->ic->interrupt_callback.opaque = f;
 
     const int buffer_size = 8 * 1024;
-    f->avio_buf = allocate_nonzero<unsigned char>(buffer_size);
+    f->avio_buf = ALLOCATE_NONZERO(unsigned char, buffer_size);
     if (!f->avio_buf) {
         groove_file_close(file);
         return GrooveErrorNoMem;
     }
 
     f->avio = avio_alloc_context(f->avio_buf, buffer_size, 0, f,
-            avio_read_packet, avio_write_packet, avio_seek);
+            avio_read_packet_callback, avio_write_packet_callback, avio_seek_callback);
     if (!f->avio) {
         groove_file_close(file);
         return GrooveErrorNoMem;
@@ -228,7 +229,7 @@ void groove_file_close(struct GrooveFile *file) {
 
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *)file;
 
-    f->abort_request.store(true);
+    GROOVE_ATOMIC_STORE(f->abort_request, true);
 
     if (f->audio_stream_index >= 0) {
         AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
@@ -242,7 +243,7 @@ void groove_file_close(struct GrooveFile *file) {
     }
 
     // disable interrupting
-    f->abort_request.store(false);
+    GROOVE_ATOMIC_STORE(f->abort_request, false);
 
     if (f->ic)
         avformat_close_input(&f->ic);
@@ -266,7 +267,7 @@ void groove_file_destroy(struct GrooveFile *file) {
 
     groove_file_close(file);
 
-    deallocate(f);
+    DEALLOCATE(f);
 }
 
 
@@ -402,7 +403,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
             cleanup_save(file);
             return GrooveErrorEncoding;
         }
-        ocodec->extradata      = allocate<uint8_t>(extra_size);
+        ocodec->extradata      = ALLOCATE(uint8_t, extra_size);
         if (!ocodec->extradata) {
             cleanup_save(file);
             return GrooveErrorNoMem;
@@ -424,11 +425,14 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
             ocodec->height             = icodec->height;
             ocodec->has_b_frames       = icodec->has_b_frames;
             if (!ocodec->sample_aspect_ratio.num) {
-                ocodec->sample_aspect_ratio   =
-                out_stream->sample_aspect_ratio =
-                    in_stream->sample_aspect_ratio.num ? in_stream->sample_aspect_ratio :
-                    icodec->sample_aspect_ratio.num ?
-                    icodec->sample_aspect_ratio : AVRational{0, 1};
+                if (in_stream->sample_aspect_ratio.num) {
+                    ocodec->sample_aspect_ratio = in_stream->sample_aspect_ratio;
+                } else if (icodec->sample_aspect_ratio.num) {
+                    ocodec->sample_aspect_ratio = icodec->sample_aspect_ratio;
+                } else {
+                    ocodec->sample_aspect_ratio.num = 0;
+                    ocodec->sample_aspect_ratio.den = 1;
+                }
             }
             break;
         case AVMEDIA_TYPE_SUBTITLE:

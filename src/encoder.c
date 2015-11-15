@@ -5,16 +5,17 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove_private.h"
+#include "groove_internal.h"
 #include "groove/encoder.h"
-#include "queue.hpp"
-#include "buffer.hpp"
-#include "ffmpeg.hpp"
-#include "util.hpp"
-#include "atomics.hpp"
+#include "queue.h"
+#include "buffer.h"
+#include "util.h"
+#include "atomics.h"
 
 #include <string.h>
 #include <pthread.h>
+
+#include <libavformat/avformat.h>
 
 struct GrooveEncoderPrivate {
     struct GrooveEncoder externals;
@@ -27,7 +28,7 @@ struct GrooveEncoderPrivate {
     AVStream *stream;
     AVPacket pkt;
     int audioq_size; // in bytes
-    atomic_bool abort_request;
+    struct GrooveAtomicBool abort_request;
 
     // set temporarily
     struct GroovePlaylistItem *purge_item;
@@ -69,7 +70,7 @@ static enum SoundIoFormat prioritized_sample_formats[] = {
     SoundIoFormatU8,
 };
 
-static int set_codec_ctx_format(AVCodecContext *codec_ctx, const GrooveAudioFormat *fmt) {
+static int set_codec_ctx_format(AVCodecContext *codec_ctx, const struct GrooveAudioFormat *fmt) {
     switch (fmt->format) {
         case SoundIoFormatU8:
             codec_ctx->bits_per_raw_sample = 8;
@@ -187,11 +188,11 @@ static int init_avcontext(struct GrooveEncoder *encoder) {
 }
 
 static void *encode_thread(void *arg) {
-    struct GrooveEncoder *encoder = (GrooveEncoder *)arg;
+    struct GrooveEncoder *encoder = (struct GrooveEncoder *)arg;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     struct GrooveBuffer *buffer;
-    while (!e->abort_request.load()) {
+    while (!GROOVE_ATOMIC_LOAD(e->abort_request)) {
         pthread_mutex_lock(&e->encode_head_mutex);
 
         if (e->audioq_size >= encoder->encoded_buffer_size) {
@@ -263,7 +264,7 @@ static void *encode_thread(void *arg) {
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
-    struct GrooveEncoder *encoder = (GrooveEncoder *)sink->userdata;
+    struct GrooveEncoder *encoder = (struct GrooveEncoder *)sink->userdata;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     pthread_mutex_lock(&e->encode_head_mutex);
@@ -280,7 +281,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GrooveEncoder *encoder = (GrooveEncoder *)sink->userdata;
+    struct GrooveEncoder *encoder = (struct GrooveEncoder *)sink->userdata;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     pthread_mutex_lock(&e->encode_head_mutex);
@@ -295,35 +296,35 @@ static void sink_flush(struct GrooveSink *sink) {
 }
 
 static int audioq_purge(struct GrooveQueue* queue, void *obj) {
-    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
+    struct GrooveBuffer *buffer = (struct GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return 0;
-    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *)queue->context;
     return buffer->item == e->purge_item;
 }
 
 static void audioq_cleanup(struct GrooveQueue* queue, void *obj) {
-    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
+    struct GrooveBuffer *buffer = (struct GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return;
-    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *)queue->context;
     e->audioq_size -= buffer->size;
     groove_buffer_unref(buffer);
 }
 
 static void audioq_put(struct GrooveQueue *queue, void *obj) {
-    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
+    struct GrooveBuffer *buffer = (struct GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return;
-    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *)queue->context;
     e->audioq_size += buffer->size;
 }
 
 static void audioq_get(struct GrooveQueue *queue, void *obj) {
-    struct GrooveBuffer *buffer = (GrooveBuffer *)obj;
+    struct GrooveBuffer *buffer = (struct GrooveBuffer *)obj;
     if (buffer == end_of_q_sentinel)
         return;
-    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)queue->context;
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *)queue->context;
     struct GrooveEncoder *encoder = &e->externals;
     e->audioq_size -= buffer->size;
 
@@ -332,9 +333,9 @@ static void audioq_get(struct GrooveQueue *queue, void *obj) {
 }
 
 static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
-    struct GrooveEncoderPrivate *e = (GrooveEncoderPrivate *)opaque;
+    struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *)opaque;
 
-    struct GrooveBufferPrivate *b = allocate<GrooveBufferPrivate>(1);
+    struct GrooveBufferPrivate *b = ALLOCATE(struct GrooveBufferPrivate, 1);
 
     if (!b) {
         return GrooveErrorNoMem;
@@ -343,7 +344,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     struct GrooveBuffer *buffer = &b->externals;
 
     if (pthread_mutex_init(&b->mutex, NULL)) {
-        deallocate(b);
+        DEALLOCATE(b);
         return GrooveErrorSystemResources;
     }
 
@@ -353,10 +354,10 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
     buffer->format = e->encode_format;
 
     b->is_packet = 1;
-    b->data = allocate_nonzero<uint8_t>(buf_size);
+    b->data = ALLOCATE_NONZERO(uint8_t, buf_size);
     if (!b->data) {
-        deallocate(buffer);
-        deallocate(b);
+        DEALLOCATE(buffer);
+        DEALLOCATE(b);
         pthread_mutex_destroy(&b->mutex);
         return GrooveErrorNoMem;
     }
@@ -373,7 +374,7 @@ static int encoder_write_packet(void *opaque, uint8_t *buf, int buf_size) {
 }
 
 struct GrooveEncoder *groove_encoder_create(struct Groove *groove) {
-    struct GrooveEncoderPrivate *e = allocate<GrooveEncoderPrivate>(1);
+    struct GrooveEncoderPrivate *e = ALLOCATE(struct GrooveEncoderPrivate, 1);
 
     if (!e) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate encoder\n");
@@ -382,10 +383,10 @@ struct GrooveEncoder *groove_encoder_create(struct Groove *groove) {
     struct GrooveEncoder *encoder = &e->externals;
 
     e->groove = groove;
-    e->abort_request.store(false);
+    GROOVE_ATOMIC_STORE(e->abort_request, false);
 
     const int buffer_size = 4 * 1024;
-    e->avio_buf = allocate_nonzero<unsigned char>(buffer_size);
+    e->avio_buf = ALLOCATE_NONZERO(unsigned char, buffer_size);
     if (!e->avio_buf) {
         groove_encoder_destroy(encoder);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate avio buffer\n");
@@ -469,12 +470,12 @@ void groove_encoder_destroy(struct GrooveEncoder *encoder) {
         av_free(e->avio);
 
     if (e->avio_buf)
-        deallocate(e->avio_buf);
+        DEALLOCATE(e->avio_buf);
 
     if (e->metadata)
         av_dict_free(&e->metadata);
 
-    deallocate(e);
+    DEALLOCATE(e);
 }
 
 static int abs_diff(int a, int b) {
@@ -482,7 +483,7 @@ static int abs_diff(int a, int b) {
     return n >= 0 ? n : -n;
 }
 
-static bool codec_supports_fmt(AVCodec *codec, SoundIoFormat fmt, bool is_planar) {
+static bool codec_supports_fmt(AVCodec *codec, enum SoundIoFormat fmt, bool is_planar) {
     if (!codec->sample_fmts)
         return true;
 
@@ -525,8 +526,8 @@ static bool codec_supports_fmt(AVCodec *codec, SoundIoFormat fmt, bool is_planar
     return false;
 }
 
-static int closest_supported_sample_fmt(AVCodec *codec, const GrooveAudioFormat *target_fmt,
-        GrooveAudioFormat *actual_fmt)
+static int closest_supported_sample_fmt(AVCodec *codec, const struct GrooveAudioFormat *target_fmt,
+        struct GrooveAudioFormat *actual_fmt)
 {
     if (codec_supports_fmt(codec, target_fmt->format, target_fmt->is_planar)) {
         actual_fmt->format = target_fmt->format;
@@ -539,8 +540,8 @@ static int closest_supported_sample_fmt(AVCodec *codec, const GrooveAudioFormat 
         return 0;
     }
 
-    for (int i = 0; i < array_length(prioritized_sample_formats); i += 1) {
-        SoundIoFormat fmt = prioritized_sample_formats[i];
+    for (int i = 0; i < ARRAY_LENGTH(prioritized_sample_formats); i += 1) {
+        enum SoundIoFormat fmt = prioritized_sample_formats[i];
         if (codec_supports_fmt(codec, fmt, target_fmt->is_planar)) {
             actual_fmt->format = fmt;
             actual_fmt->is_planar = target_fmt->is_planar;
@@ -700,13 +701,13 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
 int groove_encoder_detach(struct GrooveEncoder *encoder) {
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
-    e->abort_request.store(true);
+    GROOVE_ATOMIC_STORE(e->abort_request, true);
     groove_sink_detach(e->sink);
     groove_queue_flush(e->audioq);
     groove_queue_abort(e->audioq);
     pthread_cond_signal(&e->drain_cond);
     pthread_join(e->thread_id, NULL);
-    e->abort_request.store(false);
+    GROOVE_ATOMIC_STORE(e->abort_request, false);
 
     cleanup_avcontext(e);
     e->oformat = NULL;

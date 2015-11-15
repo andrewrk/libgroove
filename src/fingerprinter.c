@@ -5,12 +5,11 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "groove_private.h"
+#include "groove_internal.h"
 #include "groove/fingerprinter.h"
-#include "queue.hpp"
-#include "ffmpeg.hpp"
-#include "util.hpp"
-#include "atomics.hpp"
+#include "queue.h"
+#include "util.h"
+#include "atomics.h"
 
 #include <chromaprint.h>
 
@@ -49,11 +48,11 @@ struct GrooveFingerprinterPrivate {
     // set temporarily
     struct GroovePlaylistItem *purge_item;
 
-    atomic_bool abort_request;
+    struct GrooveAtomicBool abort_request;
 };
 
 static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
-    struct GrooveFingerprinterInfo *info = allocate<GrooveFingerprinterInfo>(1);
+    struct GrooveFingerprinterInfo *info = ALLOCATE(struct GrooveFingerprinterInfo, 1);
     if (!info) {
         return GrooveErrorNoMem;
     }
@@ -77,11 +76,11 @@ static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
 }
 
 static void *print_thread(void *arg) {
-    struct GrooveFingerprinterPrivate *p = (GrooveFingerprinterPrivate *)arg;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)arg;
     struct GrooveFingerprinter *printer = &p->externals;
 
     struct GrooveBuffer *buffer;
-    while (!p->abort_request.load()) {
+    while (!GROOVE_ATOMIC_LOAD(p->abort_request)) {
         pthread_mutex_lock(&p->info_head_mutex);
 
         if (p->info_queue_count >= printer->info_queue_size) {
@@ -104,7 +103,7 @@ static void *print_thread(void *arg) {
             emit_track_info(p);
 
             // send album info
-            struct GrooveFingerprinterInfo *info = allocate<GrooveFingerprinterInfo>(1);
+            struct GrooveFingerprinterInfo *info = ALLOCATE(struct GrooveFingerprinterInfo, 1);
             if (info) {
                 info->duration = p->album_duration;
                 groove_queue_put(p->info_queue, info);
@@ -153,19 +152,19 @@ static void *print_thread(void *arg) {
 }
 
 static void info_queue_cleanup(struct GrooveQueue* queue, void *obj) {
-    struct GrooveFingerprinterInfo *info = (GrooveFingerprinterInfo *)obj;
-    struct GrooveFingerprinterPrivate *p = (GrooveFingerprinterPrivate *)queue->context;
+    struct GrooveFingerprinterInfo *info = (struct GrooveFingerprinterInfo *)obj;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
     p->info_queue_count -= 1;
-    deallocate(info);
+    DEALLOCATE(info);
 }
 
 static void info_queue_put(struct GrooveQueue *queue, void *obj) {
-    struct GrooveFingerprinterPrivate *p = (GrooveFingerprinterPrivate *)queue->context;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
     p->info_queue_count += 1;
 }
 
 static void info_queue_get(struct GrooveQueue *queue, void *obj) {
-    struct GrooveFingerprinterPrivate *p = (GrooveFingerprinterPrivate *)queue->context;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
     struct GrooveFingerprinter *printer = &p->externals;
 
     p->info_queue_count -= 1;
@@ -175,14 +174,14 @@ static void info_queue_get(struct GrooveQueue *queue, void *obj) {
 }
 
 static int info_queue_purge(struct GrooveQueue* queue, void *obj) {
-    struct GrooveFingerprinterInfo *info = (GrooveFingerprinterInfo *)obj;
-    struct GrooveFingerprinterPrivate *p = (GrooveFingerprinterPrivate *)queue->context;
+    struct GrooveFingerprinterInfo *info = (struct GrooveFingerprinterInfo *)obj;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
 
     return info->item == p->purge_item;
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
-    struct GrooveFingerprinterPrivate *p = (GrooveFingerprinterPrivate *)sink->userdata;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)sink->userdata;
 
     pthread_mutex_lock(&p->info_head_mutex);
     p->purge_item = item;
@@ -198,7 +197,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GrooveFingerprinterPrivate *p = (GrooveFingerprinterPrivate *)sink->userdata;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)sink->userdata;
 
     pthread_mutex_lock(&p->info_head_mutex);
     groove_queue_flush(p->info_queue);
@@ -211,12 +210,12 @@ static void sink_flush(struct GrooveSink *sink) {
 }
 
 struct GrooveFingerprinter *groove_fingerprinter_create(struct Groove *groove) {
-    struct GrooveFingerprinterPrivate *p = allocate<GrooveFingerprinterPrivate>(1);
+    struct GrooveFingerprinterPrivate *p = ALLOCATE(struct GrooveFingerprinterPrivate, 1);
     if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate fingerprinter\n");
         return NULL;
     }
-    p->abort_request.store(false);
+    GROOVE_ATOMIC_STORE(p->abort_request, false);
     p->groove = groove;
 
     struct GrooveFingerprinter *printer = &p->externals;
@@ -254,7 +253,7 @@ struct GrooveFingerprinter *groove_fingerprinter_create(struct Groove *groove) {
         return NULL;
     }
 
-    GrooveAudioFormat audio_format;
+    struct GrooveAudioFormat audio_format;
     audio_format.sample_rate = 44100;
     audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
     audio_format.format = SoundIoFormatS16NE;
@@ -290,7 +289,7 @@ void groove_fingerprinter_destroy(struct GrooveFingerprinter *printer) {
     if (p->drain_cond_inited)
         pthread_cond_destroy(&p->drain_cond);
 
-    deallocate(p);
+    DEALLOCATE(p);
 }
 
 int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
@@ -324,7 +323,7 @@ int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
 int groove_fingerprinter_detach(struct GrooveFingerprinter *printer) {
     struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *) printer;
 
-    p->abort_request.store(true);
+    GROOVE_ATOMIC_STORE(p->abort_request, true);
     groove_sink_detach(p->sink);
     groove_queue_flush(p->info_queue);
     groove_queue_abort(p->info_queue);
@@ -338,7 +337,7 @@ int groove_fingerprinter_detach(struct GrooveFingerprinter *printer) {
         p->chroma_ctx = NULL;
     }
 
-    p->abort_request.store(false);
+    GROOVE_ATOMIC_STORE(p->abort_request, false);
     p->info_head = NULL;
     p->info_pos = 0;
     p->track_duration = 0.0;
@@ -354,7 +353,7 @@ int groove_fingerprinter_info_get(struct GrooveFingerprinter *printer,
     struct GrooveFingerprinterInfo *info_ptr;
     if (groove_queue_get(p->info_queue, (void**)&info_ptr, block) == 1) {
         *info = *info_ptr;
-        deallocate(info_ptr);
+        DEALLOCATE(info_ptr);
         return 1;
     }
 

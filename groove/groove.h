@@ -136,7 +136,8 @@ struct GrooveAudioFormat {
     int sample_rate;
     struct SoundIoChannelLayout layout;
     enum SoundIoFormat format;
-    bool is_planar;
+    /// 0 - nonplanar, otherwise planar
+    int is_planar;
 };
 
 struct GrooveFile {

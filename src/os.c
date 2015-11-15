@@ -5,10 +5,10 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "os.hpp"
-#include "groove_private.h"
-#include "util.hpp"
-#include "atomics.hpp"
+#include "os.h"
+#include "groove_internal.h"
+#include "util.h"
+#include "atomics.h"
 
 #include <stdlib.h>
 #include <time.h>
@@ -155,7 +155,7 @@ double groove_os_get_time(void) {
 #if defined(GROOVE_OS_WINDOWS)
 static DWORD WINAPI run_win32_thread(LPVOID userdata) {
     struct GrooveOsThread *thread = (struct GrooveOsThread *)userdata;
-    HRESULT err = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT err = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     assert(err == S_OK);
     thread->run(thread->arg);
     CoUninitialize();
@@ -179,7 +179,7 @@ int groove_os_thread_create(
 {
     *out_thread = NULL;
 
-    struct GrooveOsThread *thread = allocate<GrooveOsThread>(1);
+    struct GrooveOsThread *thread = ALLOCATE(struct GrooveOsThread, 1);
     if (!thread) {
         groove_os_thread_destroy(thread);
         return GrooveErrorNoMem;
@@ -228,7 +228,7 @@ void groove_os_thread_destroy(struct GrooveOsThread *thread) {
 }
 
 struct GrooveOsMutex *groove_os_mutex_create(void) {
-    struct GrooveOsMutex *mutex = allocate<GrooveOsMutex>(1);
+    struct GrooveOsMutex *mutex = ALLOCATE(struct GrooveOsMutex, 1);
     if (!mutex) {
         groove_os_mutex_destroy(mutex);
         return NULL;
@@ -280,7 +280,7 @@ void groove_os_mutex_unlock(struct GrooveOsMutex *mutex) {
 }
 
 struct GrooveOsCond * groove_os_cond_create(void) {
-    struct GrooveOsCond *cond = allocate<GrooveOsCond>(1);
+    struct GrooveOsCond *cond = ALLOCATE(struct GrooveOsCond, 1);
 
     if (!cond) {
         groove_os_cond_destroy(cond);
@@ -553,18 +553,18 @@ int groove_os_init(int (*init_once)(void)) {
     if ((err = init_once()))
         return err;
 
-    if (!InitOnceComplete(&win32_init_once, INIT_ONCE_ASYNC, nullptr))
+    if (!InitOnceComplete(&win32_init_once, INIT_ONCE_ASYNC, NULL))
         return GrooveErrorSystemResources;
 #else
-    if (initialized.load())
+    if (atomic_load(&initialized))
         return 0;
 
     assert_no_err(pthread_mutex_lock(&init_mutex));
-    if (initialized.load()) {
+    if (atomic_load(&initialized)) {
         assert_no_err(pthread_mutex_unlock(&init_mutex));
         return 0;
     }
-    initialized.store(true);
+    atomic_store(&initialized, true);
     if ((err = internal_init()))
         return err;
     if ((err = init_once()))
