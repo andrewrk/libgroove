@@ -1540,6 +1540,22 @@ int groove_sink_get_fill_level(struct GrooveSink *sink) {
     return GROOVE_ATOMIC_LOAD(s->audioq_size);
 }
 
+void groove_sink_set_buffer_size_bytes(struct GrooveSink *sink, int buffer_size_bytes) {
+    struct GroovePlaylist *playlist = (struct GroovePlaylist *) sink->playlist;
+    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
+
+    pthread_mutex_lock(&p->decode_head_mutex);
+    sink->buffer_size_bytes = buffer_size_bytes;
+    s->min_audioq_size = sink->buffer_size_bytes;
+    if (GROOVE_ATOMIC_LOAD(s->audioq_size) < s->min_audioq_size) {
+        pthread_mutex_lock(&p->drain_cond_mutex);
+        pthread_cond_signal(&p->sink_drain_cond);
+        pthread_mutex_unlock(&p->drain_cond_mutex);
+    }
+    pthread_mutex_unlock(&p->decode_head_mutex);
+}
+
 int groove_sink_contains_end_of_playlist(struct GrooveSink *sink) {
     struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
     return GROOVE_ATOMIC_LOAD(s->audioq_contains_end);

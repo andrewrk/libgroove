@@ -529,6 +529,9 @@ GROOVE_EXPORT int groove_sink_buffer_peek(struct GrooveSink *sink, int block);
 /// returns 0 on success, < 0 on error
 GROOVE_EXPORT int groove_sink_set_gain(struct GrooveSink *sink, double gain);
 
+/// Set the buffer_size_bytes field of the sink while the sink is attached.
+GROOVE_EXPORT void groove_sink_set_buffer_size_bytes(struct GrooveSink *sink, int buffer_size_bytes);
+
 /// Returns the number of bytes contained in this sink.
 GROOVE_EXPORT int groove_sink_get_fill_level(struct GrooveSink *sink);
 

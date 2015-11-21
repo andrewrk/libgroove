@@ -25,6 +25,8 @@ enum GroovePlayerEventType {
     GROOVE_EVENT_DEVICE_OPENED,
 
     /// when the audio device gets an error re-opening
+    /// in this event the only recourse you have is to detach the player
+    /// and re-attach it.
     GROOVE_EVENT_DEVICE_OPEN_ERROR,
 
     /// when the end of playlist is hit
@@ -73,6 +75,8 @@ GROOVE_EXPORT int groove_player_detach(struct GroovePlayer *player);
 /// both the current playlist item and the position in seconds in the playlist
 /// item are given. item will be set to NULL if the playlist is empty
 /// you may pass NULL for item or seconds
+/// seconds might be negative, to compensate for the latency of the sound
+/// card buffer.
 GROOVE_EXPORT void groove_player_position(struct GroovePlayer *player,
         struct GroovePlaylistItem **item, double *seconds);
 
