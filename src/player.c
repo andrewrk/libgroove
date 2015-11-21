@@ -421,6 +421,8 @@ static void sink_flush(struct GrooveSink *sink) {
     p->play_pos = -1.0;
     p->play_head = NULL;
     p->prebuffering = true;
+    if (p->outstream)
+        soundio_outstream_clear_buffer(p->outstream);
 
     groove_os_mutex_unlock(p->play_head_mutex);
 }
