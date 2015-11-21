@@ -33,6 +33,9 @@ struct GroovePlayerPrivate {
     // number of seconds into the play_head song where the buffered audio
     // is reaching the device
     double play_pos;
+    // adjustment which takes into account hardware latency and sound card buffer
+    double play_pos_adjustment;
+
     bool prebuffering;
     bool is_paused;
     bool is_started;
@@ -242,6 +245,8 @@ static void audio_callback(struct SoundIoOutStream *outstream,
             }
         }
     }
+
+    soundio_outstream_get_latency(outstream, &p->play_pos_adjustment);
 
 unlock_and_return:
     groove_os_mutex_unlock(p->play_head_mutex);
@@ -620,7 +625,7 @@ void groove_player_position(struct GroovePlayer *player,
         *item = p->play_head;
 
     if (seconds)
-        *seconds = p->play_pos;
+        *seconds = p->play_pos - p->play_pos_adjustment;
 
     groove_os_mutex_unlock(p->play_head_mutex);
 }
