@@ -33,7 +33,6 @@ struct GroovePlayerPrivate {
     bool prebuffering;
     bool is_paused;
     bool is_started;
-    bool silence;
 
     struct SoundIoOutStream *outstream;
     struct GrooveSink *sink;
@@ -110,7 +109,10 @@ static void set_pause_state(struct GroovePlayerPrivate *p, bool new_state) {
 }
 
 static void underflow_callback(struct SoundIoOutStream *outstream) {
-    error_callback(outstream, SoundIoErrorUnderflow);
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *)outstream->userdata;
+    p->prebuffering = true;
+    emit_event(p->eventq, GROOVE_EVENT_BUFFERUNDERRUN);
+    groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
 }
 
 static bool audio_formats_equal_ignore_planar(
@@ -134,7 +136,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
 
     groove_os_mutex_lock(p->play_head_mutex);
 
-    p->silence = p->prebuffering || p->request_device_close || p->is_paused;
+    bool silence = p->prebuffering || p->request_device_close || p->is_paused;
 
 
     while (frames_left) {
@@ -149,7 +151,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
             break;
 
         while (frame_count > 0) {
-            if (!p->silence && p->audio_buf_index >= p->audio_buf_size) {
+            if (!silence && p->audio_buf_index >= p->audio_buf_size) {
                 groove_buffer_unref(p->audio_buf);
                 p->audio_buf_index = 0;
                 p->audio_buf_size = 0;
@@ -161,7 +163,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     p->play_head = NULL;
                     p->play_pos = -1.0;
                     p->request_device_close = true;
-                    p->silence = true;
+                    silence = true;
                     // TODO write silence until we know closing is safe
                     groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
                 } else if (ret == GROOVE_BUFFER_YES) {
@@ -175,7 +177,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     if (!audio_formats_equal_ignore_planar(&p->audio_buf->format, &p->device_format)) {
                         p->request_device_close = true;
                         p->request_device_open = true;
-                        p->silence = true;
+                        silence = true;
                         // TODO write silence until we know closing is safe
                         groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
                     }
@@ -185,7 +187,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                 }
             }
 
-            if (p->silence) {
+            if (silence) {
                 for (int frame = 0; frame < frame_count; frame += 1) {
                     for (int ch = 0; ch < channel_count; ch += 1) {
                         memset(areas[ch].ptr, 0, outstream->bytes_per_sample);
@@ -224,8 +226,13 @@ static void audio_callback(struct SoundIoOutStream *outstream,
         }
 
         if ((err = soundio_outstream_end_write(outstream))) {
-            error_callback(outstream, err);
-            goto unlock_and_return;
+            if (err == SoundIoErrorUnderflow) {
+                underflow_callback(outstream);
+                goto unlock_and_return;
+            } else {
+                error_callback(outstream, err);
+                goto unlock_and_return;
+            }
         }
     }
 
@@ -319,17 +326,18 @@ static void helper_thread_run(void *arg) {
 
         if (done_prebuffering) {
             p->prebuffering = false;
-            p->is_started = true;
-            groove_os_mutex_unlock(p->play_head_mutex);
-            if ((err = soundio_outstream_start(p->outstream))) {
-                av_log(NULL, AV_LOG_ERROR, "unable to start playback stream: %s\n", soundio_strerror(err));
-                emit_event(p->eventq, GROOVE_EVENT_DEVICE_OPEN_ERROR);
+            if (!p->is_started) {
+                p->is_started = true;
                 groove_os_mutex_unlock(p->play_head_mutex);
-                return;
+                if ((err = soundio_outstream_start(p->outstream))) {
+                    av_log(NULL, AV_LOG_ERROR, "unable to start playback stream: %s\n", soundio_strerror(err));
+                    emit_event(p->eventq, GROOVE_EVENT_DEVICE_OPEN_ERROR);
+                    groove_os_mutex_unlock(p->play_head_mutex);
+                    return;
+                }
+                groove_os_mutex_lock(p->play_head_mutex);
             }
-            groove_os_mutex_lock(p->play_head_mutex);
-            if (p->is_paused)
-                soundio_outstream_pause(p->outstream, true);
+            soundio_outstream_pause(p->outstream, p->is_paused);
             continue;
         }
 
