@@ -29,6 +29,10 @@ enum GroovePlayerEventType {
     /// and re-attach it.
     GROOVE_EVENT_DEVICE_OPEN_ERROR,
 
+    /// when this event occurs the only recourse you have is to detach the
+    /// player and re-attach it.
+    GROOVE_EVENT_STREAM_ERROR,
+
     /// when the end of playlist is hit
     GROOVE_EVENT_END_OF_PLAYLIST,
 

@@ -99,7 +99,9 @@ static void close_audio_device(struct GroovePlayerPrivate *p) {
 }
 
 static void error_callback(struct SoundIoOutStream *outstream, int err) {
-    groove_panic("TODO stream error: %s", soundio_strerror(err));
+    struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *)outstream->userdata;
+    av_log(NULL, AV_LOG_ERROR, "stream error: %s\n", soundio_strerror(err));
+    emit_event(p->eventq, GROOVE_EVENT_STREAM_ERROR);
 }
 
 static void set_pause_state(struct GroovePlayerPrivate *p, bool new_state) {

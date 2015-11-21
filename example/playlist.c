@@ -149,6 +149,9 @@ int main(int argc, char * argv[]) {
     bool device_open = false;
     while (groove_player_event_get(player, &event, 1) >= 0) {
         switch (event.type) {
+        case GROOVE_EVENT_STREAM_ERROR:
+            panic("stream error");
+            break;
         case GROOVE_EVENT_BUFFERUNDERRUN:
             fprintf(stderr, "buffer underrun\n");
             break;
