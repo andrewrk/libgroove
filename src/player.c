@@ -23,6 +23,9 @@ struct GroovePlayerPrivate {
     size_t audio_buf_size; // in frames
     size_t audio_buf_index; // in frames
 
+    int device_buffer_frames;
+    int silence_frames_left;
+
     // this mutex applies to the variables in this block
     struct GrooveOsMutex *play_head_mutex;
     // pointer to current item where the buffered audio is reaching the device
@@ -139,8 +142,6 @@ static void audio_callback(struct SoundIoOutStream *outstream,
     groove_os_mutex_lock(p->play_head_mutex);
 
     bool silence = p->prebuffering || p->request_device_close || p->is_paused;
-
-
     while (frames_left) {
         int frame_count = frames_left;
 
@@ -166,8 +167,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     p->play_pos = -1.0;
                     p->request_device_close = true;
                     silence = true;
-                    // TODO write silence until we know closing is safe
-                    groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
+                    p->silence_frames_left = p->device_buffer_frames;
                 } else if (ret == GROOVE_BUFFER_YES) {
                     if (p->play_head != p->audio_buf->item)
                         emit_event(p->eventq, GROOVE_EVENT_NOWPLAYING);
@@ -180,8 +180,7 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                         p->request_device_close = true;
                         p->request_device_open = true;
                         silence = true;
-                        // TODO write silence until we know closing is safe
-                        groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
+                        p->silence_frames_left = p->device_buffer_frames;
                     }
                 } else {
                     error_callback(outstream, SoundIoErrorUnderflow);
@@ -197,6 +196,12 @@ static void audio_callback(struct SoundIoOutStream *outstream,
                     }
                 }
                 frames_left -= frame_count;
+                if (p->silence_frames_left > 0) {
+                    p->silence_frames_left -= frame_count;
+                    if (p->silence_frames_left <= 0) {
+                        groove_os_cond_signal(p->helper_thread_cond, p->play_head_mutex);
+                    }
+                }
                 frame_count = 0;
             } else {
                 int audio_buf_frames_left = p->audio_buf_size - p->audio_buf_index;
@@ -270,12 +275,16 @@ static int open_audio_device(struct GroovePlayerPrivate *p) {
 
     p->outstream->software_latency = 0.025;
 
+    p->outstream->name = player->name;
+
     p->prebuffering = true;
     if ((err = soundio_outstream_open(p->outstream))) {
         close_audio_device(p);
         av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", soundio_strerror(err));
         return GrooveErrorOpeningDevice;
     }
+
+    p->device_buffer_frames = ceil(p->outstream->software_latency * (double)p->outstream->sample_rate);
 
     static const double total_buffer_duration = 2.0;
     double sink_buffer_seconds = groove_max_double(p->outstream->software_latency * 2.0,
@@ -297,7 +306,7 @@ static void helper_thread_run(void *arg) {
 
     groove_os_mutex_lock(p->play_head_mutex);
     while (!p->abort_request) {
-        if (p->request_device_close) {
+        if (p->request_device_close && p->silence_frames_left <= 0) {
             close_audio_device(p);
             emit_event(p->eventq, GROOVE_EVENT_DEVICE_CLOSED);
             p->request_device_close = false;
@@ -315,7 +324,7 @@ static void helper_thread_run(void *arg) {
         bool done_prebuffering = p->prebuffering && (groove_sink_contains_end_of_playlist(p->sink) ||
             groove_sink_get_fill_level(p->sink) >= p->sink->buffer_size_bytes);
 
-        if (p->request_device_open || (!p->outstream && done_prebuffering)) {
+        if ((p->request_device_open && p->silence_frames_left <= 0) || (!p->outstream && done_prebuffering)) {
             p->request_device_open = false;
             p->is_started = false;
             if ((err = open_audio_device(p))) {
@@ -454,6 +463,7 @@ struct GroovePlayer *groove_player_create(struct Groove *groove) {
 
     // set some nice defaults
     player->gain = p->sink->gain;
+    player->name = "libgroove";
 
     return player;
 }
@@ -552,6 +562,7 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
     p->audio_buf_size = 0;
     p->audio_buf_index = 0;
     p->abort_request = false;
+    p->silence_frames_left = 0;
 
     groove_queue_reset(p->eventq);
 

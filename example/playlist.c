@@ -103,6 +103,8 @@ int main(int argc, char * argv[]) {
     if (!soundio)
         panic("out of memory");
 
+    soundio->app_name = "libgroove playlist example";
+
     err = (backend == SoundIoBackendNone) ?
         soundio_connect(soundio) : soundio_connect_backend(soundio, backend);
     if (err)
@@ -139,6 +141,8 @@ int main(int argc, char * argv[]) {
         panic("Cannot probe device: %s", soundio_strerror(device->probe_error));
 
     player->device = device;
+
+    player->name = "libgroove playlist example";
 
     if ((err = groove_player_attach(player, playlist)))
         panic("error attaching player");

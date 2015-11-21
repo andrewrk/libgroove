@@ -56,6 +56,9 @@ struct GroovePlayer {
     /// float format. Defaults to 1.0
     double gain;
 
+    /// Stream name. Used for some system's volume mixer interfaces.
+    const char *name;
+
     /// Read-only. Set when you call ::groove_player_attach and cleared when
     /// you call ::groove_player_detach
     struct GroovePlaylist *playlist;
