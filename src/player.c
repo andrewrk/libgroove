@@ -573,6 +573,8 @@ int groove_player_attach(struct GroovePlayer *player, struct GroovePlaylist *pla
 
     assert(!p->outstream);
 
+    set_pause_state(p, !groove_playlist_playing(playlist));
+
     if ((err = groove_os_thread_create(helper_thread_run, p, &p->helper_thread))) {
         groove_player_detach(player);
         av_log(NULL, AV_LOG_ERROR, "unable to create device thread\n");
