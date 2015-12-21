@@ -1317,10 +1317,10 @@ struct GroovePlaylistItem *groove_playlist_insert(struct GroovePlaylist *playlis
         if (next->prev) {
             item->prev = next->prev;
             item->prev->next = item;
-            next->prev = item;
         } else {
             playlist->head = item;
         }
+        next->prev = item;
     } else if (!playlist->head) {
         playlist->head = item;
         playlist->tail = item;
