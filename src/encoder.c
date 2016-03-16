@@ -130,7 +130,7 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
         return GrooveErrorEncoding;
 
     av_write_frame(e->fmt_ctx, &e->pkt);
-    av_free_packet(&e->pkt);
+    av_packet_unref(&e->pkt);
 
     return 0;
 }

@@ -696,11 +696,11 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
     }
     if (pkt->stream_index != f->audio_stream_index) {
         // we're only interested in the One True Audio Stream
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
         return 0;
     }
     audio_decode_frame(playlist, file);
-    av_free_packet(pkt);
+    av_packet_unref(pkt);
     return 0;
 }
 

@@ -50,8 +50,8 @@ utility.
 
 Dependencies:
 
-* [cmake](http://www.cmake.org/)
-* [ffmpeg](http://ffmpeg.org/)
+* [cmake](http://www.cmake.org/) >= 2.8.5
+* [ffmpeg](http://ffmpeg.org/) >= 3.0
   * suggested flags: `--enable-shared --disable-static --enable-libmp3lame --enable-libvorbis --enable-gpl`
 * [libebur128](https://github.com/jiixyj/libebur128)
   * make sure it is compiled with the speex dependency so that true peak

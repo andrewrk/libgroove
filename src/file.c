@@ -234,7 +234,7 @@ void groove_file_close(struct GrooveFile *file) {
     if (f->audio_stream_index >= 0) {
         AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
 
-        av_free_packet(&f->audio_pkt);
+        av_packet_unref(&f->audio_pkt);
 
         f->ic->streams[f->audio_stream_index]->discard = AVDISCARD_ALL;
         avcodec_close(avctx);
@@ -323,7 +323,7 @@ const char *groove_tag_value(struct GrooveTag *tag) {
 static void cleanup_save(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
-    av_free_packet(&f->audio_pkt);
+    av_packet_unref(&f->audio_pkt);
     if (f->tempfile_exists) {
         remove(f->oc->filename);
         f->tempfile_exists = 0;
@@ -469,7 +469,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
             cleanup_save(file);
             return GrooveErrorEncoding;
         }
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
     }
 
     if (av_write_trailer(f->oc) < 0) {
