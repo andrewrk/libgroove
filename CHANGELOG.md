@@ -1,5 +1,6 @@
 ### Version 5.0.0 (UNRELEASED)
 
+ * Use the chromaprint 1.4+ API
  * Depend on ffmpeg instead of libav.
  * Add `groove_file_save_as` API.
  * Add `metadata_checksum.c` example. It updates metadata of a song just like
