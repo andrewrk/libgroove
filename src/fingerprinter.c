@@ -64,7 +64,7 @@ static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
         return GrooveErrorNoMem;
     }
     if (!chromaprint_get_raw_fingerprint(p->chroma_ctx,
-                (void**)&info->fingerprint, &info->fingerprint_size))
+                &info->fingerprint, &info->fingerprint_size))
     {
         av_log(NULL, AV_LOG_ERROR, "unable to get fingerprint\n");
         return GrooveErrorNoMem;
@@ -140,7 +140,7 @@ static void *print_thread(void *arg) {
         double buffer_duration = buffer->frame_count / (double)buffer->format.sample_rate;
         p->track_duration += buffer_duration;
         p->album_duration += buffer_duration;
-        if (!chromaprint_feed(p->chroma_ctx, buffer->data[0], buffer->frame_count * 2)) {
+        if (!chromaprint_feed(p->chroma_ctx, (const int16_t *)buffer->data[0], buffer->frame_count * 2)) {
             av_log(NULL, AV_LOG_ERROR, "unable to feed fingerprint\n");
         }
 
@@ -389,17 +389,17 @@ void groove_fingerprinter_free_info(struct GrooveFingerprinterInfo *info) {
     info->fingerprint = NULL;
 }
 
-int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp) {
+int groove_fingerprinter_encode(uint32_t *fp, int size, char **encoded_fp) {
     int encoded_size;
     int err = chromaprint_encode_fingerprint(fp, size,
-            CHROMAPRINT_ALGORITHM_DEFAULT, (void **)encoded_fp, &encoded_size, 1);
+            CHROMAPRINT_ALGORITHM_DEFAULT, encoded_fp, &encoded_size, 1);
     return err == 1 ? 0 : -1;
 }
 
-int groove_fingerprinter_decode(char *encoded_fp, int32_t **fp, int *size) {
+int groove_fingerprinter_decode(char *encoded_fp, uint32_t **fp, int *size) {
     int algorithm;
     int encoded_size = strlen(encoded_fp);
-    int err = chromaprint_decode_fingerprint(encoded_fp, encoded_size, (void**)fp, size,
+    int err = chromaprint_decode_fingerprint(encoded_fp, encoded_size, fp, size,
             &algorithm, 1);
     return err == 1 ? 0 : -1;
 }
