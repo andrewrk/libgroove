@@ -1318,9 +1318,9 @@ struct GroovePlaylistItem *groove_playlist_insert(struct GroovePlaylist *playlis
             item->prev = next->prev;
             item->prev->next = item;
         } else {
-            playlist->head = item;			
-			p->decode_head = playlist->head;
-			pthread_cond_signal(&p->decode_head_cond);
+            playlist->head = item;
+            p->decode_head = playlist->head;
+            pthread_cond_signal(&p->decode_head_cond);
         }
         next->prev = item;
     } else if (!playlist->head) {
