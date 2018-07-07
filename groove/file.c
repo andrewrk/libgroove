@@ -183,9 +183,9 @@ static int tempfileify(char * str, size_t max_len) {
     size_t len = strlen(str);
     if (len + 10 > max_len)
         return -1;
-    char prepend[11];
+    char prepend[16];
     int n = rand() % 99999;
-    snprintf(prepend, 11, ".tmp%05d-", n);
+    snprintf(prepend, 16, ".tmp%05d-", n);
     // find the last slash and insert after it
     // if no slash, insert at beginning
     char * slash = strrchr(str, '/');

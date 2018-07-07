@@ -59,6 +59,14 @@ You will need these to compile libgroove.
 * [libsdl2-dev](http://www.libsdl.org/)
 * [libchromaprint-dev](http://acoustid.org/chromaprint)
 
+### Ubuntu 18.04
+
+libav is not available on Ubuntu 18.04. You can build it from source like this:
+
+* Download https://libav.org/releases/libav-11.12.tar.xz and extract it.
+* `./configure --prefix=$HOME/local/ --enable-libmp3lame --disable-doc --disable-static --enable-shared`
+* `make install`
+
 Installation
 ------------
 
@@ -69,6 +77,10 @@ source are also provided at the end of this list.
 
 Note: as of Ubuntu 14.10 Utopic Unicorn, libgroove is included in the default
 repository index so you don't need a PPA.
+
+Note: as of Ubuntu 18.04 Bionic Beaver, the libgroove available from apt crashes
+when trying to encode mp3 audio due to the libav dependency being replaced by
+ffmpeg. You will need to build libgroove and libav from source on Ubuntu 18.04.
 
 ```sh
 sudo apt-add-repository ppa:andrewrk/libgroove
@@ -125,11 +137,23 @@ brew install libgroove
 
 ### From Source
 
+#### Normal build
+
 ```sh
 mkdir build && cd build && cmake ../
 # Verify that the configure output is to your liking.
 make
 sudo make install
+```
+
+#### Building with a locally built libav
+
+```sh
+mkdir build && cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/local -DCMAKE_PREFIX_PATH=$HOME/local -DCMAKE_BUILD_TYPE=Release
+# Verify that the configure output is to your liking.
+make
+make install
 ```
 
 Documentation
