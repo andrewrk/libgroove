@@ -26,13 +26,51 @@ pub fn build(b: *std.build.Builder) void {
     //}, &.{
     //});
 
-    //const chromaprint = b.addStaticLibrary("chromaprint", null);
-    //chromaprint.setTarget(target);
-    //chromaprint.setBuildMode(mode);
-    //chromaprint.linkLibC();
-    //chromaprint.addCSourceFiles(&.{
-    //}, &.{
-    //});
+    const chromaprint = b.addStaticLibrary("chromaprint", null);
+    chromaprint.setTarget(target);
+    chromaprint.setBuildMode(mode);
+    chromaprint.linkLibC();
+    chromaprint.linkSystemLibrary("c++");
+    chromaprint.addIncludeDir("deps/chromaprint/src");
+    chromaprint.addIncludeDir("deps/ffmpeg");
+    chromaprint.addCSourceFiles(&.{
+        "deps/chromaprint/src/audio_processor.cpp",
+        "deps/chromaprint/src/chroma.cpp",
+        "deps/chromaprint/src/chroma_resampler.cpp",
+        "deps/chromaprint/src/chroma_filter.cpp",
+        "deps/chromaprint/src/spectrum.cpp",
+        "deps/chromaprint/src/fft.cpp",
+        "deps/chromaprint/src/fingerprinter.cpp",
+        "deps/chromaprint/src/image_builder.cpp",
+        "deps/chromaprint/src/simhash.cpp",
+        "deps/chromaprint/src/silence_remover.cpp",
+        "deps/chromaprint/src/fingerprint_calculator.cpp",
+        "deps/chromaprint/src/fingerprint_compressor.cpp",
+        "deps/chromaprint/src/fingerprint_decompressor.cpp",
+        "deps/chromaprint/src/fingerprinter_configuration.cpp",
+        "deps/chromaprint/src/fingerprint_matcher.cpp",
+        "deps/chromaprint/src/utils/base64.cpp",
+        "deps/chromaprint/src/chromaprint.cpp",
+        "deps/chromaprint/src/fft_lib_avfft.cpp",
+    }, &.{
+        "-std=c++11",
+        "-DHAVE_CONFIG_H",
+        "-D_SCL_SECURE_NO_WARNINGS",
+        "-D__STDC_LIMIT_MACROS",
+        "-D__STDC_CONSTANT_MACROS",
+        "-DCHROMAPRINT_NODLL",
+    });
+    chromaprint.addCSourceFiles(&.{
+        "deps/chromaprint/src/avresample/resample2.c",
+    }, &.{
+        "-std=c11",
+        "-DHAVE_CONFIG_H",
+        "-D_SCL_SECURE_NO_WARNINGS",
+        "-D__STDC_LIMIT_MACROS",
+        "-D__STDC_CONSTANT_MACROS",
+        "-DCHROMAPRINT_NODLL",
+        "-D_GNU_SOURCE",
+    });
 
     //const transcode = b.addExecutable("transcode", null);
     //transcode.setTarget(target);
@@ -45,8 +83,10 @@ pub fn build(b: *std.build.Builder) void {
     groove.setTarget(target);
     groove.setBuildMode(mode);
     groove.linkLibrary(ffmpeg);
+    groove.linkLibrary(chromaprint);
     groove.linkLibC();
     groove.addIncludeDir(".");
+    groove.addIncludeDir("deps");
     groove.addIncludeDir("deps/ffmpeg");
     groove.addCSourceFiles(&.{
         "groove/buffer.c",
