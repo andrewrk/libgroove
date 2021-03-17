@@ -10,11 +10,11 @@ pub fn build(b: *std.build.Builder) void {
     ffmpeg.linkLibC();
     ffmpeg.addCSourceFiles(&.{}, &.{});
 
-    //const sdl2 = b.addStaticLibrary("SDL2", null);
-    //sdl2.setTarget(target);
-    //sdl2.setBuildMode(mode);
-    //sdl2.linkLibC();
-    //sdl2.addCSourceFiles(&.{
+    //const soundio = b.addStaticLibrary("soundio", null);
+    //soundio.setTarget(target);
+    //soundio.setBuildMode(mode);
+    //soundio.linkLibC();
+    //soundio.addCSourceFiles(&.{
     //}, &.{
     //});
 
