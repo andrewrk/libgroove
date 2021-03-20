@@ -18,13 +18,14 @@ pub fn build(b: *std.build.Builder) void {
     //}, &.{
     //});
 
-    //const ebur128 = b.addStaticLibrary("ebur128", null);
-    //ebur128.setTarget(target);
-    //ebur128.setBuildMode(mode);
-    //ebur128.linkLibC();
-    //ebur128.addCSourceFiles(&.{
-    //}, &.{
-    //});
+    const ebur128 = b.addStaticLibrary("ebur128", null);
+    ebur128.setTarget(target);
+    ebur128.setBuildMode(mode);
+    ebur128.linkLibC();
+    ebur128.linkSystemLibrary("m");
+    ebur128.addCSourceFiles(&.{
+        "deps/ebur128/ebur128/ebur128.c",
+    }, &.{});
 
     const chromaprint = b.addStaticLibrary("chromaprint", null);
     chromaprint.setTarget(target);
@@ -84,10 +85,12 @@ pub fn build(b: *std.build.Builder) void {
     groove.setBuildMode(mode);
     groove.linkLibrary(ffmpeg);
     groove.linkLibrary(chromaprint);
+    groove.linkLibrary(ebur128);
     groove.linkLibC();
     groove.addIncludeDir(".");
     groove.addIncludeDir("deps");
     groove.addIncludeDir("deps/ffmpeg");
+    groove.addIncludeDir("deps/ebur128/ebur128");
     groove.addCSourceFiles(&.{
         "groove/buffer.c",
         "groove/encoder.c",
