@@ -10,13 +10,29 @@ pub fn build(b: *std.build.Builder) void {
     ffmpeg.linkLibC();
     ffmpeg.addCSourceFiles(&.{}, &.{});
 
-    //const soundio = b.addStaticLibrary("soundio", null);
-    //soundio.setTarget(target);
-    //soundio.setBuildMode(mode);
-    //soundio.linkLibC();
-    //soundio.addCSourceFiles(&.{
-    //}, &.{
-    //});
+    const soundio = b.addStaticLibrary("soundio", null);
+    soundio.setTarget(target);
+    soundio.setBuildMode(mode);
+    soundio.linkLibC();
+    soundio.addIncludeDir("deps/soundio");
+    soundio.addCSourceFiles(&.{
+        "deps/soundio/src/soundio.c",
+        "deps/soundio/src/util.c",
+        "deps/soundio/src/os.c",
+        "deps/soundio/src/dummy.c",
+        "deps/soundio/src/channel_layout.c",
+        "deps/soundio/src/ring_buffer.c",
+    }, &.{
+        "-std=c11",
+        "-fvisibility=hidden",
+        "-Wall",
+        "-Werror=strict-prototypes",
+        "-Werror=old-style-definition",
+        "-Werror=missing-prototypes",
+        "-D_REENTRANT",
+        "-D_POSIX_C_SOURCE=200809L",
+        "-Wno-missing-braces",
+    });
 
     const ebur128 = b.addStaticLibrary("ebur128", null);
     ebur128.setTarget(target);
@@ -86,11 +102,13 @@ pub fn build(b: *std.build.Builder) void {
     groove.linkLibrary(ffmpeg);
     groove.linkLibrary(chromaprint);
     groove.linkLibrary(ebur128);
+    groove.linkLibrary(soundio);
     groove.linkLibC();
     groove.addIncludeDir(".");
     groove.addIncludeDir("deps");
     groove.addIncludeDir("deps/ffmpeg");
     groove.addIncludeDir("deps/ebur128/ebur128");
+    groove.addIncludeDir("deps/soundio");
     groove.addCSourceFiles(&.{
         "groove/buffer.c",
         "groove/encoder.c",
