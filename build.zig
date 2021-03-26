@@ -4,11 +4,36 @@ pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
+    const zlib = b.addStaticLibrary("z", null);
+    zlib.setTarget(target);
+    zlib.setBuildMode(mode);
+    zlib.linkLibC();
+    zlib.addIncludeDir("deps/zlib");
+    zlib.addCSourceFiles(&.{
+        "deps/zlib/adler32.c",
+        "deps/zlib/crc32.c",
+        "deps/zlib/deflate.c",
+        "deps/zlib/infback.c",
+        "deps/zlib/inffast.c",
+        "deps/zlib/inflate.c",
+        "deps/zlib/inftrees.c",
+        "deps/zlib/trees.c",
+        "deps/zlib/zutil.c",
+        "deps/zlib/compress.c",
+        "deps/zlib/uncompr.c",
+        "deps/zlib/gzclose.c",
+        "deps/zlib/gzlib.c",
+        "deps/zlib/gzread.c",
+        "deps/zlib/gzwrite.c",
+    }, &.{});
+
     const ffmpeg = b.addStaticLibrary("ffmpeg", null);
     ffmpeg.setTarget(target);
     ffmpeg.setBuildMode(mode);
+    ffmpeg.linkLibrary(zlib);
     ffmpeg.linkLibC();
     ffmpeg.addIncludeDir("deps/ffmpeg");
+    ffmpeg.addIncludeDir("deps/zlib");
     ffmpeg.addCSourceFiles(&avcodec_sources, ffmpeg_cflags);
     ffmpeg.addCSourceFiles(&avutil_sources, ffmpeg_cflags);
 
@@ -143,6 +168,7 @@ pub fn build(b: *std.build.Builder) void {
     playlist.linkLibrary(ebur128);
     playlist.linkLibrary(soundio);
     playlist.linkLibrary(groove);
+    playlist.linkLibrary(zlib);
     playlist.addIncludeDir(".");
     playlist.addIncludeDir("deps");
     playlist.addIncludeDir("deps/ffmpeg");
