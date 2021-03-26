@@ -53,10 +53,47 @@ pub fn build(b: *std.build.Builder) void {
         "-DBUILDING_swscale",
     });
 
+    const pulse = b.addStaticLibrary("pulse", null);
+    pulse.setTarget(target);
+    pulse.setBuildMode(mode);
+    pulse.linkLibC();
+    pulse.addIncludeDir("deps/pulseaudio/src");
+    pulse.addCSourceFiles(&.{
+        "deps/pulseaudio/src/pulse/channelmap.c",
+        "deps/pulseaudio/src/pulse/context.c",
+        "deps/pulseaudio/src/pulse/direction.c",
+        "deps/pulseaudio/src/pulse/error.c",
+        "deps/pulseaudio/src/pulse/ext-device-manager.c",
+        "deps/pulseaudio/src/pulse/ext-device-restore.c",
+        "deps/pulseaudio/src/pulse/ext-stream-restore.c",
+        "deps/pulseaudio/src/pulse/format.c",
+        "deps/pulseaudio/src/pulse/introspect.c",
+        "deps/pulseaudio/src/pulse/mainloop-api.c",
+        "deps/pulseaudio/src/pulse/mainloop-signal.c",
+        "deps/pulseaudio/src/pulse/mainloop.c",
+        "deps/pulseaudio/src/pulse/operation.c",
+        "deps/pulseaudio/src/pulse/proplist.c",
+        "deps/pulseaudio/src/pulse/rtclock.c",
+        "deps/pulseaudio/src/pulse/sample.c",
+        "deps/pulseaudio/src/pulse/scache.c",
+        "deps/pulseaudio/src/pulse/stream.c",
+        "deps/pulseaudio/src/pulse/subscribe.c",
+        "deps/pulseaudio/src/pulse/thread-mainloop.c",
+        "deps/pulseaudio/src/pulse/timeval.c",
+        "deps/pulseaudio/src/pulse/utf8.c",
+        "deps/pulseaudio/src/pulse/util.c",
+        "deps/pulseaudio/src/pulse/volume.c",
+        "deps/pulseaudio/src/pulse/xmalloc.c",
+    }, &.{
+        "-std=gnu11",
+        "-DPACKAGE=\"pulseaudio\"",
+    });
+
     const soundio = b.addStaticLibrary("soundio", null);
     soundio.setTarget(target);
     soundio.setBuildMode(mode);
     soundio.linkLibC();
+    soundio.linkLibrary(pulse);
     soundio.addIncludeDir("deps/soundio");
     soundio.addCSourceFiles(&.{
         "deps/soundio/src/soundio.c",
@@ -65,6 +102,7 @@ pub fn build(b: *std.build.Builder) void {
         "deps/soundio/src/dummy.c",
         "deps/soundio/src/channel_layout.c",
         "deps/soundio/src/ring_buffer.c",
+        "deps/soundio/src/pulseaudio.c",
     }, &.{
         "-std=c11",
         "-fvisibility=hidden",
