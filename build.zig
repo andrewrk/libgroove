@@ -110,15 +110,18 @@ pub fn build(b: *std.build.Builder) void {
     groove.addIncludeDir("deps/ebur128/ebur128");
     groove.addIncludeDir("deps/soundio");
     groove.addCSourceFiles(&.{
-        "groove/buffer.c",
-        "groove/encoder.c",
-        "groove/file.c",
-        "groove/fingerprinter.c",
-        "groove/global.c",
-        "groove/loudness.c",
-        "groove/player.c",
-        "groove/playlist.c",
-        "groove/queue.c",
+        "src/buffer.c",
+        "src/file.c",
+        "src/groove.c",
+        "src/player.c",
+        "src/queue.c",
+        "src/encoder.c",
+        "src/fingerprinter.c",
+        "src/loudness.c",
+        "src/waveform.c",
+        "src/playlist.c",
+        "src/util.c",
+        "src/os.c",
     }, &.{
         "-std=c99",
         "-pedantic",
