@@ -52,6 +52,7 @@ struct GroovePlayer {
     /* how big the device buffer should be, in sample frames.
      * must be a power of 2.
      * groove_player_create defaults this to 1024
+     * TODO: this is unused.
      */
     int device_buffer_size;
 

@@ -29,8 +29,6 @@ endif()
 
 option(BUILD_STATIC_LIBS "Build static libraries" ON)
 option(BUILD_DYNAMIC_LIBS "Build dynamic libraries" ON)
-option(BUILD_EXAMPLE_PROGRAMS "Build example programs" ON)
-option(BUILD_TESTS "Build tests" ON)
 option(ENABLE_JACK "Enable JACK backend" ON)
 option(ENABLE_PULSEAUDIO "Enable PulseAudio backend" ON)
 option(ENABLE_ALSA "Enable ALSA backend" ON)
@@ -183,7 +181,6 @@ endif()
 include_directories(
     ${libsoundio_SOURCE_DIR}
     ${libsoundio_BINARY_DIR}
-    "${libsoundio_SOURCE_DIR}/test"
     "${libsoundio_SOURCE_DIR}/src"
 )
 
@@ -200,16 +197,10 @@ set(LIBSOUNDIO_LIBS
 if(MSVC)
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Wall")
     set(LIB_CFLAGS "/TP /W4")
-    set(EXAMPLE_CFLAGS "/W4")
-    set(TEST_CFLAGS "${LIB_CFLAGS}")
-    set(TEST_LDFLAGS " ")
     set(LIBM " ")
 else()
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Werror -pedantic")
     set(LIB_CFLAGS "-std=c11 -fvisibility=hidden -Wall -Werror=strict-prototypes -Werror=old-style-definition -Werror=missing-prototypes -D_REENTRANT -D_POSIX_C_SOURCE=200809L -Wno-missing-braces")
-    set(EXAMPLE_CFLAGS "-std=c99 -Wall")
-    set(TEST_CFLAGS "${LIB_CFLAGS} -fprofile-arcs -ftest-coverage")
-    set(TEST_LDFLAGS "-fprofile-arcs -ftest-coverage")
     set(LIBM "m")
 endif()
 
@@ -249,140 +240,3 @@ endif()
 install(FILES
     ${LIBSOUNDIO_HEADERS}
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/soundio")
-
-# Example Programs
-
-if(BUILD_EXAMPLE_PROGRAMS)
-    add_executable(sio_sine example/sio_sine.c)
-    set_target_properties(sio_sine PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-    if(BUILD_DYNAMIC_LIBS)
-        target_link_libraries(sio_sine libsoundio_shared ${LIBM})
-    else()
-        target_link_libraries(sio_sine libsoundio_static ${LIBSOUNDIO_LIBS} ${LIBM})
-    endif()
-    install(TARGETS sio_sine DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-    add_executable(sio_list_devices example/sio_list_devices.c)
-    set_target_properties(sio_list_devices PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-    if(BUILD_DYNAMIC_LIBS)
-        target_link_libraries(sio_list_devices libsoundio_shared)
-    else()
-        target_link_libraries(sio_list_devices libsoundio_static ${LIBSOUNDIO_LIBS})
-    endif()
-    install(TARGETS sio_list_devices DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-    add_executable(sio_microphone example/sio_microphone.c)
-    set_target_properties(sio_microphone PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-    if(BUILD_DYNAMIC_LIBS)
-        target_link_libraries(sio_microphone libsoundio_shared)
-    else()
-        target_link_libraries(sio_microphone libsoundio_static ${LIBSOUNDIO_LIBS})
-    endif()
-    install(TARGETS sio_microphone DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-    add_executable(sio_record example/sio_record.c)
-    set_target_properties(sio_record PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-    if(BUILD_DYNAMIC_LIBS)
-        target_link_libraries(sio_record libsoundio_shared)
-    else()
-        target_link_libraries(sio_record libsoundio_static ${LIBSOUNDIO_LIBS})
-    endif()
-    install(TARGETS sio_record DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
-
-if(BUILD_TESTS)
-    add_executable(unit_tests "${libsoundio_SOURCE_DIR}/test/unit_tests.c" ${LIBSOUNDIO_SOURCES})
-    target_link_libraries(unit_tests LINK_PUBLIC ${LIBSOUNDIO_LIBS})
-    set_target_properties(unit_tests PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${TEST_CFLAGS}
-        LINK_FLAGS ${TEST_LDFLAGS}
-    )
-
-    add_executable(latency "${libsoundio_SOURCE_DIR}/test/latency.c" ${LIBSOUNDIO_SOURCES})
-    target_link_libraries(latency LINK_PUBLIC ${LIBSOUNDIO_LIBS} ${LIBM})
-    set_target_properties(latency PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${LIB_CFLAGS}
-    )
-
-    add_executable(underflow test/underflow.c)
-    set_target_properties(underflow PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-    if(BUILD_DYNAMIC_LIBS)
-        target_link_libraries(underflow libsoundio_shared ${LIBM})
-    else()
-        target_link_libraries(underflow libsoundio_static ${LIBSOUNDIO_LIBS} ${LIBM})
-    endif()
-
-    add_executable(backend_disconnect_recover test/backend_disconnect_recover.c)
-    set_target_properties(backend_disconnect_recover PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-    if(BUILD_DYNAMIC_LIBS)
-        target_link_libraries(backend_disconnect_recover libsoundio_shared)
-    else()
-        target_link_libraries(backend_disconnect_recover libsoundio_static ${LIBSOUNDIO_LIBS})
-    endif()
-
-    add_executable(overflow test/overflow.c)
-    set_target_properties(overflow PROPERTIES
-        LINKER_LANGUAGE C
-        COMPILE_FLAGS ${EXAMPLE_CFLAGS})
-    if(BUILD_DYNAMIC_LIBS)
-        target_link_libraries(overflow libsoundio_shared)
-    else()
-        target_link_libraries(overflow libsoundio_static ${LIBSOUNDIO_LIBS})
-    endif()
-
-
-
-    add_custom_target(coverage
-        DEPENDS unit_tests
-        WORKING_DIRECTORY ${libsoundio_BINARY_DIR}
-        COMMAND lcov --directory . --zerocounters --rc lcov_branch_coverage=1
-        COMMAND ./unit_tests
-        COMMAND lcov --directory . --capture --output-file coverage.info --rc lcov_branch_coverage=1
-        COMMAND lcov --remove coverage.info '/usr/*' --output-file coverage.info.cleaned --rc lcov_branch_coverage=1
-        COMMAND genhtml -o coverage coverage.info.cleaned --rc lcov_branch_coverage=1
-        COMMAND rm coverage.info coverage.info.cleaned
-    )
-endif()
-
-
-add_custom_target(doc
-    WORKING_DIRECTORY ${libsoundio_BINARY_DIR}
-    COMMAND doxygen ${DOXYGEN_CONF_FILE}
-)
-
-
-
-message("\n"
-    "Installation Summary\n"
-    "--------------------\n"
-    "* Install Directory            : ${CMAKE_INSTALL_PREFIX}\n"
-    "* Build Type                   : ${CMAKE_BUILD_TYPE}\n"
-    "* Build static libs            : ${BUILD_STATIC_LIBS}\n"
-    "* Build examples               : ${BUILD_EXAMPLE_PROGRAMS}\n"
-    "* Build tests                  : ${BUILD_TESTS}\n"
-)
-
-message(
-    "System Dependencies\n"
-    "-------------------\n"
-    "* threads                      : ${STATUS_THREADS}\n"
-    "* JACK       (optional)        : ${STATUS_JACK}\n"
-    "* PulseAudio (optional)        : ${STATUS_PULSEAUDIO}\n"
-    "* ALSA       (optional)        : ${STATUS_ALSA}\n"
-    "* CoreAudio  (optional)        : ${STATUS_COREAUDIO}\n"
-    "* WASAPI     (optional)        : ${STATUS_WASAPI}\n"
-)
