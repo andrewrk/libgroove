@@ -5,14 +5,14 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#ifndef GROOVE_BUFFER_H_INCLUDED
-#define GROOVE_BUFFER_H_INCLUDED
+#ifndef GROOVE_BUFFER_H
+#define GROOVE_BUFFER_H
 
-#include "groove.h"
+#include "groove_internal.h"
+
+#include <pthread.h>
 
 #include <libavutil/frame.h>
-#include <libavcodec/avcodec.h>
-#include <pthread.h>
 
 struct GrooveBufferPrivate {
     struct GrooveBuffer externals;
@@ -26,4 +26,4 @@ struct GrooveBufferPrivate {
     uint8_t *data;
 };
 
-#endif /* GROOVE_BUFFER_H_INCLUDED */
+#endif
