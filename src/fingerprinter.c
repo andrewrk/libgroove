@@ -11,7 +11,7 @@
 #include "util.h"
 #include "atomics.h"
 
-#include <chromaprint.h>
+#include <chromaprint/src/chromaprint.h>
 
 #include <limits.h>
 #include <stdlib.h>

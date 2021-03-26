@@ -138,6 +138,10 @@ pub fn build(b: *std.build.Builder) void {
     playlist.setBuildMode(mode);
     playlist.linkLibrary(groove);
     playlist.addIncludeDir(".");
+    playlist.addIncludeDir("deps");
+    playlist.addIncludeDir("deps/ffmpeg");
+    playlist.addIncludeDir("deps/ebur128/ebur128");
+    playlist.addIncludeDir("deps/soundio");
     playlist.addCSourceFiles(&.{
         "example/playlist.c",
     }, example_cflags);
