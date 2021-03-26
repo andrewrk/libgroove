@@ -8,7 +8,9 @@ pub fn build(b: *std.build.Builder) void {
     ffmpeg.setTarget(target);
     ffmpeg.setBuildMode(mode);
     ffmpeg.linkLibC();
-    ffmpeg.addCSourceFiles(&.{}, &.{});
+    ffmpeg.addCSourceFiles(&.{
+        // TODO
+    }, &.{});
 
     const soundio = b.addStaticLibrary("soundio", null);
     soundio.setTarget(target);
@@ -136,6 +138,10 @@ pub fn build(b: *std.build.Builder) void {
     const playlist = b.addExecutable("playlist", null);
     playlist.setTarget(target);
     playlist.setBuildMode(mode);
+    playlist.linkLibrary(ffmpeg);
+    playlist.linkLibrary(chromaprint);
+    playlist.linkLibrary(ebur128);
+    playlist.linkLibrary(soundio);
     playlist.linkLibrary(groove);
     playlist.addIncludeDir(".");
     playlist.addIncludeDir("deps");
