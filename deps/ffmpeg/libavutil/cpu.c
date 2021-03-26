@@ -41,7 +41,11 @@
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#if defined(__linux__)
+#include <linux/sysctl.h>
+#else
 #include <sys/sysctl.h>
+#endif
 #endif
 #if HAVE_UNISTD_H
 #include <unistd.h>
