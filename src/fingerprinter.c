@@ -5,13 +5,13 @@
  * See http://opensource.org/licenses/MIT
  */
 
-#include "fingerprinter.h"
-#include <groove/queue.h>
+#include "groove_internal.h"
+#include "groove/fingerprinter.h"
+#include "queue.h"
+#include "util.h"
+#include "atomics.h"
 
 #include <chromaprint.h>
-
-#include <libavutil/mem.h>
-#include <libavutil/log.h>
 
 #include <limits.h>
 #include <stdlib.h>
@@ -21,6 +21,7 @@
 struct GrooveFingerprinterPrivate {
     struct GrooveFingerprinter externals;
 
+    struct Groove *groove;
     int state_history_count;
 
     // index into all_track_states
@@ -47,27 +48,26 @@ struct GrooveFingerprinterPrivate {
     // set temporarily
     struct GroovePlaylistItem *purge_item;
 
-    int abort_request;
+    struct GrooveAtomicBool abort_request;
 };
 
 static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
-    struct GrooveFingerprinterInfo *info = av_mallocz(sizeof(struct GrooveFingerprinterInfo));
+    struct GrooveFingerprinterInfo *info = ALLOCATE(struct GrooveFingerprinterInfo, 1);
     if (!info) {
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate fingerprinter info\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     info->item = p->info_head;
     info->duration = p->track_duration;
 
     if (!chromaprint_finish(p->chroma_ctx)) {
         av_log(NULL, AV_LOG_ERROR, "unable to finish chromaprint\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
     if (!chromaprint_get_raw_fingerprint(p->chroma_ctx,
                 (void**)&info->fingerprint, &info->fingerprint_size))
     {
         av_log(NULL, AV_LOG_ERROR, "unable to get fingerprint\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
     groove_queue_put(p->info_queue, info);
@@ -76,11 +76,11 @@ static int emit_track_info(struct GrooveFingerprinterPrivate *p) {
 }
 
 static void *print_thread(void *arg) {
-    struct GrooveFingerprinterPrivate *p = arg;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)arg;
     struct GrooveFingerprinter *printer = &p->externals;
 
     struct GrooveBuffer *buffer;
-    while (!p->abort_request) {
+    while (!GROOVE_ATOMIC_LOAD(p->abort_request)) {
         pthread_mutex_lock(&p->info_head_mutex);
 
         if (p->info_queue_count >= printer->info_queue_size) {
@@ -103,8 +103,7 @@ static void *print_thread(void *arg) {
             emit_track_info(p);
 
             // send album info
-            struct GrooveFingerprinterInfo *info = av_mallocz(
-                    sizeof(struct GrooveFingerprinterInfo));
+            struct GrooveFingerprinterInfo *info = ALLOCATE(struct GrooveFingerprinterInfo, 1);
             if (info) {
                 info->duration = p->album_duration;
                 groove_queue_put(p->info_queue, info);
@@ -153,19 +152,19 @@ static void *print_thread(void *arg) {
 }
 
 static void info_queue_cleanup(struct GrooveQueue* queue, void *obj) {
-    struct GrooveFingerprinterInfo *info = obj;
-    struct GrooveFingerprinterPrivate *p = queue->context;
+    struct GrooveFingerprinterInfo *info = (struct GrooveFingerprinterInfo *)obj;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
     p->info_queue_count -= 1;
-    av_free(info);
+    DEALLOCATE(info);
 }
 
 static void info_queue_put(struct GrooveQueue *queue, void *obj) {
-    struct GrooveFingerprinterPrivate *p = queue->context;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
     p->info_queue_count += 1;
 }
 
 static void info_queue_get(struct GrooveQueue *queue, void *obj) {
-    struct GrooveFingerprinterPrivate *p = queue->context;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
     struct GrooveFingerprinter *printer = &p->externals;
 
     p->info_queue_count -= 1;
@@ -175,14 +174,14 @@ static void info_queue_get(struct GrooveQueue *queue, void *obj) {
 }
 
 static int info_queue_purge(struct GrooveQueue* queue, void *obj) {
-    struct GrooveFingerprinterInfo *info = obj;
-    struct GrooveFingerprinterPrivate *p = queue->context;
+    struct GrooveFingerprinterInfo *info = (struct GrooveFingerprinterInfo *)obj;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)queue->context;
 
     return info->item == p->purge_item;
 }
 
 static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item) {
-    struct GrooveFingerprinterPrivate *p = sink->userdata;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)sink->userdata;
 
     pthread_mutex_lock(&p->info_head_mutex);
     p->purge_item = item;
@@ -198,7 +197,7 @@ static void sink_purge(struct GrooveSink *sink, struct GroovePlaylistItem *item)
 }
 
 static void sink_flush(struct GrooveSink *sink) {
-    struct GrooveFingerprinterPrivate *p = sink->userdata;
+    struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *)sink->userdata;
 
     pthread_mutex_lock(&p->info_head_mutex);
     groove_queue_flush(p->info_queue);
@@ -210,12 +209,14 @@ static void sink_flush(struct GrooveSink *sink) {
     pthread_mutex_unlock(&p->info_head_mutex);
 }
 
-struct GrooveFingerprinter *groove_fingerprinter_create(void) {
-    struct GrooveFingerprinterPrivate *p = av_mallocz(sizeof(struct GrooveFingerprinterPrivate));
+struct GrooveFingerprinter *groove_fingerprinter_create(struct Groove *groove) {
+    struct GrooveFingerprinterPrivate *p = ALLOCATE(struct GrooveFingerprinterPrivate, 1);
     if (!p) {
         av_log(NULL, AV_LOG_ERROR, "unable to allocate fingerprinter\n");
         return NULL;
     }
+    GROOVE_ATOMIC_STORE(p->abort_request, false);
+    p->groove = groove;
 
     struct GrooveFingerprinter *printer = &p->externals;
 
@@ -245,22 +246,27 @@ struct GrooveFingerprinter *groove_fingerprinter_create(void) {
     p->info_queue->get = info_queue_get;
     p->info_queue->purge = info_queue_purge;
 
-    p->sink = groove_sink_create();
+    p->sink = groove_sink_create(groove);
     if (!p->sink) {
         groove_fingerprinter_destroy(printer);
         av_log(NULL, AV_LOG_ERROR, "unable to allocate sink\n");
         return NULL;
     }
-    p->sink->audio_format.sample_rate = 44100;
-    p->sink->audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
-    p->sink->audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
+
+    struct GrooveAudioFormat audio_format;
+    audio_format.sample_rate = 44100;
+    audio_format.layout = *soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
+    audio_format.format = SoundIoFormatS16NE;
+    audio_format.is_planar = false;
+
+    groove_sink_set_only_format(p->sink, &audio_format);
     p->sink->userdata = printer;
     p->sink->purge = sink_purge;
     p->sink->flush = sink_flush;
 
     // set some defaults
     printer->info_queue_size = INT_MAX;
-    printer->sink_buffer_size = p->sink->buffer_size;
+    printer->sink_buffer_size_bytes = p->sink->buffer_size_bytes;
 
     return printer;
 }
@@ -283,7 +289,7 @@ void groove_fingerprinter_destroy(struct GrooveFingerprinter *printer) {
     if (p->drain_cond_inited)
         pthread_cond_destroy(&p->drain_cond);
 
-    av_free(p);
+    DEALLOCATE(p);
 }
 
 int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
@@ -297,20 +303,18 @@ int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
     p->chroma_ctx = chromaprint_new(CHROMAPRINT_ALGORITHM_DEFAULT);
     if (!p->chroma_ctx) {
         groove_fingerprinter_detach(printer);
-        av_log(NULL, AV_LOG_ERROR, "unable to allocate chromaprint\n");
-        return -1;
+        return GrooveErrorNoMem;
     }
 
-    if (groove_sink_attach(p->sink, playlist) < 0) {
+    int err;
+    if ((err = groove_sink_attach(p->sink, playlist))) {
         groove_fingerprinter_detach(printer);
-        av_log(NULL, AV_LOG_ERROR, "unable to attach sink\n");
-        return -1;
+        return err;
     }
 
-    if (pthread_create(&p->thread_id, NULL, print_thread, printer) != 0) {
+    if (pthread_create(&p->thread_id, NULL, print_thread, printer)) {
         groove_fingerprinter_detach(printer);
-        av_log(NULL, AV_LOG_ERROR, "unable to create printer thread\n");
-        return -1;
+        return GrooveErrorSystemResources;
     }
 
     return 0;
@@ -319,7 +323,7 @@ int groove_fingerprinter_attach(struct GrooveFingerprinter *printer,
 int groove_fingerprinter_detach(struct GrooveFingerprinter *printer) {
     struct GrooveFingerprinterPrivate *p = (struct GrooveFingerprinterPrivate *) printer;
 
-    p->abort_request = 1;
+    GROOVE_ATOMIC_STORE(p->abort_request, true);
     groove_sink_detach(p->sink);
     groove_queue_flush(p->info_queue);
     groove_queue_abort(p->info_queue);
@@ -333,7 +337,7 @@ int groove_fingerprinter_detach(struct GrooveFingerprinter *printer) {
         p->chroma_ctx = NULL;
     }
 
-    p->abort_request = 0;
+    GROOVE_ATOMIC_STORE(p->abort_request, false);
     p->info_head = NULL;
     p->info_pos = 0;
     p->track_duration = 0.0;
@@ -349,7 +353,7 @@ int groove_fingerprinter_info_get(struct GrooveFingerprinter *printer,
     struct GrooveFingerprinterInfo *info_ptr;
     if (groove_queue_get(p->info_queue, (void**)&info_ptr, block) == 1) {
         *info = *info_ptr;
-        av_free(info_ptr);
+        DEALLOCATE(info_ptr);
         return 1;
     }
 
@@ -388,7 +392,7 @@ void groove_fingerprinter_free_info(struct GrooveFingerprinterInfo *info) {
 int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp) {
     int encoded_size;
     int err = chromaprint_encode_fingerprint(fp, size,
-            CHROMAPRINT_ALGORITHM_DEFAULT, (void*)encoded_fp, &encoded_size, 1);
+            CHROMAPRINT_ALGORITHM_DEFAULT, (void **)encoded_fp, &encoded_size, 1);
     return err == 1 ? 0 : -1;
 }
 

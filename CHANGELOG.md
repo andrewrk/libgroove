@@ -6,6 +6,71 @@
    `metadata.c` but it compares a checksum of the audio before and after
    updating metadata, and only atomically replaces the original song with the
    update if the checksum passed.
+ * Add `groove_create_rand_name` - allocates a new file path str which is in the
+   same directory as another file but with a random filename with the same
+   extension. The purpose is to use this file to atomically rename it into
+   place for metadata updates.
+ * Depend on libsoundio instead of SDL2.
+ * Merge all libraries into one. libgrooveplayer, libgrooveloudness, and
+   libgroovefingerprinter no longer exist; they are part of libgroove itself
+   now.
+ * No longer depend on OS X timing code that breaks when the system time
+   changes.
+ * Add `groove_strerror` and `enum GrooveError`.
+ * build: `-Werror` and `-pedantic` in debug mode only.
+ * build: use `GNUInstallDirs` when cmake version is 3.0.0 or later. This
+   fixes support for distributions that have multi-arch setup.
+ * Ability to update playlist item gain and peak at the same time.
+ * Default fill mode now stops decoding when any sink is full.
+ * Fix theoretical race conditions from non-atomic booleans.
+ * Fix bug with any sink full fill mode.
+ * Provide doxygen documentation.
+ * Fix `disable_resample` flag causing `*_buffer_get` to hang.
+ * libgroove API is now tightly coupled with libsoundio API. You will need to
+   reference the libsoundio API when using libgroove.
+ * Instead of `GROOVE_CH_*` constants, use `SoundIoChannelId` enum values.
+ * Instead of `GROOVE_CH_LAYOUT_*` constants, use `SoundIoChannelLayoutId`
+   enum values.
+ * Instead of `groove_channel_layout_count` use `layout.channel_count`
+ * Instead of `groove_channel_layout_default` use
+   `soundio_channel_layout_get_default`
+ * Instead of `GrooveSampleFormat` enum use `SoundIoFormat` enum.
+ * Instead of the `*P` suffix on sample formats to indicate planar, use
+   the new `GrooveAudioFormat::is_planar` property.
+ * Instead of `groove_sample_format_bytes_per_sample` use
+   `soundio_get_bytes_per_sample`.
+ * Instead of `GROOVE_FILL_MODE_*` constants, use `GrooveFillMode`
+   enum values.
+ * Instead of `groove_playlist_set_item_gain` and
+   `groove_playlist_set_item_peak`, use `groove_playlist_set_item_gain_peak`.
+ * Instead of these, use the libsoundio API:
+   - `groove_device_count`
+   - `groove_device_name`
+   - `GroovePlayer::device_index`
+   - `GROOVE_PLAYER_DEFAULT_DEVICE`
+   - `GROOVE_PLAYER_DUMMY_DEVICE`
+ * `groove_init` and `groove_finish` no longer exist. Instead, use
+   `groove_create` and `groove_destroy`. Compilation errors will lead you
+   toward correct usage.
+ * Instead of `groove_file_open` now use `groove_file_create` and then
+   `groove_file_open`. Then `groove_file_destroy` when done.
+ * Instead of `groove_file_close` use `groove_file_destroy`.
+ * `GroovePlayer::target_audio_format`, `GroovePlayer::actual_audio_format`, and
+   `GroovePlayer::use_exact_audio_format` no longer exist. Exact mode is always
+   on now. When the device does not support audio parameters, the highest
+   quality substitute is used.
+ * `GrooveSink::audio_format` no longer exists. See
+   `groove_sink_set_only_format` instead.
+ * `GrooveSink::disable_resample` no longer exists. Instead, this is now the
+   default and you must set the allowed formats in order to get conversions.
+ * `GrooveSink::bytes_per_sec` no longer exists. API users should compute this
+   value themselves if they want to use it.
+ * player: `GROOVE_EVENT_DEVICEREOPENED` is now
+   `GROOVE_EVENT_DEVICE_CLOSED` and `GROOVE_EVENT_DEVICE_OPENED`.
+ * player: `GROOVE_EVENT_DEVICE_REOPEN_ERROR` is now
+   `GROOVE_EVENT_DEVICE_OPEN_ERROR`
+ * player: new event: `GROOVE_EVENT_END_OF_PLAYLIST`
+
 
 ### Version 4.3.0 (2015-05-25)
 
