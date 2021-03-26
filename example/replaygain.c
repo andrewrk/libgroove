@@ -1,6 +1,6 @@
 /* replaygain scanner */
 
-#include <grooveloudness/loudness.h>
+#include <groove/loudness.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -20,23 +20,31 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    groove_init();
-    atexit(groove_finish);
+    struct Groove *groove;
+    int err;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
 
-    struct GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create(groove);
 
     for (int i = 1; i < argc; i += 1) {
         char * filename = argv[i];
-        struct GrooveFile * file = groove_file_open(filename);
+        struct GrooveFile *file = groove_file_create(groove);
         if (!file) {
-            fprintf(stderr, "Unable to open %s\n", filename);
+            fprintf(stderr, "out of memory\n");
+            return 1;
+        }
+        if ((err = groove_file_open(file, filename, filename))) {
+            fprintf(stderr, "Unable to open %s: %s\n", filename, groove_strerror(err));
             continue;
         }
         groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
     }
 
-    struct GrooveLoudnessDetector *detector = groove_loudness_detector_create();
+    struct GrooveLoudnessDetector *detector = groove_loudness_detector_create(groove);
     groove_loudness_detector_attach(detector, playlist);
 
     struct GrooveLoudnessDetectorInfo info;
@@ -62,13 +70,15 @@ int main(int argc, char * argv[]) {
         struct GrooveFile *file = item->file;
         struct GroovePlaylistItem *next = item->next;
         groove_playlist_remove(playlist, item);
-        groove_file_close(file);
+        groove_file_destroy(file);
         item = next;
     }
 
     groove_loudness_detector_detach(detector);
     groove_loudness_detector_destroy(detector);
     groove_playlist_destroy(playlist);
+
+    groove_destroy(groove);
 
     return 0;
 }

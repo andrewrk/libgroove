@@ -20,10 +20,14 @@ int main(int argc, char * argv[]) {
 
     char *output_file_name = NULL;
 
-    groove_init();
-    atexit(groove_finish);
+    struct Groove *groove;
+    int err;
+    if ((err = groove_create(&groove))) {
+        fprintf(stderr, "unable to initialize libgroove: %s\n", groove_strerror(err));
+        return 1;
+    }
     groove_set_logging(GROOVE_LOG_INFO);
-    struct GroovePlaylist *playlist = groove_playlist_create();
+    struct GroovePlaylist *playlist = groove_playlist_create(groove);
 
     for (int i = 1; i < argc; i += 1) {
         char *arg = argv[i];
@@ -45,9 +49,13 @@ int main(int argc, char * argv[]) {
                 return usage(argv[0]);
             }
         } else {
-            struct GrooveFile * file = groove_file_open(arg);
+            struct GrooveFile *file = groove_file_create(groove);
             if (!file) {
-                fprintf(stderr, "Error opening input file %s\n", arg);
+                fprintf(stderr, "out of memory\n");
+                return 1;
+            }
+            if ((err = groove_file_open(file, arg, arg))) {
+                fprintf(stderr, "Error opening input file %s: %s\n", arg, groove_strerror(err));
                 return 1;
             }
             groove_playlist_insert(playlist, file, 1.0, 1.0, NULL);
@@ -56,7 +64,7 @@ int main(int argc, char * argv[]) {
     if (!output_file_name)
         return usage(argv[0]);
 
-    struct GrooveEncoder *encoder = groove_encoder_create();
+    struct GrooveEncoder *encoder = groove_encoder_create(groove);
     encoder->bit_rate = bit_rate_k * 1000;
     encoder->format_short_name = format;
     encoder->codec_short_name = codec;
@@ -100,10 +108,12 @@ int main(int argc, char * argv[]) {
         struct GrooveFile *file = item->file;
         struct GroovePlaylistItem *next = item->next;
         groove_playlist_remove(playlist, item);
-        groove_file_close(file);
+        groove_file_destroy(file);
         item = next;
     }
     groove_playlist_destroy(playlist);
+
+    groove_destroy(groove);
 
     return 0;
 }
