@@ -34,12 +34,24 @@ pub fn build(b: *std.build.Builder) void {
     ffmpeg.linkLibC();
     ffmpeg.addIncludeDir("deps/ffmpeg");
     ffmpeg.addIncludeDir("deps/zlib");
-    ffmpeg.addCSourceFiles(&avcodec_sources, ffmpeg_cflags);
-    ffmpeg.addCSourceFiles(&avutil_sources, ffmpeg_cflags);
-    ffmpeg.addCSourceFiles(&avformat_sources, ffmpeg_cflags);
-    ffmpeg.addCSourceFiles(&avfilter_sources, ffmpeg_cflags);
-    ffmpeg.addCSourceFiles(&swresample_sources, ffmpeg_cflags);
-    ffmpeg.addCSourceFiles(&swscale_sources, ffmpeg_cflags);
+    ffmpeg.addCSourceFiles(&avcodec_sources, ffmpeg_cflags ++ [_][]const u8{
+        "-DBUILDING_avcodec",
+    });
+    ffmpeg.addCSourceFiles(&avutil_sources, ffmpeg_cflags ++ [_][]const u8{
+        "-DBUILDING_avutil",
+    });
+    ffmpeg.addCSourceFiles(&avformat_sources, ffmpeg_cflags ++ [_][]const u8{
+        "-DBUILDING_avformat",
+    });
+    ffmpeg.addCSourceFiles(&avfilter_sources, ffmpeg_cflags ++ [_][]const u8{
+        "-DBUILDING_avfilter",
+    });
+    ffmpeg.addCSourceFiles(&swresample_sources, ffmpeg_cflags ++ [_][]const u8{
+        "-DBUILDING_swresample",
+    });
+    ffmpeg.addCSourceFiles(&swscale_sources, ffmpeg_cflags ++ [_][]const u8{
+        "-DBUILDING_swscale",
+    });
 
     const soundio = b.addStaticLibrary("soundio", null);
     soundio.setTarget(target);
@@ -196,7 +208,6 @@ const ffmpeg_cflags: []const []const u8 = &.{
     "-D_XOPEN_SOURCE=600",
     "-DZLIB_CONST",
     "-DHAVE_AV_CONFIG_H",
-    "-DBUILDING_avdevice",
     "-std=c11",
     "-fno-math-errno",
     "-fno-signed-zeros",
