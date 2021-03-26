@@ -193,7 +193,7 @@ static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile
 
         if (!got_frame) {
             // stop sending empty packets if the decoder is finished
-            if (!pkt_temp->data && dec->codec->capabilities & CODEC_CAP_DELAY)
+            if (!pkt_temp->data && dec->codec->capabilities & AV_CODEC_CAP_DELAY)
                 return 0;
             continue;
         }
@@ -698,7 +698,7 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
     pthread_mutex_unlock(&f->seek_mutex);
 
     if (f->eof) {
-        if (f->audio_st->codec->codec->capabilities & CODEC_CAP_DELAY) {
+        if (f->audio_st->codec->codec->capabilities & AV_CODEC_CAP_DELAY) {
             av_init_packet(pkt);
             pkt->data = NULL;
             pkt->size = 0;
