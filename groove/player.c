@@ -10,8 +10,7 @@
 
 #include <libavutil/mem.h>
 #include <libavutil/log.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_audio.h>
+#include <soundio/soundio.h>
 #include <pthread.h>
 #include <time.h>
 #include <stdbool.h>
@@ -34,6 +33,10 @@ struct GroovePlayerPrivate {
     // number of seconds into the play_head song where the buffered audio
     // is reaching the device
     double play_pos;
+
+    struct SoundIo *soundio;
+    struct SoundIoDevice *device;
+    struct SoundIoOutStream *outstream;
 
     SDL_AudioDeviceID device_id;
     struct GrooveSink *sink;
@@ -59,43 +62,42 @@ struct GroovePlayerPrivate {
     int silence_bytes_left;
     bool request_device_reopen;
     struct GrooveAudioFormat device_format;
-    int device_buffer_size;
 };
 
 static int open_audio_device(struct GroovePlayer *player,
         const struct GrooveAudioFormat *target_format, struct GrooveAudioFormat *actual_format,
         int use_exact_audio_format);
 
-static Uint16 groove_fmt_to_sdl_fmt(enum GrooveSampleFormat fmt) {
+static enum SoundIoFormat groove_fmt_to_soundio_format(enum GrooveSampleFormat fmt) {
     switch (fmt) {
         case GROOVE_SAMPLE_FMT_U8:
         case GROOVE_SAMPLE_FMT_U8P:
-            return AUDIO_U8;
+            return SoundIoFormatU8;
         case GROOVE_SAMPLE_FMT_S16:
         case GROOVE_SAMPLE_FMT_S16P:
-            return AUDIO_S16SYS;
+            return SoundIoFormatS16NE;
         case GROOVE_SAMPLE_FMT_S32:
         case GROOVE_SAMPLE_FMT_S32P:
-            return AUDIO_S32SYS;
+            return SoundIoFormatS32NE;
         case GROOVE_SAMPLE_FMT_FLT:
         case GROOVE_SAMPLE_FMT_FLTP:
-            return AUDIO_F32SYS;
+            return SoundIoFormatFloat32NE;
         default:
             av_log(NULL, AV_LOG_ERROR,
                 "unable to use selected format. using GROOVE_SAMPLE_FMT_S16 instead.\n");
-            return AUDIO_S16SYS;
+            return SoundIoFormatS16NE;
     }
 }
 
-static enum GrooveSampleFormat sdl_fmt_to_groove_fmt(Uint16 sdl_format) {
-    switch (sdl_format) {
-        case AUDIO_U8:
+static enum GrooveSampleFormat soundio_format_to_groove_fmt(enum SoundIoFormat soundio_format) {
+    switch (soundio_format) {
+        case SoundIoFormatU8:
             return GROOVE_SAMPLE_FMT_U8;
-        case AUDIO_S16SYS:
+        case SoundIoFormatS16NE:
             return GROOVE_SAMPLE_FMT_S16;
-        case AUDIO_S32SYS:
+        case SoundIoFormatS32NE:
             return GROOVE_SAMPLE_FMT_S32;
-        case AUDIO_F32SYS:
+        case SoundIoFormatFloat32NE:
             return GROOVE_SAMPLE_FMT_FLT;
         default:
             return GROOVE_SAMPLE_FMT_NONE;
@@ -409,19 +411,27 @@ struct GroovePlayer *groove_player_create(void) {
         return NULL;
     }
 
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+    p->soundio = soundio_create();
+    if (!p->soundio) {
         av_free(p);
-        av_log(NULL, AV_LOG_ERROR, "unable to init SDL audio subsystem: %s\n",
-                SDL_GetError());
+        av_log(NULL, AV_LOG_ERROR, "unable to create soundio: out of memory\n");
         return NULL;
     }
+
+    int err = soundio_connect(p->soundio);
+    if (err) {
+        groove_player_destroy(player);
+        av_log(NULL, AV_LOG_ERROR, "Unable to connect to soundio backend: %s\n", soundio_strerror(err));
+        return NULL;
+    }
+    soundio_flush_events(p->soundio);
 
     struct GroovePlayer *player = &p->externals;
 
     p->sink = groove_sink_create();
     if (!p->sink) {
         groove_player_destroy(player);
-        av_log(NULL, AV_LOG_ERROR,"unable to create sink: out of memory\n");
+        av_log(NULL, AV_LOG_ERROR, "unable to create sink: out of memory\n");
         return NULL;
     }
 
@@ -465,8 +475,6 @@ struct GroovePlayer *groove_player_create(void) {
     player->target_audio_format.sample_rate = 44100;
     player->target_audio_format.channel_layout = GROOVE_CH_LAYOUT_STEREO;
     player->target_audio_format.sample_fmt = GROOVE_SAMPLE_FMT_S16;
-    // small because there is no way to clear the buffer.
-    player->device_buffer_size = 1024;
     player->sink_buffer_size = 8192;
     player->gain = p->sink->gain;
     player->device_index = -1; // default device
@@ -477,8 +485,6 @@ struct GroovePlayer *groove_player_create(void) {
 void groove_player_destroy(struct GroovePlayer *player) {
     if (!player)
         return;
-
-    SDL_QuitSubSystem(SDL_INIT_AUDIO);
 
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
@@ -496,6 +502,15 @@ void groove_player_destroy(struct GroovePlayer *player) {
 
     groove_sink_destroy(p->sink);
 
+    if (p->outstream)
+        soundio_outstream_destroy(p->outstream);
+
+    if (p->device)
+        soundio_device_unref(p->device);
+
+    if (p->soundio)
+        soundio_destroy(p->soundio);
+
     av_free(p);
 }
 
@@ -506,31 +521,61 @@ static int open_audio_device(struct GroovePlayer *player,
 {
     struct GroovePlayerPrivate *p = (struct GroovePlayerPrivate *) player;
 
-    SDL_AudioSpec wanted_spec, spec;
-    wanted_spec.format = groove_fmt_to_sdl_fmt(target_format->sample_fmt);
-    wanted_spec.freq = target_format->sample_rate;
-    wanted_spec.channels = groove_channel_layout_count(target_format->channel_layout);
-    wanted_spec.samples = p->device_buffer_size;
-    wanted_spec.callback = sdl_audio_callback;
-    wanted_spec.userdata = player;
+    int device_index = soundio_default_output_device_index(p->soundio);
+    p->device = soundio_get_output_device(p->soundio, device_index);
+    // TODO: errdefer unref device
 
-    const char* device_name = NULL;
+    p->outstream = soundio_outstream_create(p->device);
+    if (!outstream) {
+        av_log(NULL, AV_LOG_ERROR, "unable to create outstream: out of memory\n");
+        return -1;
+    }
+    // TODO: errdefer destroy outstream
 
-    if (player->device_index >= 0)
-        device_name = SDL_GetAudioDeviceName(player->device_index, 0);
+    enum SoundIoFormat soundio_format = groove_fmt_to_soundio_format(target_format->sample_fmt);
+    if (soundio_device_supports_format(p->device, soundio_format)) {
+        p->outstream->format = soundio_format;
+    } else if (use_exact_audio_format) {
+        av_log(NULL, AV_LOG_ERROR, "unsupported format\n");
+        return -1;
+    }
 
-    int allowed_changes = use_exact_audio_format ? 0 : SDL_AUDIO_ALLOW_ANY_CHANGE;
-    p->device_id = SDL_OpenAudioDevice(device_name, 0, &wanted_spec, &spec, allowed_changes);
+    if (soundio_device_supports_sample_rate(p->device, target_format->sample_rate)) {
+        p->outstream->sample_rate = target_format->sample_rate;
+    } else if (use_exact_audio_format) {
+        av_log(NULL, AV_LOG_ERROR, "unsupported sample rate\n");
+        return -1;
+    }
 
-    if (p->device_id == 0) {
-        av_log(NULL, AV_LOG_ERROR, "unable to open audio device: %s\n", SDL_GetError());
+    // TODO: support configuring the layout.
+    if (target_format->channel_layout != GROOVE_CH_LAYOUT_STEREO) {
+        av_log(NULL, AV_LOG_ERROR, "only stereo is supported right now\n");
+        return -1;
+    }
+
+    p->outstream->write_callback = sdl_audio_callback;
+    p->outstream->userdata = player;
+
+    int err = soundio_outstream_open(p->outstream);
+    if (err) {
+        av_log(NULL, AV_LOG_ERROR, "unable to open outstream: %s", soundio_strerror(err));
+        return -1;
+    }
+
+    if (p->outstream->layout_error) {
+        av_log(NULL, AV_LOG_WARN, "unable to set channel layout: %s\n", soundio_strerror(p->outstream->layout_error));
+    }
+
+    if ((err = soundio_outstream_start(p->outstream))) {
+        av_log(NULL, AV_LOG_ERROR, "unable to start device: %s\n", soundio_strerror(err));
         return -1;
     }
 
     if (actual_format) {
-        actual_format->sample_rate = spec.freq;
-        actual_format->channel_layout = groove_channel_layout_default(spec.channels);
-        actual_format->sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
+        // TODO: support this.
+        //actual_format->sample_rate = spec.freq;
+        //actual_format->channel_layout = groove_channel_layout_default(spec.channels);
+        //actual_format->sample_fmt = sdl_fmt_to_groove_fmt(spec.format);
     }
 
     return 0;
