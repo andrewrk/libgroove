@@ -60,14 +60,17 @@ pub fn build(b: *std.build.Builder) void {
     pulse.addIncludeDir("deps/pulseaudio/src");
     pulse.addCSourceFiles(&.{
         "deps/pulseaudio/src/pulse/channelmap.c",
+        "deps/pulseaudio/src/pulse/client-conf.c",
         "deps/pulseaudio/src/pulse/context.c",
         "deps/pulseaudio/src/pulse/direction.c",
         "deps/pulseaudio/src/pulse/error.c",
         "deps/pulseaudio/src/pulse/ext-device-manager.c",
         "deps/pulseaudio/src/pulse/ext-device-restore.c",
         "deps/pulseaudio/src/pulse/ext-stream-restore.c",
+        "deps/pulseaudio/src/pulse/fork-detect.c",
         "deps/pulseaudio/src/pulse/format.c",
         "deps/pulseaudio/src/pulse/introspect.c",
+        "deps/pulseaudio/src/pulse/json.c",
         "deps/pulseaudio/src/pulse/mainloop-api.c",
         "deps/pulseaudio/src/pulse/mainloop-signal.c",
         "deps/pulseaudio/src/pulse/mainloop.c",
@@ -84,9 +87,64 @@ pub fn build(b: *std.build.Builder) void {
         "deps/pulseaudio/src/pulse/util.c",
         "deps/pulseaudio/src/pulse/volume.c",
         "deps/pulseaudio/src/pulse/xmalloc.c",
+        "deps/pulseaudio/src/pulsecore/arpa-inet.c",
+        "deps/pulseaudio/src/pulsecore/aupdate.c",
+        "deps/pulseaudio/src/pulsecore/authkey.c",
+        "deps/pulseaudio/src/pulsecore/bitset.c",
+        "deps/pulseaudio/src/pulsecore/conf-parser.c",
+        "deps/pulseaudio/src/pulsecore/core-error.c",
+        "deps/pulseaudio/src/pulsecore/core-format.c",
+        "deps/pulseaudio/src/pulsecore/core-rtclock.c",
+        "deps/pulseaudio/src/pulsecore/core-util.c",
+        "deps/pulseaudio/src/pulsecore/dynarray.c",
+        "deps/pulseaudio/src/pulsecore/fdsem.c",
+        "deps/pulseaudio/src/pulsecore/flist.c",
+        "deps/pulseaudio/src/pulsecore/g711.c",
+        "deps/pulseaudio/src/pulsecore/hashmap.c",
+        "deps/pulseaudio/src/pulsecore/i18n.c",
+        "deps/pulseaudio/src/pulsecore/idxset.c",
+        "deps/pulseaudio/src/pulsecore/iochannel.c",
+        "deps/pulseaudio/src/pulsecore/ioline.c",
+        "deps/pulseaudio/src/pulsecore/ipacl.c",
+        "deps/pulseaudio/src/pulsecore/lock-autospawn.c",
+        "deps/pulseaudio/src/pulsecore/log.c",
+        "deps/pulseaudio/src/pulsecore/mcalign.c",
+        "deps/pulseaudio/src/pulsecore/memblock.c",
+        "deps/pulseaudio/src/pulsecore/memblockq.c",
+        "deps/pulseaudio/src/pulsecore/memchunk.c",
+        "deps/pulseaudio/src/pulsecore/memtrap.c",
+        "deps/pulseaudio/src/pulsecore/mutex-posix.c",
+        "deps/pulseaudio/src/pulsecore/native-common.c",
+        "deps/pulseaudio/src/pulsecore/once.c",
+        "deps/pulseaudio/src/pulsecore/packet.c",
+        "deps/pulseaudio/src/pulsecore/parseaddr.c",
+        "deps/pulseaudio/src/pulsecore/pdispatch.c",
+        "deps/pulseaudio/src/pulsecore/pid.c",
+        "deps/pulseaudio/src/pulsecore/pipe.c",
+        "deps/pulseaudio/src/pulsecore/proplist-util.c",
+        "deps/pulseaudio/src/pulsecore/pstream-util.c",
+        "deps/pulseaudio/src/pulsecore/pstream.c",
+        "deps/pulseaudio/src/pulsecore/queue.c",
+        "deps/pulseaudio/src/pulsecore/random.c",
+        "deps/pulseaudio/src/pulsecore/ratelimit.c",
+        "deps/pulseaudio/src/pulsecore/sample-util.c",
+        "deps/pulseaudio/src/pulsecore/semaphore-posix.c",
+        "deps/pulseaudio/src/pulsecore/shm.c",
+        "deps/pulseaudio/src/pulsecore/socket-client.c",
+        "deps/pulseaudio/src/pulsecore/socket-server.c",
+        "deps/pulseaudio/src/pulsecore/socket-util.c",
+        "deps/pulseaudio/src/pulsecore/srbchannel.c",
+        "deps/pulseaudio/src/pulsecore/strbuf.c",
+        "deps/pulseaudio/src/pulsecore/strlist.c",
+        "deps/pulseaudio/src/pulsecore/tagstruct.c",
+        "deps/pulseaudio/src/pulsecore/thread-posix.c",
+        "deps/pulseaudio/src/pulsecore/time-smoother.c",
+        "deps/pulseaudio/src/pulsecore/tokenizer.c",
+        "deps/pulseaudio/src/pulsecore/usergroup.c",
     }, &.{
         "-std=gnu11",
-        "-DPACKAGE=\"pulseaudio\"",
+        "-DHAVE_CONFIG_H=1",
+        "-D_GNU_SOURCE",
     });
 
     const soundio = b.addStaticLibrary("soundio", null);
@@ -95,6 +153,7 @@ pub fn build(b: *std.build.Builder) void {
     soundio.linkLibC();
     soundio.linkLibrary(pulse);
     soundio.addIncludeDir("deps/soundio");
+    soundio.addIncludeDir("deps/pulseaudio/src");
     soundio.addCSourceFiles(&.{
         "deps/soundio/src/soundio.c",
         "deps/soundio/src/util.c",
@@ -120,6 +179,7 @@ pub fn build(b: *std.build.Builder) void {
     ebur128.setBuildMode(mode);
     ebur128.linkLibC();
     ebur128.linkSystemLibrary("m");
+    ebur128.addIncludeDir("deps/ebur128/ebur128/queue");
     ebur128.addCSourceFiles(&.{
         "deps/ebur128/ebur128/ebur128.c",
     }, &.{});
@@ -221,6 +281,7 @@ pub fn build(b: *std.build.Builder) void {
     playlist.linkLibrary(chromaprint);
     playlist.linkLibrary(ebur128);
     playlist.linkLibrary(soundio);
+    playlist.linkLibrary(pulse);
     playlist.linkLibrary(groove);
     playlist.linkLibrary(zlib);
     playlist.addIncludeDir(".");

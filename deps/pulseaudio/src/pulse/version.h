@@ -28,6 +28,8 @@
 /** \file
  * Define header version */
 
+PA_C_DECL_BEGIN
+
 /** Return the version of the header files. Keep in mind that this is
 a macro and not a function, so it is impossible to get the pointer of
 it. */
@@ -62,5 +64,7 @@ const char* pa_get_library_version(void);
     ((PA_MAJOR > (major)) ||                                            \
      (PA_MAJOR == (major) && PA_MINOR > (minor)) ||                     \
      (PA_MAJOR == (major) && PA_MINOR == (minor) && PA_MICRO >= (micro)))
+
+PA_C_DECL_END
 
 #endif
