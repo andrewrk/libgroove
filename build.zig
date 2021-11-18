@@ -293,6 +293,26 @@ pub fn build(b: *std.build.Builder) void {
         "example/playlist.c",
     }, example_cflags);
     playlist.install();
+
+    const metadata = b.addExecutable("metadata", null);
+    metadata.setTarget(target);
+    metadata.setBuildMode(mode);
+    metadata.linkLibrary(ffmpeg);
+    metadata.linkLibrary(chromaprint);
+    metadata.linkLibrary(ebur128);
+    metadata.linkLibrary(soundio);
+    metadata.linkLibrary(pulse);
+    metadata.linkLibrary(groove);
+    metadata.linkLibrary(zlib);
+    metadata.addIncludeDir(".");
+    metadata.addIncludeDir("deps");
+    metadata.addIncludeDir("deps/ffmpeg");
+    metadata.addIncludeDir("deps/ebur128/ebur128");
+    metadata.addIncludeDir("deps/soundio");
+    metadata.addCSourceFiles(&.{
+        "example/metadata.c",
+    }, example_cflags);
+    metadata.install();
 }
 
 const example_cflags: []const []const u8 = &.{
