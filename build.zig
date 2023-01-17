@@ -17,6 +17,7 @@ pub fn build(b: *std.build.Builder) void {
     groove.linkLibrary(ebur128_dep.artifact("ebur128"));
     groove.linkLibrary(soundio_dep.artifact("soundio"));
     groove.linkLibC();
+    groove.addIncludePath(".");
     groove.addCSourceFiles(&.{
         "src/buffer.c",
         "src/file.c",
