@@ -4,13 +4,11 @@ pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
-    //const ffmpeg = b.addStaticLibrary("ffmpeg", null);
-    //ffmpeg.setTarget(target);
-    //ffmpeg.setBuildMode(mode);
-    //ffmpeg.linkLibC();
-    //ffmpeg.addCSourceFiles(&.{
-    //}, &.{
-    //});
+    const ffmpeg = b.addStaticLibrary("ffmpeg", null);
+    ffmpeg.setTarget(target);
+    ffmpeg.setBuildMode(mode);
+    ffmpeg.linkLibC();
+    ffmpeg.addCSourceFiles(&.{}, &.{});
 
     //const sdl2 = b.addStaticLibrary("SDL2", null);
     //sdl2.setTarget(target);
@@ -46,7 +44,10 @@ pub fn build(b: *std.build.Builder) void {
     const groove = b.addStaticLibrary("groove", null);
     groove.setTarget(target);
     groove.setBuildMode(mode);
+    groove.linkLibrary(ffmpeg);
     groove.linkLibC();
+    groove.addIncludeDir(".");
+    groove.addIncludeDir("deps/ffmpeg");
     groove.addCSourceFiles(&.{
         "groove/buffer.c",
         "groove/encoder.c",
