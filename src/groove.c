@@ -46,42 +46,7 @@ const char *groove_strerror(int error) {
     return "(invalid error)";
 }
 
-static int my_lockmgr_cb(void **mutex, enum AVLockOp op) {
-    if (!mutex)
-        return -1;
-    pthread_mutex_t *pmutex;
-    switch (op) {
-        case AV_LOCK_CREATE:
-            pmutex = ALLOCATE(pthread_mutex_t, 1);
-            *mutex = pmutex;
-            return pthread_mutex_init(pmutex, NULL);
-        case AV_LOCK_OBTAIN:
-            pmutex = (pthread_mutex_t *) *mutex;
-            return pthread_mutex_lock(pmutex);
-        case AV_LOCK_RELEASE:
-            pmutex = (pthread_mutex_t *) *mutex;
-            return pthread_mutex_unlock(pmutex);
-        case AV_LOCK_DESTROY:
-            pmutex = (pthread_mutex_t *) *mutex;
-            int err = pthread_mutex_destroy(pmutex);
-            DEALLOCATE(pmutex);
-            *mutex = NULL;
-            return err;
-    }
-    return 0;
-}
-
 static int init_once(void) {
-    int err;
-    if ((err = av_lockmgr_register(&my_lockmgr_cb))) {
-        return GrooveErrorSystemResources;
-    }
-
-    // register all codecs, demux and protocols
-    avcodec_register_all();
-    av_register_all();
-    avfilter_register_all();
-
     av_log_set_level(AV_LOG_QUIET);
     return 0;
 }

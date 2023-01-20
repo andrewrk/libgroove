@@ -19,6 +19,9 @@
 #include <libavfilter/buffersrc.h>
 #include <libavfilter/buffersink.h>
 #include <libavutil/samplefmt.h>
+#include <libavcodec/avcodec.h>
+#include <libavcodec/packet.h>
+#include <libavformat/avformat.h>
 
 struct GrooveSinkPrivate {
     struct GrooveSink externals;
@@ -51,12 +54,11 @@ struct GroovePlaylistPrivate {
     bool thread_inited;
     bool abort_request;
 
-    AVPacket audio_pkt_temp;
     AVFrame *in_frame;
     struct GrooveAtomicBool paused;
 
     int in_sample_rate;
-    uint64_t in_channel_layout;
+    AVChannelLayout in_channel_layout;
     enum AVSampleFormat in_sample_fmt;
     AVRational in_time_base;
 
@@ -64,12 +66,12 @@ struct GroovePlaylistPrivate {
     AVFilterGraph *filter_graph;
     AVFilterContext *abuffer_ctx;
 
-    AVFilter *volume_filter;
-    AVFilter *compand_filter;
-    AVFilter *abuffer_filter;
-    AVFilter *asplit_filter;
-    AVFilter *aformat_filter;
-    AVFilter *abuffersink_filter;
+    const AVFilter *volume_filter;
+    const AVFilter *compand_filter;
+    const AVFilter *abuffer_filter;
+    const AVFilter *asplit_filter;
+    const AVFilter *aformat_filter;
+    const AVFilter *abuffersink_filter;
 
     pthread_mutex_t drain_cond_mutex;
     int drain_cond_mutex_inited;
@@ -115,7 +117,7 @@ struct GroovePlaylistPrivate {
 static struct GrooveBuffer *end_of_q_sentinel = NULL;
 
 static int frame_size(const AVFrame *frame) {
-    return av_get_channel_layout_nb_channels(frame->channel_layout) *
+    return frame->ch_layout.nb_channels *
         av_get_bytes_per_sample((enum AVSampleFormat)frame->format) * frame->nb_samples;
 }
 
@@ -144,7 +146,7 @@ static struct GrooveBuffer *frame_to_groove_buffer(struct GroovePlaylist *playli
 
     buffer->data = frame->extended_data;
     buffer->frame_count = frame->nb_samples;
-    from_ffmpeg_layout(frame->channel_layout, &buffer->format.layout);
+    from_ffmpeg_layout(frame->ch_layout, &buffer->format.layout);
     buffer->format.format = from_ffmpeg_format((enum AVSampleFormat)frame->format);
     buffer->format.is_planar = from_ffmpeg_format_planar((enum AVSampleFormat)frame->format);
     buffer->format.sample_rate = frame->sample_rate;
@@ -156,123 +158,74 @@ static struct GrooveBuffer *frame_to_groove_buffer(struct GroovePlaylist *playli
     return buffer;
 }
 
-
-// decode one audio packet and return its uncompressed size
-static int audio_decode_frame(struct GroovePlaylist *playlist, struct GrooveFile *file) {
+static int send_frame_to_filter_graph(struct GroovePlaylist *playlist, AVFrame *frame) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
-    struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
+    int err;
 
-    AVPacket *pkt = &f->audio_pkt;
-    AVCodecContext *dec = f->audio_st->codec;
+    if ((err = av_buffersrc_add_frame_flags(p->abuffer_ctx, frame, 0)) < 0) {
+        av_strerror(err, p->strbuf, sizeof(p->strbuf));
+        av_log(NULL, AV_LOG_ERROR, "error feeding the filtergraph: %s\n", p->strbuf);
+        if (err == AVERROR(ENOMEM)) {
+            return GrooveErrorNoMem;
+        } else {
+            return GrooveErrorDecoding;
+        }
+    }
 
-    AVPacket *pkt_temp = &p->audio_pkt_temp;
-    *pkt_temp = *pkt;
-
-    // update the audio clock with the pts if we can
-    if (pkt->pts != AV_NOPTS_VALUE)
-        f->audio_clock = av_q2d(f->audio_st->time_base) * pkt->pts;
-
+    // for each data format in the sink map, pull filtered audio from its
+    // buffersink, turn it into a GrooveBuffer and then increment the ref
+    // count for each sink in that stack.
+    struct SinkMap *map_item = p->sink_map;
     int max_data_size = 0;
-    int len1, got_frame;
-    int new_packet = 1;
-    AVFrame *in_frame = p->in_frame;
-
-    // NOTE: the audio packet can contain several frames
-    while (pkt_temp->size > 0 || (!pkt_temp->data && new_packet)) {
-        new_packet = 0;
-
-        len1 = avcodec_decode_audio4(dec, in_frame, &got_frame, pkt_temp);
-        if (len1 < 0) {
-            // if error, we skip the frame
-            pkt_temp->size = 0;
-            return -1;
-        }
-
-        pkt_temp->data += len1;
-        pkt_temp->size -= len1;
-
-        if (!got_frame) {
-            // stop sending empty packets if the decoder is finished
-            if (!pkt_temp->data && dec->codec->capabilities & AV_CODEC_CAP_DELAY)
-                return 0;
-            continue;
-        }
-
-        // push the audio data from decoded frame into the filtergraph
-        int err = av_buffersrc_write_frame(p->abuffer_ctx, in_frame);
-        if (err < 0) {
-            av_strerror(err, p->strbuf, sizeof(p->strbuf));
-            av_log(NULL, AV_LOG_ERROR, "error writing frame to buffersrc: %s\n",
-                    p->strbuf);
-            if (err == AVERROR(ENOMEM)) {
+    while (map_item) {
+        struct GrooveSink *example_sink = map_item->stack_head->sink;
+        int data_size = 0;
+        for (;;) {
+            AVFrame *oframe = av_frame_alloc();
+            if (!oframe) {
                 return GrooveErrorNoMem;
-            } else {
+            }
+            err = example_sink->buffer_sample_count == 0 ?
+                av_buffersink_get_frame(map_item->abuffersink_ctx, oframe) :
+                av_buffersink_get_samples(map_item->abuffersink_ctx, oframe, example_sink->buffer_sample_count);
+            if (err == AVERROR_EOF || err == AVERROR(EAGAIN)) {
+                av_frame_free(&oframe);
+                break;
+            }
+            if (err < 0) {
+                av_frame_free(&oframe);
+                av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
                 return GrooveErrorDecoding;
             }
-        }
-
-        // for each data format in the sink map, pull filtered audio from its
-        // buffersink, turn it into a GrooveBuffer and then increment the ref
-        // count for each sink in that stack.
-        struct SinkMap *map_item = p->sink_map;
-        double clock_adjustment = 0;
-        while (map_item) {
-            struct GrooveSink *example_sink = map_item->stack_head->sink;
-            int data_size = 0;
-            for (;;) {
-                AVFrame *oframe = av_frame_alloc();
-                int err = example_sink->buffer_sample_count == 0 ?
-                    av_buffersink_get_frame(map_item->abuffersink_ctx, oframe) :
-                    av_buffersink_get_samples(map_item->abuffersink_ctx, oframe, example_sink->buffer_sample_count);
-                if (err == AVERROR_EOF || err == AVERROR(EAGAIN)) {
-                    av_frame_free(&oframe);
-                    break;
-                }
-                if (err < 0) {
-                    av_frame_free(&oframe);
-                    av_log(NULL, AV_LOG_ERROR, "error reading buffer from buffersink\n");
-                    return GrooveErrorDecoding;
-                }
-                struct GrooveBuffer *buffer = frame_to_groove_buffer(playlist, example_sink, oframe);
-                if (!buffer) {
-                    av_frame_free(&oframe);
-                    return GrooveErrorNoMem;
-                }
-                if (!clock_adjustment && pkt->pts == AV_NOPTS_VALUE) {
-                    double bytes_per_sec = soundio_get_bytes_per_second(
-                            buffer->format.format, buffer->format.layout.channel_count,
-                            buffer->format.sample_rate);
-                    clock_adjustment = buffer->size / bytes_per_sec;
-                }
-                data_size += buffer->size;
-                struct SinkStack *stack_item = map_item->stack_head;
-                // we hold this reference to avoid cleanups until at least this loop
-                // is done and we call unref after it.
-                groove_buffer_ref(buffer);
-                while (stack_item) {
-                    struct GrooveSink *sink = stack_item->sink;
-                    struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
-                    // as soon as we call groove_queue_put, this buffer could be unref'd.
-                    // so we ref before putting it in the queue, and unref if it failed.
-                    groove_buffer_ref(buffer);
-                    if (groove_queue_put(s->audioq, buffer) < 0) {
-                        av_log(NULL, AV_LOG_ERROR, "unable to put buffer in queue\n");
-                        groove_buffer_unref(buffer);
-                    }
-                    if (sink->filled) sink->filled(sink);
-                    stack_item = stack_item->next;
-                }
-                groove_buffer_unref(buffer);
+            struct GrooveBuffer *buffer = frame_to_groove_buffer(playlist, example_sink, oframe);
+            if (!buffer) {
+                av_frame_free(&oframe);
+                return GrooveErrorNoMem;
             }
-            max_data_size = groove_max_int(max_data_size, data_size);
-            map_item = map_item->next;
+            data_size += buffer->size;
+            struct SinkStack *stack_item = map_item->stack_head;
+            // we hold this reference to avoid cleanups until at least this loop
+            // is done and we call unref after it.
+            groove_buffer_ref(buffer);
+            while (stack_item) {
+                struct GrooveSink *sink = stack_item->sink;
+                struct GrooveSinkPrivate *s = (struct GrooveSinkPrivate *) sink;
+                // as soon as we call groove_queue_put, this buffer could be unref'd.
+                // so we ref before putting it in the queue, and unref if it failed.
+                groove_buffer_ref(buffer);
+                if (groove_queue_put(s->audioq, buffer) < 0) {
+                    av_log(NULL, AV_LOG_ERROR, "unable to put buffer in queue\n");
+                    groove_buffer_unref(buffer);
+                }
+                if (sink->filled) sink->filled(sink);
+                stack_item = stack_item->next;
+            }
+            groove_buffer_unref(buffer);
         }
-
-        // if no pts, then estimate it
-        if (pkt->pts == AV_NOPTS_VALUE)
-            f->audio_clock += clock_adjustment;
-        return max_data_size;
+        max_data_size = groove_max_int(max_data_size, data_size);
+        map_item = map_item->next;
     }
+
     return max_data_size;
 }
 
@@ -354,18 +307,18 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
 
     int err;
     // create abuffer filter
-    AVCodecContext *avctx = f->audio_st->codec;
+    struct AVCodecContext *avctx = f->decode_ctx;
     AVRational time_base = f->audio_st->time_base;
     snprintf(p->strbuf, sizeof(p->strbuf),
             "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%" PRIx64, 
             time_base.num, time_base.den, avctx->sample_rate,
             av_get_sample_fmt_name(avctx->sample_fmt),
-            avctx->channel_layout);
+            avctx->ch_layout.u.mask);
     av_log(NULL, AV_LOG_INFO, "abuffer: %s\n", p->strbuf);
     // save these values so we can compare later and check
     // whether we have to reconstruct the graph
     p->in_sample_rate = avctx->sample_rate;
-    p->in_channel_layout = avctx->channel_layout;
+    p->in_channel_layout = avctx->ch_layout;
     p->in_sample_fmt = avctx->sample_fmt;
     p->in_time_base = time_base;
     err = avfilter_graph_create_filter(&p->abuffer_ctx, p->abuffer_filter,
@@ -468,7 +421,7 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
 
         // Check for channel layout.
         struct SoundIoChannelLayout aformat_layout;
-        from_ffmpeg_layout(avctx->channel_layout, &aformat_layout);
+        from_ffmpeg_layout(avctx->ch_layout, &aformat_layout);
         bool channel_layout_ok = false;
         if (example_sink->channel_layouts) {
             for (int i = 0; i < example_sink->channel_layout_count; i += 1) {
@@ -511,7 +464,8 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
             snprintf(p->strbuf, sizeof(p->strbuf),
                     "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%" PRIx64,
                     av_get_sample_fmt_name(to_ffmpeg_fmt_params(aformat_format, aformat_planar)),
-                    aformat_sample_rate, to_ffmpeg_channel_layout(&aformat_layout));
+                    aformat_sample_rate,
+                    to_ffmpeg_channel_layout(&aformat_layout).u.mask);
             av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
             err = avfilter_graph_create_filter(&aformat_ctx, p->aformat_filter,
                     NULL, p->strbuf, NULL, p->filter_graph);
@@ -564,13 +518,13 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
 static int maybe_init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile *file) {
     struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
-    AVCodecContext *avctx = f->audio_st->codec;
+    struct AVCodecContext *avctx = f->decode_ctx;
     AVRational time_base = f->audio_st->time_base;
 
     // if the input format stuff has changed, then we need to re-build the graph
     if (!p->filter_graph || p->rebuild_filter_graph_flag ||
         p->in_sample_rate != avctx->sample_rate ||
-        p->in_channel_layout != avctx->channel_layout ||
+        (av_channel_layout_compare(&p->in_channel_layout, &avctx->ch_layout) != 0) ||
         p->in_sample_fmt != avctx->sample_fmt ||
         p->in_time_base.num != time_base.num ||
         p->in_time_base.den != time_base.den ||
@@ -666,8 +620,11 @@ static void every_sink_flush(struct GroovePlaylist *playlist) {
 }
 
 static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *file) {
+    struct GroovePlaylistPrivate *p = (struct GroovePlaylistPrivate *) playlist;
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
-    AVPacket *pkt = &f->audio_pkt;
+    AVPacket *pkt = f->audio_pkt;
+    AVCodecContext *decode_ctx = f->decode_ctx;
+    int err;
 
     // abort_request is set if we are destroying the file
     if (GROOVE_ATOMIC_LOAD(f->abort_request))
@@ -685,11 +642,11 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
             if (seek_pos == 0 && f->audio_st->start_time != AV_NOPTS_VALUE)
                 seek_pos = f->audio_st->start_time;
             if (av_seek_frame(f->ic, f->audio_stream_index, seek_pos, 0) < 0) {
-                av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->filename);
+                av_log(NULL, AV_LOG_ERROR, "%s: error while seeking\n", f->ic->url);
             } else if (f->seek_flush) {
                 every_sink_flush(playlist);
             }
-            avcodec_flush_buffers(f->audio_st->codec);
+            avcodec_flush_buffers(decode_ctx);
         }
         f->ever_seeked = true;
         f->seek_pos = -1;
@@ -698,12 +655,8 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
     pthread_mutex_unlock(&f->seek_mutex);
 
     if (f->eof) {
-        if (f->audio_st->codec->codec->capabilities & AV_CODEC_CAP_DELAY) {
-            av_init_packet(pkt);
-            pkt->data = NULL;
-            pkt->size = 0;
-            pkt->stream_index = f->audio_stream_index;
-            if (audio_decode_frame(playlist, file) > 0) {
+        if (decode_ctx->codec->capabilities & AV_CODEC_CAP_DELAY) {
+            if ((err = send_frame_to_filter_graph(playlist, NULL)) > 0) {
                 // keep flushing
                 return 0;
             }
@@ -711,8 +664,7 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
         // this file is complete. move on
         return -1;
     }
-    int err = av_read_frame(f->ic, pkt);
-    if (err < 0) {
+    if ((err = av_read_frame(f->ic, pkt))) {
         // treat all errors as EOF, but log non-EOF errors.
         if (err != AVERROR_EOF) {
             av_log(NULL, AV_LOG_WARNING, "error reading frames\n");
@@ -725,9 +677,33 @@ static int decode_one_frame(struct GroovePlaylist *playlist, struct GrooveFile *
         av_packet_unref(pkt);
         return 0;
     }
-    audio_decode_frame(playlist, file);
-    av_packet_unref(pkt);
-    return 0;
+    av_packet_rescale_ts(pkt,
+        f->ic->streams[pkt->stream_index]->time_base,
+        decode_ctx->time_base);
+
+    if ((err = avcodec_send_packet(decode_ctx, pkt))) {
+        av_log(NULL, AV_LOG_WARNING, "decoding failed\n");
+        f->eof = 1;
+        return 0;
+    }
+
+    AVFrame *frame = p->in_frame;
+
+    for (;;) {
+        err = avcodec_receive_frame(decode_ctx, frame);
+        if (err == AVERROR_EOF || err == AVERROR(EAGAIN)) {
+            f->audio_clock = av_q2d(f->audio_st->time_base) * frame->pts;
+            av_packet_unref(pkt);
+            return 0;
+        } else if (err < 0) {
+            return GrooveErrorDecoding;
+        }
+
+        frame->pts = frame->best_effort_timestamp;
+
+        if ((err = send_frame_to_filter_graph(playlist, frame)) < 0)
+            return err;
+    }
 }
 
 static void audioq_put(struct GrooveQueue *queue, void *obj) {

@@ -12,8 +12,8 @@
 
 /// use this to find out the unique id of an audio track
 struct GrooveFingerprinterInfo {
-    /// raw fingerprint. A fingerprint is an array of signed 32-bit integers.
-    int32_t *fingerprint;
+    /// raw fingerprint. A fingerprint is an array of unsigned 32-bit integers.
+    uint32_t *fingerprint;
     /// the number of 32-bit integers in the fingerprint array
     int fingerprint_size;
 
@@ -76,7 +76,7 @@ GROOVE_EXPORT void groove_fingerprinter_position(struct GrooveFingerprinter *pri
 /// ::groove_fingerprinter_dealloc().
 /// 
 /// Parameters:
-///  - fp: pointer to an array of signed 32-bit integers representing the raw
+///  - fp: pointer to an array of unsigned 32-bit integers representing the raw
 ///        fingerprint to be encoded
 ///  - size: number of items in the raw fingerprint
 ///  - encoded_fp: pointer to a pointer, where the encoded fingerprint will be
@@ -85,7 +85,7 @@ GROOVE_EXPORT void groove_fingerprinter_position(struct GrooveFingerprinter *pri
 /// Returns:
 ///  - 0 on success, < 0 on error
 /// 
-GROOVE_EXPORT int groove_fingerprinter_encode(int32_t *fp, int size, char **encoded_fp);
+GROOVE_EXPORT int groove_fingerprinter_encode(uint32_t *fp, int size, char **encoded_fp);
 
 /// Uncompress and base64-decode an encoded fingerprint
 /// 
@@ -96,13 +96,13 @@ GROOVE_EXPORT int groove_fingerprinter_encode(int32_t *fp, int size, char **enco
 ///  - encoded_fp: Pointer to an encoded fingerprint
 ///  - encoded_size: Size of the encoded fingerprint in bytes
 ///  - fp: Pointer to a pointer, where the decoded raw fingerprint (array
-///        of signed 32-bit integers) will be stored
+///        of unsigned 32-bit integers) will be stored
 ///  - size: Number of items in the returned raw fingerprint
 /// 
 /// Returns:
 ///  - 0 on success, < 0 on error
 /// 
-GROOVE_EXPORT int groove_fingerprinter_decode(char *encoded_fp, int32_t **fp, int *size);
+GROOVE_EXPORT int groove_fingerprinter_decode(char *encoded_fp, uint32_t **fp, int *size);
 
 GROOVE_EXPORT void groove_fingerprinter_dealloc(void *ptr);
 

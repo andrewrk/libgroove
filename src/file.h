@@ -12,19 +12,26 @@
 #include "atomics.h"
 
 #include <pthread.h>
+#include <stdio.h>
 
-#include <libavformat/avformat.h>
+struct AVCodec;
+struct AVCodecContext;
+struct AVFormatContext;
+struct AVIOContext;
+struct AVPacket;
+struct AVStream;
 
 struct GrooveFilePrivate {
     struct GrooveFile externals;
     struct Groove *groove;
     int audio_stream_index;
     struct GrooveAtomicBool abort_request; // true when we're closing the file
-    AVFormatContext *ic;
-    AVCodec *decoder;
-    AVStream *audio_st;
+    struct AVFormatContext *ic;
+    struct AVCodecContext *decode_ctx;
+    const struct AVCodec *decoder;
+    struct AVStream *audio_st;
     unsigned char *avio_buf;
-    AVIOContext *avio;
+    struct AVIOContext *avio;
     struct GrooveCustomIo *custom_io;
 
     // this mutex protects the fields in this block
@@ -35,10 +42,11 @@ struct GrooveFilePrivate {
 
     int eof;
     double audio_clock; // position of the decode head
-    AVPacket audio_pkt;
+    struct AVPacket *audio_pkt;
 
     // state while saving
-    AVFormatContext *oc;
+    struct AVFormatContext *oc;
+    struct AVCodecContext *encode_ctx;
     int tempfile_exists;
 
     int paused;
