@@ -16,7 +16,7 @@
 #include <pthread.h>
 
 #include <libavformat/avformat.h>
-#include <libavcodec/codec.h>
+#include <libavcodec/avcodec.h>
 
 struct GrooveEncoderPrivate {
     struct GrooveEncoder externals;
@@ -24,10 +24,11 @@ struct GrooveEncoderPrivate {
     struct GrooveQueue *audioq;
     struct GrooveSink *sink;
     AVFormatContext *fmt_ctx;
-    AVOutputFormat *oformat;
-    AVCodec *codec;
+    const AVOutputFormat *oformat;
+    const AVCodec *codec;
+    AVCodecContext *codec_ctx;
     AVStream *stream;
-    AVPacket pkt;
+    AVPacket *pkt;
     int audioq_size; // in bytes
     struct GrooveAtomicBool abort_request;
 
@@ -71,7 +72,7 @@ static enum SoundIoFormat prioritized_sample_formats[] = {
     SoundIoFormatU8,
 };
 
-static int set_codec_ctx_format(AVCodecContext *codec_ctx, const struct GrooveAudioFormat *fmt) {
+static int set_codec_ctx_format(struct AVCodecContext *codec_ctx, const struct GrooveAudioFormat *fmt) {
     switch (fmt->format) {
         case SoundIoFormatU8:
             codec_ctx->bits_per_raw_sample = 8;
@@ -103,9 +104,8 @@ static int set_codec_ctx_format(AVCodecContext *codec_ctx, const struct GrooveAu
 }
 
 static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buffer) {
+    int err;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
-
-    av_init_packet(&e->pkt);
 
     AVFrame *frame = NULL;
     if (buffer) {
@@ -120,25 +120,34 @@ static int encode_buffer(struct GrooveEncoder *encoder, struct GrooveBuffer *buf
         e->next_pts += buffer->frame_count + 1;
     }
 
-    int got_packet = 0;
-    int errcode = avcodec_encode_audio2(e->stream->codec, &e->pkt, frame, &got_packet);
-    if (errcode < 0) {
-        av_strerror(errcode, e->strbuf, sizeof(e->strbuf));
+    if ((err = avcodec_send_frame(e->codec_ctx, frame)) != 0) {
+        av_strerror(err, e->strbuf, sizeof(e->strbuf));
         av_log(NULL, AV_LOG_ERROR, "error encoding audio frame: %s\n", e->strbuf);
         return GrooveErrorEncoding;
     }
-    if (!got_packet)
-        return GrooveErrorEncoding;
 
-    av_write_frame(e->fmt_ctx, &e->pkt);
-    av_packet_unref(&e->pkt);
+    for (;;) {
+        switch ((err = avcodec_receive_packet(e->codec_ctx, e->pkt))) {
+            case 0:
+            av_write_frame(e->fmt_ctx, e->pkt);
+            av_packet_unref(e->pkt);
+            continue;
 
-    return 0;
+            case AVERROR(EAGAIN):
+            case AVERROR_EOF:
+            return GrooveErrorEncoding;
+
+            default:
+            av_strerror(err, e->strbuf, sizeof(e->strbuf));
+            av_log(NULL, AV_LOG_ERROR, "error encoding audio frame: %s\n", e->strbuf);
+            return GrooveErrorEncoding;
+        }
+    }
 }
 
 static void cleanup_avcontext(struct GrooveEncoderPrivate *e) {
     if (e->stream) {
-        avcodec_close(e->stream->codec);
+        avcodec_free_context(&e->codec_ctx);
         // stream is freed by freeing the AVFormatContext
         e->stream = NULL;
     }
@@ -164,26 +173,28 @@ static int init_avcontext(struct GrooveEncoder *encoder) {
     e->fmt_ctx->pb = e->avio;
     e->fmt_ctx->oformat = e->oformat;
 
+    e->codec_ctx = avcodec_alloc_context3(e->codec);
+    if (!e->codec_ctx) {
+        return GrooveErrorNoMem;
+    }
+
     e->stream = avformat_new_stream(e->fmt_ctx, e->codec);
     if (!e->stream) {
         return GrooveErrorNoMem;
     }
 
-    AVCodecContext *codec_ctx = e->stream->codec;
-    codec_ctx->bit_rate = encoder->bit_rate;
-    set_codec_ctx_format(codec_ctx, &encoder->actual_audio_format);
-    codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
-    codec_ctx->channel_layout = to_ffmpeg_channel_layout(&encoder->actual_audio_format.layout);
-    codec_ctx->channels = av_get_channel_layout_nb_channels(codec_ctx->channel_layout);
-    codec_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+    e->codec_ctx->bit_rate = encoder->bit_rate;
+    set_codec_ctx_format(e->codec_ctx, &encoder->actual_audio_format);
+    e->codec_ctx->sample_rate = encoder->actual_audio_format.sample_rate;
+    e->codec_ctx->ch_layout = to_ffmpeg_channel_layout(&encoder->actual_audio_format.layout);
+    e->codec_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
 
-    int err = avcodec_open2(codec_ctx, e->codec, NULL);
+    int err = avcodec_open2(e->codec_ctx, e->codec, NULL);
     if (err < 0) {
         av_strerror(err, e->strbuf, sizeof(e->strbuf));
         av_log(NULL, AV_LOG_ERROR, "unable to open codec: %s\n", e->strbuf);
         return GrooveErrorEncoding;
     }
-    e->stream->codec = codec_ctx;
 
     return 0;
 }
@@ -386,6 +397,13 @@ struct GrooveEncoder *groove_encoder_create(struct Groove *groove) {
     e->groove = groove;
     GROOVE_ATOMIC_STORE(e->abort_request, false);
 
+    e->pkt = av_packet_alloc();
+    if (!e->pkt) {
+        groove_encoder_destroy(encoder);
+        av_log(NULL, AV_LOG_ERROR, "unable to allocate encoding packet\n");
+        return NULL;
+    }
+
     const int buffer_size = 4 * 1024;
     e->avio_buf = ALLOCATE_NONZERO(unsigned char, buffer_size);
     if (!e->avio_buf) {
@@ -476,6 +494,12 @@ void groove_encoder_destroy(struct GrooveEncoder *encoder) {
     if (e->metadata)
         av_dict_free(&e->metadata);
 
+    if (e->pkt)
+        av_packet_free(&e->pkt);
+
+    if (e->codec_ctx)
+        avcodec_free_context(&e->codec_ctx);
+
     DEALLOCATE(e);
 }
 
@@ -484,7 +508,7 @@ static int abs_diff(int a, int b) {
     return n >= 0 ? n : -n;
 }
 
-static bool codec_supports_fmt(AVCodec *codec, enum SoundIoFormat fmt, bool is_planar) {
+static bool codec_supports_fmt(const AVCodec *codec, enum SoundIoFormat fmt, bool is_planar) {
     if (!codec->sample_fmts)
         return true;
 
@@ -527,8 +551,8 @@ static bool codec_supports_fmt(AVCodec *codec, enum SoundIoFormat fmt, bool is_p
     return false;
 }
 
-static int closest_supported_sample_fmt(AVCodec *codec, const struct GrooveAudioFormat *target_fmt,
-        struct GrooveAudioFormat *actual_fmt)
+static int closest_supported_sample_fmt(const AVCodec *codec,
+    const struct GrooveAudioFormat *target_fmt, struct GrooveAudioFormat *actual_fmt)
 {
     if (codec_supports_fmt(codec, target_fmt->format, target_fmt->is_planar)) {
         actual_fmt->format = target_fmt->format;
@@ -558,7 +582,7 @@ static int closest_supported_sample_fmt(AVCodec *codec, const struct GrooveAudio
     return GrooveErrorInvalidSampleFormat;
 }
 
-static int closest_supported_sample_rate(AVCodec *codec, int target) {
+static int closest_supported_sample_rate(const AVCodec *codec, int target) {
     // if we can, return exact match. otherwise, return the minimum sample
     // rate >= target
 
@@ -584,18 +608,18 @@ static int closest_supported_sample_rate(AVCodec *codec, int target) {
     return best;
 }
 
-static uint64_t closest_supported_channel_layout(AVCodec *codec, uint64_t target) {
-    int target_count = av_get_channel_layout_nb_channels(target);
-    const uint64_t *p = codec->channel_layouts;
+static AVChannelLayout closest_supported_channel_layout(const AVCodec *codec, AVChannelLayout target) {
+    int target_count = target.nb_channels;
+    const AVChannelLayout *p = codec->ch_layouts;
     if (!p)
         return target;
-    uint64_t best = *p;
-    int best_count = av_get_channel_layout_nb_channels(best);
-    while (*p) {
-        if (*p == target)
+    AVChannelLayout best = *p;
+    int best_count = best.nb_channels;
+    while (p->nb_channels != 0) {
+        if (av_channel_layout_compare(&target, p) == 0)
             return target;
 
-        int count = av_get_channel_layout_nb_channels(*p);
+        int count = p->nb_channels;
         if ((best_count < target_count && count > best_count) ||
             (count >= target_count &&
              abs_diff(target_count, count) < abs_diff(target_count, best_count)))
@@ -633,7 +657,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
     // https://trac.ffmpeg.org/ticket/4706
     // because of this we do a workaround to return the correct codec based on
     // the codec_short_name.
-    AVCodec *codec = NULL;
+    const AVCodec *codec = NULL;
     if (encoder->codec_short_name) {
         codec = avcodec_find_encoder_by_name(encoder->codec_short_name);
         if (!codec) {
@@ -669,8 +693,8 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
     encoder->actual_audio_format.sample_rate = closest_supported_sample_rate(
             codec, encoder->target_audio_format.sample_rate);
 
-    uint64_t target_channel_layout = to_ffmpeg_channel_layout(&encoder->target_audio_format.layout);
-    uint64_t out_channel_layout = closest_supported_channel_layout(codec, target_channel_layout);
+    AVChannelLayout target_channel_layout = to_ffmpeg_channel_layout(&encoder->target_audio_format.layout);
+    AVChannelLayout out_channel_layout = closest_supported_channel_layout(codec, target_channel_layout);
     from_ffmpeg_layout(out_channel_layout, &encoder->actual_audio_format.layout);
 
     log_audio_fmt(&encoder->actual_audio_format);
@@ -683,7 +707,7 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
     groove_sink_set_only_format(e->sink, &encoder->actual_audio_format);
     e->sink->buffer_size_bytes = encoder->sink_buffer_size_bytes;
     e->sink->buffer_sample_count = (codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE) ?
-        0 : e->stream->codec->frame_size;
+        0 : e->codec_ctx->frame_size;
     e->sink->gain = encoder->gain;
 
     if ((err = groove_sink_attach(e->sink, playlist))) {

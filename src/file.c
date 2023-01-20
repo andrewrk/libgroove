@@ -9,6 +9,9 @@
 #include "util.h"
 #include "groove_private.h"
 
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -100,12 +103,18 @@ int groove_file_open_custom(struct GrooveFile *file, struct GrooveCustomIo *cust
         return GrooveErrorSystemResources;
     }
 
+    f->audio_pkt = av_packet_alloc();
+    if (!f->audio_pkt) {
+        groove_file_close(file);
+        return GrooveErrorNoMem;
+    }
+
     f->ic = avformat_alloc_context();
     if (!f->ic) {
         groove_file_close(file);
         return GrooveErrorNoMem;
     }
-    file->filename = f->ic->filename;
+    file->filename = f->ic->url;
     f->ic->interrupt_callback.callback = decode_interrupt_cb;
     f->ic->interrupt_callback.opaque = f;
 
@@ -173,16 +182,25 @@ int groove_file_open_custom(struct GrooveFile *file, struct GrooveCustomIo *cust
     f->audio_st = f->ic->streams[f->audio_stream_index];
     f->audio_st->discard = AVDISCARD_DEFAULT;
 
-    AVCodecContext *avctx = f->audio_st->codec;
+    const AVCodec *codec = avcodec_find_decoder(f->audio_st->codecpar->codec_id);
 
-    if (avcodec_open2(avctx, f->decoder, NULL) < 0) {
+    f->decode_ctx = avcodec_alloc_context3(codec);
+    if (!f->decode_ctx) {
+        groove_file_close(file);
+        return GrooveErrorNoMem;
+    }
+
+    if ((err = avcodec_parameters_to_context(f->decode_ctx, f->audio_st->codecpar))) {
         groove_file_close(file);
         return GrooveErrorDecoding;
     }
 
-    if (!avctx->channel_layout)
-        avctx->channel_layout = av_get_default_channel_layout(avctx->channels);
-    if (!avctx->channel_layout) {
+    if (avcodec_open2(f->decode_ctx, f->decoder, NULL) < 0) {
+        groove_file_close(file);
+        return GrooveErrorDecoding;
+    }
+
+    if (f->decode_ctx->ch_layout.nb_channels == 0) {
         groove_file_close(file);
         return GrooveErrorInvalidChannelLayout;
     }
@@ -222,7 +240,7 @@ int groove_file_open(struct GrooveFile *file,
     return groove_file_open_custom(file, &f->prealloc_custom_io, filename_hint);
 }
 
-// should be safe to call no matter what state the file is in
+// Must be safe to call no matter what state the file is in.
 void groove_file_close(struct GrooveFile *file) {
     if (!file)
         return;
@@ -232,12 +250,9 @@ void groove_file_close(struct GrooveFile *file) {
     GROOVE_ATOMIC_STORE(f->abort_request, true);
 
     if (f->audio_stream_index >= 0) {
-        AVCodecContext *avctx = f->ic->streams[f->audio_stream_index]->codec;
-
-        av_packet_unref(&f->audio_pkt);
+        av_packet_unref(f->audio_pkt);
 
         f->ic->streams[f->audio_stream_index]->discard = AVDISCARD_ALL;
-        avcodec_close(avctx);
         f->audio_st = NULL;
         f->audio_stream_index = -1;
     }
@@ -250,11 +265,13 @@ void groove_file_close(struct GrooveFile *file) {
 
     pthread_mutex_destroy(&f->seek_mutex);
 
-    if (f->avio)
-        av_free(f->avio);
+    av_free(f->avio);
 
     if (f->stdfile)
         fclose(f->stdfile);
+
+    avcodec_free_context(&f->decode_ctx);
+    av_packet_free(&f->audio_pkt);
 
     init_file_state(f);
 }
@@ -285,11 +302,11 @@ double groove_file_duration(struct GrooveFile *file) {
 void groove_file_audio_format(struct GrooveFile *file, struct GrooveAudioFormat *audio_format) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
-    AVCodecContext *codec_ctx = f->audio_st->codec;
-    audio_format->sample_rate = codec_ctx->sample_rate;
-    from_ffmpeg_layout(codec_ctx->channel_layout, &audio_format->layout);
-    audio_format->format = from_ffmpeg_format(codec_ctx->sample_fmt);
-    audio_format->is_planar = from_ffmpeg_format_planar(codec_ctx->sample_fmt);
+    AVCodecContext *decode_ctx = f->decode_ctx;
+    audio_format->sample_rate = decode_ctx->sample_rate;
+    from_ffmpeg_layout(decode_ctx->ch_layout, &audio_format->layout);
+    audio_format->format = from_ffmpeg_format(decode_ctx->sample_fmt);
+    audio_format->is_planar = from_ffmpeg_format_planar(decode_ctx->sample_fmt);
 }
 
 struct GrooveTag *groove_file_metadata_get(struct GrooveFile *file, const char *key,
@@ -323,9 +340,9 @@ const char *groove_tag_value(struct GrooveTag *tag) {
 static void cleanup_save(struct GrooveFile *file) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
-    av_packet_unref(&f->audio_pkt);
+    av_packet_unref(f->audio_pkt);
     if (f->tempfile_exists) {
-        remove(f->oc->filename);
+        remove(f->oc->url);
         f->tempfile_exists = 0;
     }
     if (f->oc) {
@@ -333,13 +350,16 @@ static void cleanup_save(struct GrooveFile *file) {
         avformat_free_context(f->oc);
         f->oc = NULL;
     }
+    if (f->encode_ctx) {
+        avcodec_free_context(&f->encode_ctx);
+    }
 }
 
 int groove_file_save_as(struct GrooveFile *file, const char *filename) {
     struct GrooveFilePrivate *f = (struct GrooveFilePrivate *) file;
 
     // detect output format
-    AVOutputFormat *ofmt = av_guess_format(f->ic->iformat->name, f->ic->filename, NULL);
+    const AVOutputFormat *ofmt = av_guess_format(f->ic->iformat->name, f->ic->url, NULL);
     if (!ofmt) {
         return GrooveErrorUnknownFormat;
     }
@@ -351,12 +371,29 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
         return GrooveErrorNoMem;
     }
 
+    f->decode_ctx = avcodec_alloc_context3(f->decoder);
+    if (!f->decode_ctx) {
+        cleanup_save(file);
+        return GrooveErrorNoMem;
+    }
+
+    f->encode_ctx = avcodec_alloc_context3(f->decoder);
+    if (!f->encode_ctx) {
+        cleanup_save(file);
+        return GrooveErrorNoMem;
+    }
+
     f->oc->oformat = ofmt;
-    snprintf(f->oc->filename, sizeof(f->oc->filename), "%s", filename);
+    f->oc->url = av_strdup(filename);
+
+    if (!f->oc->url) {
+        cleanup_save(file);
+        return GrooveErrorNoMem;
+    }
 
     // open output file if needed
     if (!(ofmt->flags & AVFMT_NOFILE)) {
-        if (avio_open(&f->oc->pb, f->oc->filename, AVIO_FLAG_WRITE) < 0) {
+        if (avio_open(&f->oc->pb, f->oc->url, AVIO_FLAG_WRITE) < 0) {
             cleanup_save(file);
             return GrooveErrorFileSystem;
         }
@@ -381,8 +418,8 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
         out_stream->disposition = in_stream->disposition;
         out_stream->time_base = in_stream->time_base;
 
-        AVCodecContext *icodec = in_stream->codec;
-        AVCodecContext *ocodec = out_stream->codec;
+        AVCodecContext *icodec = f->decode_ctx;
+        AVCodecContext *ocodec = f->encode_ctx;
         ocodec->bits_per_raw_sample    = icodec->bits_per_raw_sample;
         ocodec->chroma_sample_location = icodec->chroma_sample_location;
         ocodec->codec_id   = icodec->codec_id;
@@ -412,9 +449,8 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
         ocodec->extradata_size = icodec->extradata_size;
         switch (ocodec->codec_type) {
         case AVMEDIA_TYPE_AUDIO:
-            ocodec->channel_layout     = icodec->channel_layout;
+            ocodec->ch_layout          = icodec->ch_layout;
             ocodec->sample_rate        = icodec->sample_rate;
-            ocodec->channels           = icodec->channels;
             ocodec->frame_size         = icodec->frame_size;
             ocodec->audio_service_type = icodec->audio_service_type;
             ocodec->block_align        = icodec->block_align;
@@ -456,7 +492,7 @@ int groove_file_save_as(struct GrooveFile *file, const char *filename) {
         return GrooveErrorEncoding;
     }
 
-    AVPacket *pkt = &f->audio_pkt;
+    AVPacket *pkt = f->audio_pkt;
     for (;;) {
         int err = av_read_frame(f->ic, pkt);
         if (err == AVERROR_EOF) {
@@ -491,7 +527,7 @@ int groove_file_save(struct GrooveFile *file) {
 
     int temp_filename_len;
     char *temp_filename = groove_create_rand_name(f->groove,
-            &temp_filename_len, f->ic->filename, strlen(f->ic->filename));
+            &temp_filename_len, f->ic->url, strlen(f->ic->url));
 
     if (!temp_filename) {
         cleanup_save(file);
@@ -504,7 +540,7 @@ int groove_file_save(struct GrooveFile *file) {
         return err;
     }
 
-    if (rename(temp_filename, f->ic->filename)) {
+    if (rename(temp_filename, f->ic->url)) {
         f->tempfile_exists = 1;
         cleanup_save(file);
         return GrooveErrorFileSystem;
