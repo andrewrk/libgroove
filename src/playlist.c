@@ -309,11 +309,24 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
     // create abuffer filter
     struct AVCodecContext *avctx = f->decode_ctx;
     AVRational time_base = f->audio_st->time_base;
-    snprintf(p->strbuf, sizeof(p->strbuf),
-            "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%" PRIx64, 
+
+    char channel_layout_buf[300];
+    if (av_channel_layout_describe(&avctx->ch_layout, channel_layout_buf,
+            sizeof(channel_layout_buf)) >= sizeof(channel_layout_buf))
+    {
+        av_log(NULL, AV_LOG_ERROR, "unable to serialize channel layout for the filter graph: buffer size exceeded\n");
+        return -1;
+    }
+
+    if (snprintf(p->strbuf, sizeof(p->strbuf),
+            "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=%s", 
             time_base.num, time_base.den, avctx->sample_rate,
             av_get_sample_fmt_name(avctx->sample_fmt),
-            avctx->ch_layout.u.mask);
+            channel_layout_buf) >= sizeof(p->strbuf))
+    {
+        av_log(NULL, AV_LOG_ERROR, "unable to serialize filter graph string: buffer size exceeded\n");
+        return -1;
+    }
     av_log(NULL, AV_LOG_INFO, "abuffer: %s\n", p->strbuf);
     // save these values so we can compare later and check
     // whether we have to reconstruct the graph
@@ -461,11 +474,21 @@ static int init_filter_graph(struct GroovePlaylist *playlist, struct GrooveFile 
         if (need_aformat) {
             AVFilterContext *aformat_ctx;
             // create aformat filter
-            snprintf(p->strbuf, sizeof(p->strbuf),
-                    "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%" PRIx64,
+            AVChannelLayout aformat_ch_layout = to_ffmpeg_channel_layout(&aformat_layout);
+            if (av_channel_layout_describe(&aformat_ch_layout, channel_layout_buf,
+                    sizeof(channel_layout_buf)) >= sizeof(channel_layout_buf))
+            {
+                av_log(NULL, AV_LOG_ERROR, "unable to serialize channel layout for the filter graph: buffer size exceeded\n");
+                return -1;
+            }
+            if (snprintf(p->strbuf, sizeof(p->strbuf),
+                    "sample_fmts=%s:sample_rates=%d:channel_layouts=%s",
                     av_get_sample_fmt_name(to_ffmpeg_fmt_params(aformat_format, aformat_planar)),
-                    aformat_sample_rate,
-                    to_ffmpeg_channel_layout(&aformat_layout).u.mask);
+                    aformat_sample_rate, channel_layout_buf) >= sizeof(p->strbuf))
+            {
+                av_log(NULL, AV_LOG_ERROR, "unable to serialize filter graph string: buffer size exceeded\n");
+                return -1;
+            }
             av_log(NULL, AV_LOG_INFO, "aformat: %s\n", p->strbuf);
             err = avfilter_graph_create_filter(&aformat_ctx, p->aformat_filter,
                     NULL, p->strbuf, NULL, p->filter_graph);
@@ -1035,7 +1058,6 @@ static int groove_sink_pause(struct GrooveSink *sink) {
 int groove_sink_detach(struct GrooveSink *sink) {
     struct GroovePlaylist *playlist = sink->playlist;
 
-    assert(playlist);
     if (!playlist)
         return GrooveErrorInvalid;
 
