@@ -165,6 +165,7 @@ static void cleanup_avcontext(struct GrooveEncoderPrivate *e) {
 }
 
 static int init_avcontext(struct GrooveEncoder *encoder) {
+    int err;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
     e->fmt_ctx = avformat_alloc_context();
     if (!e->fmt_ctx) {
@@ -189,8 +190,15 @@ static int init_avcontext(struct GrooveEncoder *encoder) {
     e->codec_ctx->ch_layout = to_ffmpeg_channel_layout(&encoder->actual_audio_format.layout);
     e->codec_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
 
-    int err = avcodec_open2(e->codec_ctx, e->codec, NULL);
-    if (err < 0) {
+    e->stream->time_base = (AVRational){ 1, e->codec_ctx->sample_rate };
+
+    if ((err = avcodec_parameters_from_context(e->stream->codecpar, e->codec_ctx)) < 0) {
+        av_strerror(err, e->strbuf, sizeof(e->strbuf));
+        av_log(NULL, AV_LOG_ERROR, "unable to copy stream parameters: %s\n", e->strbuf);
+        return GrooveErrorEncoding;
+    }
+
+    if ((err = avcodec_open2(e->codec_ctx, e->codec, NULL)) < 0) {
         av_strerror(err, e->strbuf, sizeof(e->strbuf));
         av_log(NULL, AV_LOG_ERROR, "unable to open codec: %s\n", e->strbuf);
         return GrooveErrorEncoding;
@@ -471,6 +479,8 @@ struct GrooveEncoder *groove_encoder_create(struct Groove *groove) {
 }
 
 void groove_encoder_destroy(struct GrooveEncoder *encoder) {
+    groove_encoder_detach(encoder);
+
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     if (e->sink)
@@ -724,10 +734,12 @@ int groove_encoder_attach(struct GrooveEncoder *encoder, struct GroovePlaylist *
 }
 
 int groove_encoder_detach(struct GrooveEncoder *encoder) {
+    int err;
     struct GrooveEncoderPrivate *e = (struct GrooveEncoderPrivate *) encoder;
 
     GROOVE_ATOMIC_STORE(e->abort_request, true);
-    groove_sink_detach(e->sink);
+    if ((err = groove_sink_detach(e->sink)))
+        return err;
     groove_queue_flush(e->audioq);
     groove_queue_abort(e->audioq);
     pthread_cond_signal(&e->drain_cond);
