@@ -9,6 +9,8 @@ pub fn build(b: *std.build.Builder) void {
     const ebur128_dep = b.dependency("ebur128", .{});
     const chromaprint_dep = b.dependency("chromaprint", .{});
 
+    const libsoundio = soundio_dep.artifact("soundio");
+
     const groove = b.addStaticLibrary("groove", null);
     groove.setTarget(target);
     groove.setBuildMode(mode);
@@ -39,29 +41,28 @@ pub fn build(b: *std.build.Builder) void {
     groove.linkLibrary(ffmpeg_dep.artifact("ffmpeg"));
     groove.linkLibrary(chromaprint_dep.artifact("chromaprint"));
     groove.linkLibrary(ebur128_dep.artifact("ebur128"));
-    groove.linkLibrary(soundio_dep.artifact("soundio"));
+    groove.linkLibrary(libsoundio);
     groove.linkLibC();
     groove.install();
     groove.installHeadersDirectory("groove", "groove");
+    groove.installLibraryHeaders(libsoundio);
 
     const playlist = b.addExecutable("playlist", null);
     playlist.setTarget(target);
     playlist.setBuildMode(mode);
-    playlist.linkLibrary(groove);
-    playlist.addIncludePath("zig-cache/pkg/include"); // TODO remove this hack
     playlist.addCSourceFiles(&.{
         "example/playlist.c",
     }, example_cflags);
+    playlist.linkLibrary(groove);
     playlist.install();
 
     const metadata = b.addExecutable("metadata", null);
     metadata.setTarget(target);
     metadata.setBuildMode(mode);
-    metadata.linkLibrary(groove);
-    metadata.addIncludePath("zig-cache/pkg/include"); // TODO remove this hack
     metadata.addCSourceFiles(&.{
         "example/metadata.c",
     }, example_cflags);
+    metadata.linkLibrary(groove);
     metadata.install();
 }
 
