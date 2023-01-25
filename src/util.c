@@ -110,26 +110,39 @@ bool from_ffmpeg_format_planar(enum AVSampleFormat fmt) {
 
 enum AVChannel to_ffmpeg_channel_id(enum SoundIoChannelId channel_id) {
     switch (channel_id) {
-        default: return 0;
-        case SoundIoChannelIdInvalid: return 0;
-        case SoundIoChannelIdFrontLeft: return AV_CH_FRONT_LEFT;
-        case SoundIoChannelIdFrontRight: return AV_CH_FRONT_RIGHT;
-        case SoundIoChannelIdFrontCenter: return AV_CH_FRONT_CENTER;
-        case SoundIoChannelIdLfe: return AV_CH_LOW_FREQUENCY;
-        case SoundIoChannelIdBackLeft: return AV_CH_BACK_LEFT;
-        case SoundIoChannelIdBackRight: return AV_CH_BACK_RIGHT;
-        case SoundIoChannelIdFrontLeftCenter: return AV_CH_FRONT_LEFT_OF_CENTER;
-        case SoundIoChannelIdFrontRightCenter: return AV_CH_FRONT_RIGHT_OF_CENTER;
-        case SoundIoChannelIdBackCenter: return AV_CH_BACK_CENTER;
-        case SoundIoChannelIdSideLeft: return AV_CH_SIDE_LEFT;
-        case SoundIoChannelIdSideRight: return AV_CH_SIDE_RIGHT;
-        case SoundIoChannelIdTopCenter: return AV_CH_TOP_CENTER;
-        case SoundIoChannelIdTopFrontLeft: return AV_CH_TOP_FRONT_LEFT;
-        case SoundIoChannelIdTopFrontCenter: return AV_CH_TOP_FRONT_CENTER;
-        case SoundIoChannelIdTopFrontRight: return AV_CH_TOP_FRONT_RIGHT;
-        case SoundIoChannelIdTopBackLeft: return AV_CH_TOP_BACK_LEFT;
-        case SoundIoChannelIdTopBackCenter: return AV_CH_TOP_BACK_CENTER;
-        case SoundIoChannelIdTopBackRight: return AV_CH_TOP_BACK_RIGHT;
+        default:                                return AV_CHAN_NONE;
+
+        case SoundIoChannelIdFrontLeft:         return AV_CHAN_FRONT_LEFT;
+        case SoundIoChannelIdFrontRight:        return AV_CHAN_FRONT_RIGHT;
+        case SoundIoChannelIdFrontCenter:       return AV_CHAN_FRONT_CENTER;
+        case SoundIoChannelIdLfe:               return AV_CHAN_LOW_FREQUENCY;
+        case SoundIoChannelIdBackLeft:          return AV_CHAN_BACK_LEFT;
+        case SoundIoChannelIdBackRight:         return AV_CHAN_BACK_RIGHT;
+        case SoundIoChannelIdFrontLeftCenter:   return AV_CHAN_FRONT_LEFT_OF_CENTER;
+        case SoundIoChannelIdFrontRightCenter:  return AV_CHAN_FRONT_RIGHT_OF_CENTER;
+        case SoundIoChannelIdBackCenter:        return AV_CHAN_BACK_CENTER;
+        case SoundIoChannelIdSideLeft:          return AV_CHAN_SIDE_LEFT;
+        case SoundIoChannelIdSideRight:         return AV_CHAN_SIDE_RIGHT;
+        case SoundIoChannelIdTopCenter:         return AV_CHAN_TOP_CENTER;
+        case SoundIoChannelIdTopFrontLeft:      return AV_CHAN_TOP_FRONT_LEFT;
+        case SoundIoChannelIdTopFrontCenter:    return AV_CHAN_TOP_FRONT_CENTER;
+        case SoundIoChannelIdTopFrontRight:     return AV_CHAN_TOP_FRONT_RIGHT;
+        case SoundIoChannelIdTopBackLeft:       return AV_CHAN_TOP_BACK_LEFT;
+        case SoundIoChannelIdTopBackCenter:     return AV_CHAN_TOP_BACK_CENTER;
+        case SoundIoChannelIdTopBackRight:      return AV_CHAN_TOP_BACK_RIGHT;
+
+        case SoundIoChannelIdFrontLeftWide:     return AV_CHAN_WIDE_LEFT;
+        case SoundIoChannelIdFrontRightWide:    return AV_CHAN_WIDE_RIGHT;
+
+        case SoundIoChannelIdFrontLeftHigh:     return AV_CHAN_SURROUND_DIRECT_LEFT;
+        case SoundIoChannelIdFrontRightHigh:    return AV_CHAN_SURROUND_DIRECT_RIGHT;
+
+        case SoundIoChannelIdLfe2:              return AV_CHAN_LOW_FREQUENCY_2;
+        case SoundIoChannelIdTopSideLeft:       return AV_CHAN_TOP_SIDE_LEFT;
+        case SoundIoChannelIdTopSideRight:      return AV_CHAN_TOP_SIDE_RIGHT;
+        case SoundIoChannelIdBottomCenter:      return AV_CHAN_BOTTOM_FRONT_CENTER;
+        case SoundIoChannelIdBottomLeftCenter:  return AV_CHAN_BOTTOM_FRONT_LEFT;
+        case SoundIoChannelIdBottomRightCenter: return AV_CHAN_BOTTOM_FRONT_RIGHT;
     }
 }
 
@@ -137,7 +150,10 @@ AVChannelLayout to_ffmpeg_channel_layout(const struct SoundIoChannelLayout *chan
     uint64_t mask = 0;
     for (int i = 0; i < channel_layout->channel_count; i += 1) {
         enum SoundIoChannelId channel_id = channel_layout->channels[i];
-        mask |= (1ULL << to_ffmpeg_channel_id(channel_id));
+        enum AVChannel ffmpeg_channel_id = to_ffmpeg_channel_id(channel_id);
+        if (ffmpeg_channel_id != AV_CHAN_NONE) {
+            mask |= (1ULL << ffmpeg_channel_id);
+        }
     }
     int err;
     AVChannelLayout result;
