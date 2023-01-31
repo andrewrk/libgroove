@@ -2,18 +2,32 @@ const std = @import("std");
 
 pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
-    const mode = b.standardReleaseOptions();
+    const optimize = b.standardOptimizeOption(.{});
 
-    const ffmpeg_dep = b.dependency("ffmpeg", .{});
-    const soundio_dep = b.dependency("soundio", .{});
-    const ebur128_dep = b.dependency("ebur128", .{});
-    const chromaprint_dep = b.dependency("chromaprint", .{});
+    const ffmpeg_dep = b.dependency("ffmpeg", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const soundio_dep = b.dependency("soundio", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const ebur128_dep = b.dependency("ebur128", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const chromaprint_dep = b.dependency("chromaprint", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const libsoundio = soundio_dep.artifact("soundio");
 
-    const groove = b.addStaticLibrary("groove", null);
-    groove.setTarget(target);
-    groove.setBuildMode(mode);
+    const groove = b.addStaticLibrary(.{
+        .name = "groove",
+        .target = target,
+        .optimize = optimize,
+    });
     groove.addIncludePath(".");
     groove.addCSourceFiles(&.{
         "src/buffer.c",
@@ -47,18 +61,22 @@ pub fn build(b: *std.build.Builder) void {
     groove.installHeadersDirectory("groove", "groove");
     groove.installLibraryHeaders(libsoundio);
 
-    const playlist = b.addExecutable("playlist", null);
-    playlist.setTarget(target);
-    playlist.setBuildMode(mode);
+    const playlist = b.addExecutable(.{
+        .name = "playlist",
+        .target = target,
+        .optimize = optimize,
+    });
     playlist.addCSourceFiles(&.{
         "example/playlist.c",
     }, example_cflags);
     playlist.linkLibrary(groove);
     playlist.install();
 
-    const metadata = b.addExecutable("metadata", null);
-    metadata.setTarget(target);
-    metadata.setBuildMode(mode);
+    const metadata = b.addExecutable(.{
+        .name = "metadata",
+        .target = target,
+        .optimize = optimize,
+    });
     metadata.addCSourceFiles(&.{
         "example/metadata.c",
     }, example_cflags);
