@@ -132,7 +132,9 @@ int groove_file_open_custom(struct GrooveFile *file, struct GrooveCustomIo *cust
         return GrooveErrorNoMem;
     }
     f->avio->seekable = AVIO_SEEKABLE_NORMAL;
-    f->avio->direct = AVIO_FLAG_DIRECT;
+    // Disabled as a temporary workaround for
+    // https://trac.ffmpeg.org/ticket/10199
+    //f->avio->direct = AVIO_FLAG_DIRECT;
 
     f->ic->pb = f->avio;
     int err = avformat_open_input(&f->ic, filename_hint, NULL, NULL);
