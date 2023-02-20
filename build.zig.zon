@@ -3,8 +3,8 @@
     .version = "5.0.0-5",
     .dependencies = .{
         .ffmpeg = .{
-            .url = "https://github.com/andrewrk/ffmpeg/archive/b7d167be3a59073b1cc9847cb25e606d02ed8c59.tar.gz",
-            .hash = "12203198c48dfc4d3f71192377bb2ce143ed008e97be1803dc8d930c78e7c56f12de",
+            .url = "https://github.com/andrewrk/ffmpeg/archive/07e9384c8edd3d87dc3208a21b71fc27d45a6543.tar.gz",
+            .hash = "1220a177f3ff59afa0f701bf37f2ae6bcd15ec2b4119325b923edada707845678bef",
         },
         .soundio = .{
             .url = "https://github.com/andrewrk/libsoundio/archive/6902c84103a9a061f2a9bbe48c601faed6cf9b4b.tar.gz",
@@ -15,8 +15,8 @@
             .hash = "122011513126b0805291bb03350d5f8a48be567fc9b6ff425cc8bcb345004dbd98c4",
         },
         .chromaprint = .{
-            .url = "https://github.com/andrewrk/libchromaprint/archive/2bd344d0eee8b2b6eff429eb130a7e9a8990afd8.tar.gz",
-            .hash = "1220ec7a92573ae75451ac36ebbae7f1ad27eeb50bd01724261a0ee0d76647977b70",
+            .url = "https://github.com/andrewrk/libchromaprint/archive/7d8b8b7137161159763c2d6a40ef227690609cb7.tar.gz",
+            .hash = "1220711a5cc6c9eac86073eed8c60eacb8e065b54eba1f4499da3e9ccc5378dfbe01",
         },
     },
 }
