@@ -1,22 +1,22 @@
 .{
     .name = "libgroove",
-    .version = "5.0.0-4",
+    .version = "5.0.0-5",
     .dependencies = .{
         .ffmpeg = .{
-            .url = "https://github.com/andrewrk/ffmpeg/archive/1aa9dd34bbe7a4a3d6efcb201e32e111b9fd5b92.tar.gz",
-            .hash = "1220ec0a8a64422ed5a406fe398b5af6565f3a7c75e0f5d24ed878c83ff3c1cb3319",
+            .url = "https://github.com/andrewrk/ffmpeg/archive/b7d167be3a59073b1cc9847cb25e606d02ed8c59.tar.gz",
+            .hash = "12203198c48dfc4d3f71192377bb2ce143ed008e97be1803dc8d930c78e7c56f12de",
         },
         .soundio = .{
-            .url = "https://github.com/andrewrk/libsoundio/archive/1d03bd5ff17e43d611d011fbf5185018261d2485.tar.gz",
-            .hash = "12204dee2f832214de50a261c45b2666b329d82da69a0956a63861580041be49739a",
+            .url = "https://github.com/andrewrk/libsoundio/archive/6902c84103a9a061f2a9bbe48c601faed6cf9b4b.tar.gz",
+            .hash = "12204053889e44a93fd42b197a573bb2502d6c3ea4a644a16f6bb9d5932bb4ae6bfa",
         },
         .ebur128 = .{
             .url = "https://github.com/andrewrk/libebur128/archive/f38dc40c9ff80ca87495ab6f65ec717883eadf06.tar.gz",
             .hash = "122011513126b0805291bb03350d5f8a48be567fc9b6ff425cc8bcb345004dbd98c4",
         },
         .chromaprint = .{
-            .url = "https://github.com/andrewrk/libchromaprint/archive/f1e8ddb3adb100b5e61e248e65a792dce211128d.tar.gz",
-            .hash = "1220e53b4fae476d8834ce967889b70de3c3bfe50bf4faa501d7cfe516682d20c3f9",
+            .url = "https://github.com/andrewrk/libchromaprint/archive/2bd344d0eee8b2b6eff429eb130a7e9a8990afd8.tar.gz",
+            .hash = "1220ec7a92573ae75451ac36ebbae7f1ad27eeb50bd01724261a0ee0d76647977b70",
         },
     },
 }
