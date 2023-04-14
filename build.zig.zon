@@ -3,20 +3,20 @@
     .version = "5.0.0-5",
     .dependencies = .{
         .ffmpeg = .{
-            .url = "https://github.com/andrewrk/ffmpeg/archive/07e9384c8edd3d87dc3208a21b71fc27d45a6543.tar.gz",
-            .hash = "1220a177f3ff59afa0f701bf37f2ae6bcd15ec2b4119325b923edada707845678bef",
+            .url = "https://github.com/andrewrk/ffmpeg/archive/3ed831f2ff78252d51685a7cd07782020e09fb24.tar.gz",
+            .hash = "1220a5f11188b28c024e4711d8a67a580d61e5e78b81bbb5bdac566db86ea4bbaedf",
         },
         .soundio = .{
-            .url = "https://github.com/andrewrk/libsoundio/archive/6902c84103a9a061f2a9bbe48c601faed6cf9b4b.tar.gz",
-            .hash = "12204053889e44a93fd42b197a573bb2502d6c3ea4a644a16f6bb9d5932bb4ae6bfa",
+            .url = "https://github.com/andrewrk/libsoundio/archive/0dcae65d66aecc9277f9bea77f686a9de1ea18e5.tar.gz",
+            .hash = "1220a6ed7333016313199160de9143dea466ef4a38a3878659438f98ab14bc5032a1",
         },
         .ebur128 = .{
-            .url = "https://github.com/andrewrk/libebur128/archive/f38dc40c9ff80ca87495ab6f65ec717883eadf06.tar.gz",
-            .hash = "122011513126b0805291bb03350d5f8a48be567fc9b6ff425cc8bcb345004dbd98c4",
+            .url = "https://github.com/andrewrk/libebur128/archive/a9df675ffc0078541cbd8117f3705718ab815719.tar.gz",
+            .hash = "1220fa182fe470c42ce47acc4f9b97216c3dfa04f44d549c541f42dcddb466a327cc",
         },
         .chromaprint = .{
-            .url = "https://github.com/andrewrk/libchromaprint/archive/7d8b8b7137161159763c2d6a40ef227690609cb7.tar.gz",
-            .hash = "1220711a5cc6c9eac86073eed8c60eacb8e065b54eba1f4499da3e9ccc5378dfbe01",
+            .url = "https://github.com/andrewrk/libchromaprint/archive/b4966e923bb79ee6079654001be40bc9aa1a588e.tar.gz",
+            .hash = "122050a9cbf5fde8148f8475083eacf5f65dbe95e879b6838cb19e23d9a146fdd112",
         },
     },
 }

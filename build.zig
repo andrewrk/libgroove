@@ -57,9 +57,9 @@ pub fn build(b: *std.build.Builder) void {
     groove.linkLibrary(ebur128_dep.artifact("ebur128"));
     groove.linkLibrary(libsoundio);
     groove.linkLibC();
-    groove.install();
     groove.installHeadersDirectory("groove", "groove");
     groove.installLibraryHeaders(libsoundio);
+    b.installArtifact(groove);
 
     const playlist = b.addExecutable(.{
         .name = "playlist",
@@ -70,7 +70,7 @@ pub fn build(b: *std.build.Builder) void {
         "example/playlist.c",
     }, example_cflags);
     playlist.linkLibrary(groove);
-    playlist.install();
+    b.installArtifact(playlist);
 
     const metadata = b.addExecutable(.{
         .name = "metadata",
@@ -81,7 +81,7 @@ pub fn build(b: *std.build.Builder) void {
         "example/metadata.c",
     }, example_cflags);
     metadata.linkLibrary(groove);
-    metadata.install();
+    b.installArtifact(metadata);
 }
 
 const example_cflags: []const []const u8 = &.{
