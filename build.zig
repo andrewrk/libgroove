@@ -28,7 +28,7 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
-    groove.addIncludePath(".");
+    groove.addIncludePath(.{ .path = "." });
     groove.addCSourceFiles(&.{
         "src/buffer.c",
         "src/file.c",
