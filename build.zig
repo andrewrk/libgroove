@@ -29,28 +29,31 @@ pub fn build(b: *std.build.Builder) void {
         .optimize = optimize,
     });
     groove.addIncludePath(.{ .path = "." });
-    groove.addCSourceFiles(&.{
-        "src/buffer.c",
-        "src/file.c",
-        "src/groove.c",
-        "src/player.c",
-        "src/queue.c",
-        "src/encoder.c",
-        "src/fingerprinter.c",
-        "src/loudness.c",
-        "src/waveform.c",
-        "src/playlist.c",
-        "src/util.c",
-        "src/os.c",
-    }, &.{
-        "-std=c99",
-        "-pedantic",
-        "-Wall",
-        "-Werror=strict-prototypes",
-        "-Werror=old-style-definition",
-        "-Werror=missing-prototypes",
-        "-D_REENTRANT",
-        "-D_POSIX_C_SOURCE=200809L",
+    groove.addCSourceFiles(.{
+        .files = &.{
+            "src/buffer.c",
+            "src/file.c",
+            "src/groove.c",
+            "src/player.c",
+            "src/queue.c",
+            "src/encoder.c",
+            "src/fingerprinter.c",
+            "src/loudness.c",
+            "src/waveform.c",
+            "src/playlist.c",
+            "src/util.c",
+            "src/os.c",
+        },
+        .flags = &.{
+            "-std=c99",
+            "-pedantic",
+            "-Wall",
+            "-Werror=strict-prototypes",
+            "-Werror=old-style-definition",
+            "-Werror=missing-prototypes",
+            "-D_REENTRANT",
+            "-D_POSIX_C_SOURCE=200809L",
+        },
     });
     groove.linkLibrary(ffmpeg_dep.artifact("ffmpeg"));
     groove.linkLibrary(chromaprint_dep.artifact("chromaprint"));
@@ -66,9 +69,12 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
-    playlist.addCSourceFiles(&.{
-        "example/playlist.c",
-    }, example_cflags);
+    playlist.addCSourceFiles(.{
+        .files = &.{
+            "example/playlist.c",
+        },
+        .flags = example_cflags,
+    });
     playlist.linkLibrary(groove);
     b.installArtifact(playlist);
 
@@ -77,9 +83,12 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
-    metadata.addCSourceFiles(&.{
-        "example/metadata.c",
-    }, example_cflags);
+    metadata.addCSourceFiles(.{
+        .files = &.{
+            "example/metadata.c",
+        },
+        .flags = example_cflags,
+    });
     metadata.linkLibrary(groove);
     b.installArtifact(metadata);
 }

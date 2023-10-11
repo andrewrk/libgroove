@@ -1,22 +1,33 @@
 .{
     .name = "libgroove",
-    .version = "5.0.0-5",
+    .version = "5.0.1-1",
     .dependencies = .{
         .ffmpeg = .{
-            .url = "https://github.com/andrewrk/ffmpeg/archive/73ac2d6ce909854436a23a26a9f712861eec2b4e.tar.gz",
-            .hash = "1220e1674169be14f2d5c187f53e80247796c99fabf14aa290589b2a01a8021ae171",
+            .url = "https://github.com/andrewrk/ffmpeg/archive/27a198a581d2c40753ab37a9635f373aad61904e.tar.gz",
+            .hash = "1220c439bd3d820085113b97391d85453440468b395cab3729cd1ab3b262488db5b2",
         },
         .soundio = .{
-            .url = "https://github.com/andrewrk/libsoundio/archive/9914917312f5f5725b7c951046ff192b6427cd40.tar.gz",
-            .hash = "12208ff189dac885d31d6b7074837705979d250a0ba4a17a4acb40d431d4ef4dfac2",
+            .url = "https://github.com/andrewrk/libsoundio/archive/370c64fcd0f666cd15740ff90248ea6c9e3a28b4.tar.gz",
+            .hash = "12203721f68fab0d7fe9a9e781c9f9b44120c63836185e5cd545ce975dab9a8ef20e",
         },
         .ebur128 = .{
-            .url = "https://github.com/andrewrk/libebur128/archive/ee7b950721e74538a0b4f10d866af9aea6659a13.tar.gz",
-            .hash = "1220d2343132cb8c3a9bf7de63ba979bce8c5f4a858224e1058aca84c2ad7b0ef3ca",
+            .url = "https://github.com/andrewrk/libebur128/archive/0b9acabc1a1723eabcecf9da99f1237ea77f381b.tar.gz",
+            .hash = "12202a0b9d1e901cf83aa68b9354eb229c770c5b177959b013d162f934ded85961c9",
         },
         .chromaprint = .{
-            .url = "https://github.com/andrewrk/libchromaprint/archive/645c5ecfcd716b844dccbeb4be1eff43cc429c1e.tar.gz",
-            .hash = "122055fa2fe0cc862997d06d74faf3c259d33f6b0f35fbb86e9b7602640610eac15d",
+            .url = "https://github.com/andrewrk/libchromaprint/archive/c87568039949e5c1c42563b017b52b66cd10010d.tar.gz",
+            .hash = "122063a7af8e4e93229d5b0898939071852508cb5252126eaee0fc7c97a3c139063b",
         },
+    },
+    .paths = .{
+        "CHANGELOG.md",
+        "LICENSE",
+        "README.md",
+        "build.zig",
+        "build.zig.zon",
+        "doc",
+        "example",
+        "groove",
+        "src",
     },
 }
