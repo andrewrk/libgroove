@@ -1,10 +1,10 @@
 .{
     .name = "libgroove",
-    .version = "5.0.1-1",
+    .version = "5.0.1-2",
     .dependencies = .{
         .ffmpeg = .{
-            .url = "https://github.com/andrewrk/ffmpeg/archive/27a198a581d2c40753ab37a9635f373aad61904e.tar.gz",
-            .hash = "1220c439bd3d820085113b97391d85453440468b395cab3729cd1ab3b262488db5b2",
+            .url = "https://github.com/andrewrk/ffmpeg/archive/cfcbf587e9cb3bb0c94e448bf79a0ddc68f37896.tar.gz",
+            .hash = "1220b2910a4f18787392123002e949eb2463739031fb7c8e1d0097b95fe672cf6300",
         },
         .soundio = .{
             .url = "https://github.com/andrewrk/libsoundio/archive/370c64fcd0f666cd15740ff90248ea6c9e3a28b4.tar.gz",
@@ -15,8 +15,8 @@
             .hash = "12202a0b9d1e901cf83aa68b9354eb229c770c5b177959b013d162f934ded85961c9",
         },
         .chromaprint = .{
-            .url = "https://github.com/andrewrk/libchromaprint/archive/c87568039949e5c1c42563b017b52b66cd10010d.tar.gz",
-            .hash = "122063a7af8e4e93229d5b0898939071852508cb5252126eaee0fc7c97a3c139063b",
+            .url = "https://github.com/andrewrk/libchromaprint/archive/9f1200a9ac66d4ed5a1bcc2a528adbe4d3e0c703.tar.gz",
+            .hash = "122030f835cab55856ddf0a4b2032acc570e50e651cbb882b7df78917f8dc33ac5e0",
         },
     },
     .paths = .{
