@@ -7,8 +7,8 @@
             .hash = "1220b2910a4f18787392123002e949eb2463739031fb7c8e1d0097b95fe672cf6300",
         },
         .soundio = .{
-            .url = "https://github.com/andrewrk/libsoundio/archive/370c64fcd0f666cd15740ff90248ea6c9e3a28b4.tar.gz",
-            .hash = "12203721f68fab0d7fe9a9e781c9f9b44120c63836185e5cd545ce975dab9a8ef20e",
+            .url = "https://github.com/andrewrk/libsoundio/archive/984f60647d39e64775002d169868ccdf07595cf8.tar.gz",
+            .hash = "12206929bc10374c5f24d96b8619bdfaba72020fcffa68a695eafdf0a6d30411728e",
         },
         .ebur128 = .{
             .url = "https://github.com/andrewrk/libebur128/archive/0b9acabc1a1723eabcecf9da99f1237ea77f381b.tar.gz",
