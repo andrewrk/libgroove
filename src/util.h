@@ -18,6 +18,7 @@
 #include <libavutil/mem.h>
 #include <libavutil/samplefmt.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/log.h>
 
 #define BREAKPOINT __asm("int $0x03")
 
