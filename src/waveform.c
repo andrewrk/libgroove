@@ -11,6 +11,8 @@
 #include "queue.h"
 
 #include <pthread.h>
+#include <math.h>
+#include <limits.h>
 
 static const int sample_rate = 44100;
 

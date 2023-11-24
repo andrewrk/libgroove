@@ -14,6 +14,7 @@
 
 #include <soundio/soundio.h>
 #include <assert.h>
+#include <math.h>
 
 struct GroovePlayerPrivate {
     struct GroovePlayer externals;
